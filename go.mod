@@ -1,6 +1,6 @@
 module dcs-back-v0
 
-go 1.25.0
+go 1.26.3
 
 require (
 	github.com/disintegration/imaging v1.6.2
