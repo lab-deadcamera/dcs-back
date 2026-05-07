@@ -24,7 +24,7 @@ func Load() *Config {
 		uploadDir = "./uploads"
 	}
 
-	baseURL := os.Getenv("BASE_URL")
+	baseURL := os.Getenv("URL_PUBLIC")
 	if baseURL == "" {
 		baseURL = "http://localhost:" + port
 	}
