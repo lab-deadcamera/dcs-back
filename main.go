@@ -24,6 +24,10 @@ func main() {
 
 	r := gin.Default()
 
+	r.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "hola mundo"})
+	})
+
 	origins := os.Getenv("CORS_ALLOW_ORIGINS")
 	if origins == "" {
 		origins = "*"
