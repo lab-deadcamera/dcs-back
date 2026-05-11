@@ -11,6 +11,8 @@ type Config struct {
 	ThumbnailHeight int
 	BaseURL         string
 	AllowedExts     map[string]bool
+	DatabaseURL     string
+	JWTSecret       string
 }
 
 func Load() *Config {
@@ -29,6 +31,16 @@ func Load() *Config {
 		baseURL = "http://localhost:" + port
 	}
 
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		databaseURL = "postgres://dcs:dcs_pass@localhost:5432/dcs_db?sslmode=disable"
+	}
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "super_secret_jwt_key_development_only"
+	}
+
 	return &Config{
 		Port:            port,
 		UploadDir:       uploadDir,
@@ -37,6 +49,8 @@ func Load() *Config {
 		ThumbnailWidth:  300,
 		ThumbnailHeight: 300,
 		BaseURL:         baseURL,
+		DatabaseURL:     databaseURL,
+		JWTSecret:       jwtSecret,
 		AllowedExts: map[string]bool{
 			".jpg":  true,
 			".jpeg": true,
