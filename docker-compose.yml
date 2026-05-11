@@ -3,7 +3,7 @@ version: "3.8"
 services:
   app:
     build: .
-    container_name: dcs-back
+    container_name: ${CONTAINER_NAME:-dcs-back-v0}
     ports:
       - "${PORT:-9099}:9099"
     environment:

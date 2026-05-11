@@ -13,6 +13,10 @@ type Config struct {
 	AllowedExts     map[string]bool
 	DatabaseURL     string
 	JWTSecret       string
+	KeysFile        string
+	PresetsFile     string
+	OutputsDir      string
+	DefaultModel    string
 }
 
 func Load() *Config {
@@ -41,6 +45,26 @@ func Load() *Config {
 		jwtSecret = "super_secret_jwt_key_development_only"
 	}
 
+	keysFile := os.Getenv("KEYS_FILE")
+	if keysFile == "" {
+		keysFile = "./keys.json"
+	}
+
+	presetsFile := os.Getenv("PRESETS_FILE")
+	if presetsFile == "" {
+		presetsFile = "./presets.json"
+	}
+
+	outputsDir := os.Getenv("OUTPUTS_DIR")
+	if outputsDir == "" {
+		outputsDir = "./outputs"
+	}
+
+	defaultModel := os.Getenv("DEFAULT_MODEL")
+	if defaultModel == "" {
+		defaultModel = "dreamina-seedance-2-0-fast-260128"
+	}
+
 	return &Config{
 		Port:            port,
 		UploadDir:       uploadDir,
@@ -51,6 +75,10 @@ func Load() *Config {
 		BaseURL:         baseURL,
 		DatabaseURL:     databaseURL,
 		JWTSecret:       jwtSecret,
+		KeysFile:        keysFile,
+		PresetsFile:     presetsFile,
+		OutputsDir:      outputsDir,
+		DefaultModel:    defaultModel,
 		AllowedExts: map[string]bool{
 			".jpg":  true,
 			".jpeg": true,

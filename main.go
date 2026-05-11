@@ -9,6 +9,7 @@ import (
 	"dcs-back-v0/internal/db"
 	"dcs-back-v0/internal/image"
 	"dcs-back-v0/internal/middleware"
+	"dcs-back-v0/internal/studio"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -41,11 +42,20 @@ func main() {
 	svc := image.NewService(store, cfg.BaseURL, cfg.ThumbnailWidth, cfg.ThumbnailHeight, cfg.AllowedExts, cfg.MaxFileSize)
 	h := image.NewHandler(svc)
 
+	studioStore, err := studio.NewStore(cfg.KeysFile, cfg.PresetsFile, cfg.OutputsDir)
+	if err != nil {
+		log.Fatalf("failed to init studio store: %v", err)
+	}
+	studioSvc := studio.NewService(studioStore)
+	studioHdl := studio.NewHandler(studioSvc)
+
 	r := gin.Default()
 
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "hola mundo"})
 	})
+
+	r.Static("/outputs", cfg.OutputsDir)
 
 	origins := os.Getenv("CORS_ALLOW_ORIGINS")
 	if origins == "" {
@@ -81,6 +91,30 @@ func main() {
 				protected.GET("/list", h.List)
 				protected.DELETE("/:filename", h.Delete)
 			}
+		}
+
+		studioGroup := v1.Group("/")
+		{
+			studioGroup.GET("/keys", studioHdl.ListKeys)
+			studioGroup.POST("/keys", studioHdl.AddKey)
+			studioGroup.POST("/keys/:id/activate", studioHdl.ActivateKey)
+			studioGroup.DELETE("/keys/:id", studioHdl.DeleteKey)
+			studioGroup.PATCH("/keys/:id", studioHdl.UpdateKey)
+			studioGroup.GET("/presets", studioHdl.GetPresets)
+			studioGroup.POST("/compile-prompt", studioHdl.CompilePrompt)
+			studioGroup.POST("/generate", studioHdl.Generate)
+			studioGroup.GET("/status/:taskId", studioHdl.GetStatus)
+			studioGroup.DELETE("/task/:taskId", studioHdl.CancelTask)
+			studioGroup.GET("/seedream/assets", studioHdl.ListTrustedAssets)
+			studioGroup.POST("/seedream/generate", studioHdl.GenerateSeedream)
+			studioGroup.POST("/assets/groups", studioHdl.CreateAssetGroup)
+			studioGroup.GET("/assets/groups", studioHdl.ListAssetGroups)
+			studioGroup.POST("/assets", studioHdl.CreateAsset)
+			studioGroup.GET("/assets/:id", studioHdl.GetAsset)
+			studioGroup.GET("/assets", studioHdl.ListAssets)
+			studioGroup.DELETE("/assets/:id", studioHdl.DeleteAsset)
+			studioGroup.GET("/health", studioHdl.Health)
+			studioGroup.GET("/debug", studioHdl.Debug)
 		}
 	}
 
