@@ -34,5 +34,6 @@ Thumbs.db
 .vscode/
 *.suo
 *.sln
+keys.json
 
 temp/
