@@ -70,6 +70,7 @@ func main() {
 	})
 
 	r.Static("/outputs", cfg.OutputsDir)
+	r.Static("/docs", "./docs")
 
 	origins := os.Getenv("CORS_ALLOW_ORIGINS")
 	if origins == "" {
@@ -78,7 +79,7 @@ func main() {
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{origins},
-		AllowMethods:     []string{"GET", "POST", "DELETE", "OPTIONS"},
+		AllowMethods:     []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		AllowCredentials: true,
 	}))

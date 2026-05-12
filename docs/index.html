@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DCS Back — API Docs</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0d0d0d; color: #e0e0e0; font-family: system-ui, sans-serif; }
+    .topbar { display: flex; align-items: center; gap: 16px; padding: 12px 24px; background: #1a1a1a; border-bottom: 2px solid #DC2129; }
+    .topbar h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+    .topbar h1 span { color: #DC2129; }
+    .topbar .sub { font-size: 12px; color: #888; margin-left: auto; }
+    #swagger-ui { max-width: 1400px; margin: 0 auto; padding: 20px; }
+    .swagger-ui .topbar { display: none; }
+    .swagger-ui .info .title { color: #DC2129 !important; }
+    .swagger-ui .scheme-container { background: #1a1a1a !important; box-shadow: none !important; border-radius: 8px; }
+    .swagger-ui .opblock-tag { border-bottom: 1px solid #333 !important; }
+    .swagger-ui .opblock-tag:hover { background: #1a1a1a !important; }
+    .swagger-ui .btn { border-radius: 4px !important; }
+    .swagger-ui .opblock-summary { border: none !important; }
+    .swagger-ui .opblock { border-radius: 6px !important; border: 1px solid #333 !important; background: #121212 !important; }
+    .swagger-ui .opblock .opblock-summary { background: #1a1a1a !important; }
+    .swagger-ui .opblock .opblock-summary-description { color: #aaa !important; }
+    .swagger-ui .opblock-body pre { background: #1a1a1a !important; }
+    .swagger-ui .model-box { background: #1a1a1a !important; }
+    .swagger-ui table { background: transparent !important; }
+    .swagger-ui .response-col_status { color: #DC2129 !important; }
+    a { color: #DC2129 !important; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1><span>DCS</span> BACK · API</h1>
+    <span class="sub">Dead Camera Studios</span>
+  </div>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    SwaggerUIBundle({
+      url: '/docs/openapi.yaml',
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      presets: [
+        SwaggerUIBundle.presets.apis,
+        SwaggerUIBundle.SwaggerUIStandalonePreset,
+      ],
+      layout: 'BaseLayout',
+      defaultModelsExpandDepth: 1,
+      defaultModelExpandDepth: 1,
+      docExpansion: 'list',
+      filter: true,
+      tryItOutEnabled: false,
+    });
+  </script>
+</body>
+</html>

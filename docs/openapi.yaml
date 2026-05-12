@@ -1,0 +1,1246 @@
+openapi: "3.0.3"
+info:
+  title: DCS Back API
+  description: |
+    Backend for Dead Camera Studios. Three subsystems:
+    
+    **1. Images** — filesystem-based image upload/serve/delete (legacy).
+    **2. Studio** — BytePlus ModelArk client (Seedance video, Seedream image, Assets API).
+    **3. Files + Characters** — DB-backed file management (images, videos, audio) with character entity and file relations.
+  version: 1.0.0
+  contact:
+    name: Dead Camera Studios
+servers:
+  - url: http://localhost:9099/api/v1
+    description: Development
+  - url: https://dcs-back.cloudtecnology.cloud/api/v1
+    description: Production
+
+paths:
+  # ─── Auth ──────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, name, surname]
+              properties:
+                username:  { type: string, example: "user" }
+                password:  { type: string, example: "pass123" }
+                name:      { type: string, example: "John" }
+                surname:   { type: string, example: "Doe" }
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and get JWT token
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: "user" }
+                password: { type: string, example: "pass123" }
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string, example: "eyJhbGciOiJIUzI1NiIs..." }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─── Images (legacy) ──────────────────────────────────────────
+  /images/upload:
+    post:
+      tags: [Images]
+      summary: Upload an image (multipart or base64 JSON)
+      operationId: uploadImage
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+                description: The image file when using multipart
+          application/json:
+            schema:
+              type: object
+              required: [filename, data]
+              properties:
+                filename: { type: string, example: "photo.png" }
+                data:
+                  type: string
+                  description: Base64-encoded image (with or without data URI prefix)
+                  example: "data:image/png;base64,iVBORw0KGgo..."
+      responses:
+        "201":
+          description: Image uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageUploadResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /images/list:
+    get:
+      tags: [Images]
+      summary: List all uploaded images
+      operationId: listImages
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          description: Image list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ImageListItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /images/{filename}:
+    get:
+      tags: [Images]
+      summary: Serve original image file
+      operationId: serveImage
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Raw image binary
+          content:
+            image/*: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Images]
+      summary: Delete an image (original + thumbnail)
+      operationId: deleteImage
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Image deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /images/thumbnails/{filename}:
+    get:
+      tags: [Images]
+      summary: Serve thumbnail image
+      operationId: serveThumbnail
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Thumbnail binary
+          content:
+            image/*: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── Studio · Keys ────────────────────────────────────────────
+  /keys:
+    get:
+      tags: [Studio Keys]
+      summary: List all API keys (masked)
+      operationId: listKeys
+      responses:
+        "200":
+          description: Key list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyListResponse"
+    post:
+      tags: [Studio Keys]
+      summary: Add a new API key
+      operationId: addKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddKeyRequest"
+      responses:
+        "200":
+          description: Key added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /keys/{id}:
+    delete:
+      tags: [Studio Keys]
+      summary: Delete an API key
+      operationId: deleteKey
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Key deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyListResponse"
+    patch:
+      tags: [Studio Keys]
+      summary: Rename or change endpoint of a key
+      operationId: updateKey
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:     { type: string, example: "new-name" }
+                endpoint: { type: string, enum: [byteplus_ap, volcengine_cn] }
+      responses:
+        "200":
+          description: Key updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /keys/{id}/activate:
+    post:
+      tags: [Studio Keys]
+      summary: Activate a key (set as default)
+      operationId: activateKey
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Key activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyListResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── Studio · Presets ─────────────────────────────────────────
+  /presets:
+    get:
+      tags: [Studio Presets]
+      summary: Get cinematographic preset library
+      operationId: getPresets
+      responses:
+        "200":
+          description: Preset library (dynamic JSON structure)
+          content:
+            application/json: {}
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─── Studio · Prompt ──────────────────────────────────────────
+  /compile-prompt:
+    post:
+      tags: [Studio Prompt]
+      summary: Compile cinematographic prompt text
+      operationId: compilePrompt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Selection"
+      responses:
+        "200":
+          description: Compiled prompt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prompt: { type: string, example: "A woman walks through neon rain. Blade Runner 2049 aesthetic." }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # ─── Studio · Generate (Seedance) ─────────────────────────────
+  /generate:
+    post:
+      tags: [Studio Seedance]
+      summary: Submit a video generation task
+      operationId: generateVideo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Selection"
+      responses:
+        "200":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taskId: { type: string, example: "byteplus-task-id" }
+                  prompt: { type: string }
+                  model:  { type: string }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /status/{taskId}:
+    get:
+      tags: [Studio Seedance]
+      summary: Poll generation task status
+      operationId: getStatus
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Task status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [running, succeeded, failed, succeeded_no_url, unknown]
+                  videoUrl: { type: string, nullable: true }
+                  localUrl: { type: string, nullable: true }
+                  raw: { type: object }
+                  error: { type: string }
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /task/{taskId}:
+    delete:
+      tags: [Studio Seedance]
+      summary: Cancel a generation task
+      operationId: cancelTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Task cancelled
+          content:
+            application/json: {}
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─── Studio · Seedream ────────────────────────────────────────
+  /seedream/assets:
+    get:
+      tags: [Studio Seedream]
+      summary: List trusted assets (in-memory, last 50)
+      operationId: listTrustedAssets
+      responses:
+        "200":
+          description: Trusted assets list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TrustedAsset"
+
+  /seedream/generate:
+    post:
+      tags: [Studio Seedream]
+      summary: Generate an image via Seedream
+      operationId: generateSeedream
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                  example: "A cinematic portrait of a woman in neon light"
+                model:
+                  type: string
+                  example: "seedream-4-0-250828"
+                size:
+                  type: string
+                  example: "2K"
+                seed:
+                  type: integer
+                  nullable: true
+                referenceImages:
+                  type: array
+                  items: { type: string, format: byte }
+                  description: Array of data URIs or asset:// URIs
+      responses:
+        "200":
+          description: Image generated and tracked as trusted asset
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/TrustedAsset"
+                  - type: object
+                    properties:
+                      raw: { type: object }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─── Studio · Assets API ──────────────────────────────────────
+  /assets/groups:
+    post:
+      tags: [Studio Assets API]
+      summary: Create BytePlus asset group
+      operationId: createAssetGroup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:        { type: string, example: "My Characters" }
+                description: { type: string }
+                projectName: { type: string, default: "default" }
+      responses:
+        "200":
+          description: Group created
+          content:
+            application/json: {}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [Studio Assets API]
+      summary: List asset groups
+      operationId: listAssetGroups
+      responses:
+        "200":
+          description: Group list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groups:
+                    type: array
+                    items: { type: object }
+                  total: { type: integer }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /assets:
+    post:
+      tags: [Studio Assets API]
+      summary: Create asset (add URL to group)
+      operationId: createAsset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [groupId, url]
+              properties:
+                groupId:            { type: string }
+                url:                { type: string, format: uri }
+                name:               { type: string }
+                assetType:          { type: string, default: "Image" }
+                moderationStrategy: { type: string, nullable: true, enum: [Skip] }
+                projectName:        { type: string, default: "default" }
+      responses:
+        "200":
+          description: Asset created
+          content:
+            application/json: {}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [Studio Assets API]
+      summary: List assets (filter by group / status)
+      operationId: listAssets
+      parameters:
+        - name: groupId
+          in: query
+          schema: { type: string }
+        - name: statuses
+          in: query
+          schema: { type: string, description: "Comma-separated list of statuses" }
+        - name: projectName
+          in: query
+          schema: { type: string, default: "default" }
+      responses:
+        "200":
+          description: Asset list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assets:
+                    type: array
+                    items: { type: object }
+                  total: { type: integer }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /assets/{id}:
+    get:
+      tags: [Studio Assets API]
+      summary: Get single asset
+      operationId: getAsset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: projectName
+          in: query
+          schema: { type: string, default: "default" }
+      responses:
+        "200":
+          description: Asset data
+          content:
+            application/json: {}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    delete:
+      tags: [Studio Assets API]
+      summary: Delete asset
+      operationId: deleteAsset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: projectName
+          in: query
+          schema: { type: string, default: "default" }
+      responses:
+        "200":
+          description: Asset deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:      { type: boolean }
+                  deleted: { type: string }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # ─── Studio · Health / Debug ──────────────────────────────────
+  /health:
+    get:
+      tags: [Studio Health]
+      summary: Health check
+      operationId: health
+      responses:
+        "200":
+          description: Health info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:                  { type: boolean }
+                  keysCount:           { type: integer }
+                  activeKey:           { type: boolean }
+                  activeEndpoint:      { type: string }
+                  activeEndpointLabel: { type: string }
+                  defaultModel:        { type: string }
+
+  /debug:
+    get:
+      tags: [Studio Health]
+      summary: Debug info (masked keys, endpoints, config)
+      operationId: debug
+      responses:
+        "200":
+          description: Debug payload
+          content:
+            application/json: {}
+
+  # ─── Files ────────────────────────────────────────────────────
+  /files/upload:
+    post:
+      tags: [Files]
+      summary: Upload a file (image, video, audio, temp)
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, category]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                category:
+                  type: string
+                  enum: [images, videos, audio, temp]
+                  description: Target directory category
+                storage:
+                  type: string
+                  enum: [persistent, temp]
+                  default: persistent
+      responses:
+        "201":
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileUploadResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /files:
+    get:
+      tags: [Files]
+      summary: List files with optional filters
+      operationId: listFiles
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string, enum: [images, videos, audio, temp] }
+        - name: storage
+          in: query
+          schema: { type: string, enum: [persistent, temp] }
+        - name: trashed
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: File list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/File"
+
+  /files/trash:
+    get:
+      tags: [Files]
+      summary: List trashed files
+      operationId: listTrash
+      responses:
+        "200":
+          description: Trash list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/File"
+
+  /files/{id}:
+    get:
+      tags: [Files]
+      summary: Get file metadata by ID
+      operationId: getFile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: File metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/File"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Files]
+      summary: Soft delete (move file to trash)
+      operationId: softDeleteFile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageOK"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /files/{id}/serve:
+    get:
+      tags: [Files]
+      summary: Serve raw file binary
+      operationId: serveFile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Raw file binary
+          content:
+            application/octet-stream: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "410":
+          description: File has been soft-deleted
+
+  /files/{id}/restore:
+    post:
+      tags: [Files]
+      summary: Restore file from trash
+      operationId: restoreFile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageOK"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /files/{id}/recover-temp:
+    post:
+      tags: [Files]
+      summary: Recover a temp file from trash back to temp/
+      operationId: recoverTemp
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageOK"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /files/{id}/hard:
+    delete:
+      tags: [Files]
+      summary: Permanently delete file (from disk and DB)
+      operationId: hardDeleteFile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageOK"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─── Characters ───────────────────────────────────────────────
+  /characters:
+    post:
+      tags: [Characters]
+      summary: Create a character
+      operationId: createCharacter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCharacterRequest"
+      responses:
+        "201":
+          description: Character created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [Characters]
+      summary: List all characters
+      operationId: listCharacters
+      responses:
+        "200":
+          description: Character list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Character"
+
+  /characters/{id}:
+    get:
+      tags: [Characters]
+      summary: Get character with associated files
+      operationId: getCharacter
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Character details + files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  character: { $ref: "#/components/schemas/Character" }
+                  files:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FileRef"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Characters]
+      summary: Update character fields
+      operationId: updateCharacter
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                metadata:    { type: string, description: "JSON string for JSONB column" }
+      responses:
+        "200":
+          description: Character updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Characters]
+      summary: Soft delete a character
+      operationId: deleteCharacter
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageOK"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /characters/{id}/files:
+    post:
+      tags: [Characters]
+      summary: Link a file to a character
+      operationId: addCharacterFile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_id]
+              properties:
+                file_id: { type: string, format: uuid }
+                role:
+                  type: string
+                  enum: [reference, portrait, asset]
+                  default: reference
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageOK"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    get:
+      tags: [Characters]
+      summary: List files linked to a character
+      operationId: listCharacterFiles
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: File references
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FileRef"
+
+  /characters/{id}/files/{fileId}:
+    delete:
+      tags: [Characters]
+      summary: Unlink a file from a character
+      operationId: removeCharacterFile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: fileId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageOK"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from POST /auth/login
+
+  schemas:
+    # ─── Auth ─────────────────────────────────────────────────
+    User:
+      type: object
+      properties:
+        id:         { type: integer }
+        username:   { type: string }
+        name:       { type: string }
+        surname:    { type: string }
+        active:     { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    # ─── Images (legacy) ──────────────────────────────────────
+    ImageUploadResult:
+      type: object
+      properties:
+        filename:      { type: string }
+        url:           { type: string, format: uri }
+        thumbnail_url: { type: string, format: uri }
+        size:          { type: integer }
+
+    ImageListItem:
+      type: object
+      properties:
+        filename:      { type: string }
+        url:           { type: string }
+        thumbnail_url: { type: string }
+
+    # ─── Studio · Keys ────────────────────────────────────────
+    Endpoint:
+      type: object
+      properties:
+        label: { type: string }
+        url:   { type: string, format: uri }
+
+    MaskedKey:
+      type: object
+      properties:
+        id:        { type: string }
+        name:      { type: string }
+        preview:   { type: string, example: "ABCD••••xyz1" }
+        endpoint:  { type: string }
+        hasAkSk:   { type: boolean }
+        akPreview: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    KeyListResponse:
+      type: object
+      properties:
+        active:
+          type: string
+          nullable: true
+          example: "a1b2c3d4e5f6"
+        endpoints:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/Endpoint"
+        keys:
+          type: array
+          items:
+            $ref: "#/components/schemas/MaskedKey"
+
+    AddKeyRequest:
+      type: object
+      required: [value]
+      properties:
+        name:     { type: string }
+        value:    { type: string }
+        endpoint: { type: string, enum: [byteplus_ap, volcengine_cn] }
+        ak:       { type: string }
+        sk:       { type: string }
+
+    # ─── Studio · Prompt / Selection ──────────────────────────
+    Selection:
+      type: object
+      properties:
+        userPrompt:   { type: string }
+        model:        { type: string }
+        duration:     { type: number, default: 5 }
+        soundOn:      { type: boolean }
+        aspectRatio:  { type: object, properties: { value: { type: string } } }
+        resolution:   { type: object, properties: { value: { type: string } } }
+        cameraMotion: { type: object, properties: { id: { type: string }, prompt: { type: string } } }
+        camera:       { type: object, properties: { id: { type: string }, prompt: { type: string } } }
+        lens:         { type: object, properties: { id: { type: string }, prompt: { type: string } } }
+        colorGrading: { type: object, properties: { id: { type: string }, prompt: { type: string } } }
+        genre:        { type: object, properties: { id: { type: string }, prompt: { type: string } } }
+        firstFrame:   { type: object, properties: { dataUrl: { type: string } } }
+        lastFrame:    { type: object, properties: { dataUrl: { type: string } } }
+        refImages:    { type: array, items: { type: object, properties: { dataUrl: { type: string } } } }
+        refVideos:    { type: array, items: { type: object, properties: { dataUrl: { type: string } } } }
+        refAudios:    { type: array, items: { type: object, properties: { dataUrl: { type: string } } } }
+
+    # ─── Studio · Seedream ────────────────────────────────────
+    TrustedAsset:
+      type: object
+      properties:
+        id:        { type: string }
+        url:       { type: string, format: uri }
+        prompt:    { type: string }
+        model:     { type: string }
+        seed:      { type: integer, nullable: true }
+        size:      { type: string }
+        createdAt: { type: integer, description: "Unix ms timestamp" }
+        expiresAt: { type: integer, description: "Unix ms timestamp" }
+
+    # ─── Files ────────────────────────────────────────────────
+    File:
+      type: object
+      properties:
+        id:         { type: string, format: uuid }
+        filename:   { type: string }
+        path:       { type: string }
+        size:       { type: integer }
+        mime_type:  { type: string, example: "image/png" }
+        category:   { type: string, enum: [images, videos, audio, temp] }
+        format:     { type: string, example: "png" }
+        storage:    { type: string, enum: [persistent, temp] }
+        trashed:    { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        deleted_at: { type: string, format: date-time, nullable: true }
+
+    FileUploadResult:
+      type: object
+      properties:
+        id:        { type: string, format: uuid }
+        filename:  { type: string }
+        url:       { type: string, format: uri }
+        size:      { type: integer }
+        mime_type: { type: string }
+        format:    { type: string }
+        category:  { type: string }
+
+    FileRef:
+      type: object
+      properties:
+        file_id:    { type: string, format: uuid }
+        role:       { type: string }
+        created_at: { type: string, format: date-time }
+
+    # ─── Characters ───────────────────────────────────────────
+    Character:
+      type: object
+      properties:
+        id:          { type: string, format: uuid }
+        name:        { type: string }
+        description: { type: string }
+        metadata:    { type: string, description: "JSON string stored in JSONB column" }
+        created_at:  { type: string, format: date-time }
+        updated_at:  { type: string, format: date-time }
+        deleted_at:  { type: string, format: date-time, nullable: true }
+
+    CreateCharacterRequest:
+      type: object
+      required: [name]
+      properties:
+        name:        { type: string }
+        description: { type: string, default: "" }
+        metadata:    { type: string, description: "JSON string for JSONB" }
+
+    # ─── Generic responses ────────────────────────────────────
+    Message:
+      type: object
+      properties:
+        message: { type: string }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+  responses:
+    BadRequest:
+      description: Bad request — missing or invalid fields
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Unauthorized — invalid or missing JWT
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    MessageOK:
+      description: Success
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Message"
+
+tags:
+  - name: Auth
+    description: User registration and JWT login
+  - name: Images
+    description: Legacy filesystem-based image management (requires JWT)
+  - name: Studio Keys
+    description: BytePlus API key management
+  - name: Studio Presets
+    description: Cinematographic preset library
+  - name: Studio Prompt
+    description: Prompt compiler for cinematographic text
+  - name: Studio Seedance
+    description: Video generation via BytePlus Seedance 2.0
+  - name: Studio Seedream
+    description: Image generation via BytePlus Seedream
+  - name: Studio Assets API
+    description: BytePlus management plane for asset library (requires AK/SK)
+  - name: Studio Health
+    description: Health check and debug endpoints
+  - name: Files
+    description: DB-backed file management (images, videos, audio, temp)
+  - name: Characters
+    description: Character entity management with file associations
