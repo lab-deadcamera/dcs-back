@@ -1,9 +1,10 @@
 package image
 
 import (
-	"net/http"
 	"os"
 	"strings"
+
+	"dcs-back-v0/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -35,45 +36,45 @@ func (h *Handler) Upload(c *gin.Context) {
 func (h *Handler) uploadMultipart(c *gin.Context) {
 	file, err := c.FormFile("image")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "image field is required"})
+		utils.BadRequest(c, "image field is required")
 		return
 	}
 
 	result, err := h.svc.Upload(file)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.BadRequest(c, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusCreated, result)
+	utils.Created(c, result)
 }
 
 func (h *Handler) uploadBase64(c *gin.Context) {
 	var req uploadBase64Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "JSON body with filename and data fields is required"})
+		utils.BadRequest(c, "JSON body with filename and data fields is required")
 		return
 	}
 
 	result, err := h.svc.UploadBase64(req.Filename, req.Data)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.BadRequest(c, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusCreated, result)
+	utils.Created(c, result)
 }
 
 func (h *Handler) Serve(c *gin.Context) {
 	filename := c.Param("filename")
 	if filename == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "filename is required"})
+		utils.BadRequest(c, "filename is required")
 		return
 	}
 
 	path := h.svc.GetPath(filename)
 	if !fileExists(path) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
+		utils.NotFound(c, "image not found")
 		return
 	}
 
@@ -83,13 +84,13 @@ func (h *Handler) Serve(c *gin.Context) {
 func (h *Handler) ServeThumbnail(c *gin.Context) {
 	filename := c.Param("filename")
 	if filename == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "filename is required"})
+		utils.BadRequest(c, "filename is required")
 		return
 	}
 
 	path := h.svc.GetThumbnailPath(filename)
 	if !fileExists(path) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "thumbnail not found"})
+		utils.NotFound(c, "thumbnail not found")
 		return
 	}
 
@@ -99,22 +100,22 @@ func (h *Handler) ServeThumbnail(c *gin.Context) {
 func (h *Handler) Delete(c *gin.Context) {
 	filename := c.Param("filename")
 	if filename == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "filename is required"})
+		utils.BadRequest(c, "filename is required")
 		return
 	}
 
 	if err := h.svc.Delete(filename); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete image"})
+		utils.InternalError(c, "failed to delete image")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "image deleted"})
+	utils.Message(c, "image deleted")
 }
 
 func (h *Handler) List(c *gin.Context) {
 	files, err := h.svc.List()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list images"})
+		utils.InternalError(c, "failed to list images")
 		return
 	}
 
@@ -127,7 +128,7 @@ func (h *Handler) List(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 func fileExists(path string) bool {

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"dcs-back-v0/internal/utils"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,28 +23,28 @@ func NewHandler(svc *Service) *Handler {
 func (h *Handler) ListKeys(c *gin.Context) {
 	result, err := h.svc.ListKeys()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		utils.InternalError(c, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 func (h *Handler) AddKey(c *gin.Context) {
 	var req AddKeyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		utils.BadRequest(c, "Invalid request body")
 		return
 	}
 	if req.Value == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Missing API key value"})
+		utils.BadRequest(c, "Missing API key value")
 		return
 	}
 	result, err := h.svc.AddKey(req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		utils.InternalError(c, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 func (h *Handler) ActivateKey(c *gin.Context) {
@@ -50,42 +52,42 @@ func (h *Handler) ActivateKey(c *gin.Context) {
 	result, err := h.svc.ActivateKey(id)
 	if err != nil {
 		if err.Error() == "key not found" {
-			c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
+			utils.NotFound(c, err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		utils.InternalError(c, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 func (h *Handler) DeleteKey(c *gin.Context) {
 	id := c.Param("id")
 	result, err := h.svc.DeleteKey(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		utils.InternalError(c, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 func (h *Handler) UpdateKey(c *gin.Context) {
 	id := c.Param("id")
 	var req UpdateKeyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		utils.BadRequest(c, "Invalid request body")
 		return
 	}
 	result, err := h.svc.UpdateKey(id, req)
 	if err != nil {
 		if err.Error() == "key not found" {
-			c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
+			utils.NotFound(c, err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		utils.InternalError(c, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 // ─── Presets ──────────────────────────────────────────────────
@@ -93,15 +95,15 @@ func (h *Handler) UpdateKey(c *gin.Context) {
 func (h *Handler) GetPresets(c *gin.Context) {
 	data, err := h.svc.GetPresets()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to load presets"})
+		utils.InternalError(c, "Failed to load presets")
 		return
 	}
 	var presets interface{}
 	if err := json.Unmarshal(data, &presets); err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Invalid presets file"})
+		utils.InternalError(c, "Invalid presets file")
 		return
 	}
-	c.JSON(http.StatusOK, presets)
+	utils.Success(c, presets)
 }
 
 // ─── Compile Prompt ───────────────────────────────────────────
@@ -109,11 +111,11 @@ func (h *Handler) GetPresets(c *gin.Context) {
 func (h *Handler) CompilePrompt(c *gin.Context) {
 	var sel Selection
 	if err := c.ShouldBindJSON(&sel); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		utils.BadRequest(c, "Invalid request body")
 		return
 	}
 	text := h.svc.CompilePrompt(sel)
-	c.JSON(http.StatusOK, gin.H{"prompt": text})
+	utils.Success(c, gin.H{"prompt": text})
 }
 
 // ─── Generate Seedance ────────────────────────────────────────
@@ -121,15 +123,15 @@ func (h *Handler) CompilePrompt(c *gin.Context) {
 func (h *Handler) Generate(c *gin.Context) {
 	var sel Selection
 	if err := c.ShouldBindJSON(&sel); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		utils.BadRequest(c, "Invalid request body")
 		return
 	}
 	result, err := h.svc.Generate(sel)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		utils.InternalError(c, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 // ─── Status ───────────────────────────────────────────────────
@@ -138,10 +140,10 @@ func (h *Handler) GetStatus(c *gin.Context) {
 	taskID := c.Param("taskId")
 	result, err := h.svc.GetStatus(taskID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		utils.InternalError(c, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 // ─── Cancel Task ──────────────────────────────────────────────
@@ -150,34 +152,34 @@ func (h *Handler) CancelTask(c *gin.Context) {
 	taskID := c.Param("taskId")
 	result, err := h.svc.CancelTask(taskID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		utils.InternalError(c, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 // ─── Seedream ─────────────────────────────────────────────────
 
 func (h *Handler) ListTrustedAssets(c *gin.Context) {
-	c.JSON(http.StatusOK, h.svc.ListTrustedAssets())
+	utils.Success(c, h.svc.ListTrustedAssets())
 }
 
 func (h *Handler) GenerateSeedream(c *gin.Context) {
 	var req SeedreamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		utils.BadRequest(c, "Invalid request body")
 		return
 	}
 	if req.Prompt == "" {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Prompt is required."})
+		utils.BadRequest(c, "Prompt is required.")
 		return
 	}
 	result, err := h.svc.GenerateSeedream(req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		utils.InternalError(c, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 // ─── Assets API ───────────────────────────────────────────────
@@ -189,24 +191,24 @@ func (h *Handler) CreateAssetGroup(c *gin.Context) {
 		ProjectName string `json:"projectName"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		utils.BadRequest(c, "Invalid request body")
 		return
 	}
 	result, err := h.svc.CreateAssetGroup(body.Name, body.Description, body.ProjectName)
 	if err != nil {
-		c.JSON(errorStatus(err), ErrorResponse{Error: err.Error()})
+		utils.Error(c, errorStatus(err), err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 func (h *Handler) ListAssetGroups(c *gin.Context) {
 	result, err := h.svc.ListAssetGroups()
 	if err != nil {
-		c.JSON(errorStatus(err), ErrorResponse{Error: err.Error()})
+		utils.Error(c, errorStatus(err), err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 func (h *Handler) CreateAsset(c *gin.Context) {
@@ -219,15 +221,15 @@ func (h *Handler) CreateAsset(c *gin.Context) {
 		ProjectName        string `json:"projectName"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		utils.BadRequest(c, "Invalid request body")
 		return
 	}
 	result, err := h.svc.CreateAsset(body.GroupID, body.URL, body.Name, body.AssetType, body.ModerationStrategy, body.ProjectName)
 	if err != nil {
-		c.JSON(errorStatus(err), ErrorResponse{Error: err.Error()})
+		utils.Error(c, errorStatus(err), err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 func (h *Handler) GetAsset(c *gin.Context) {
@@ -235,10 +237,10 @@ func (h *Handler) GetAsset(c *gin.Context) {
 	projectName := c.Query("projectName")
 	result, err := h.svc.GetAsset(assetID, projectName)
 	if err != nil {
-		c.JSON(errorStatus(err), ErrorResponse{Error: err.Error()})
+		utils.Error(c, errorStatus(err), err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 func (h *Handler) ListAssets(c *gin.Context) {
@@ -247,10 +249,10 @@ func (h *Handler) ListAssets(c *gin.Context) {
 	projectName := c.Query("projectName")
 	result, err := h.svc.ListAssets(groupID, statuses, projectName)
 	if err != nil {
-		c.JSON(errorStatus(err), ErrorResponse{Error: err.Error()})
+		utils.Error(c, errorStatus(err), err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 func (h *Handler) DeleteAsset(c *gin.Context) {
@@ -258,30 +260,28 @@ func (h *Handler) DeleteAsset(c *gin.Context) {
 	projectName := c.Query("projectName")
 	result, err := h.svc.DeleteAsset(assetID, projectName)
 	if err != nil {
-		c.JSON(errorStatus(err), ErrorResponse{Error: err.Error()})
+		utils.Error(c, errorStatus(err), err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, result)
+	utils.Success(c, result)
 }
 
 // ─── Health & Debug ───────────────────────────────────────────
 
 func (h *Handler) Health(c *gin.Context) {
-	c.JSON(http.StatusOK, h.svc.Health())
+	utils.Success(c, h.svc.Health())
 }
 
 func (h *Handler) Debug(c *gin.Context) {
-	c.JSON(http.StatusOK, h.svc.Debug())
+	utils.Success(c, h.svc.Debug())
 }
 
 // ─── Helpers ──────────────────────────────────────────────────
 
 func errorStatus(err error) int {
-	// Simple heuristic: if the error contains common client error patterns
 	msg := err.Error()
 	if strings.Contains(msg, "required") {
 		return http.StatusBadRequest
 	}
-	// Default to 500 for upstream API errors
 	return http.StatusInternalServerError
 }

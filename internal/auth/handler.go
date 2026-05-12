@@ -2,7 +2,8 @@ package auth
 
 import (
 	"errors"
-	"net/http"
+
+	"dcs-back-v0/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,39 +19,39 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.BadRequest(c, err.Error())
 		return
 	}
 
 	user, err := h.service.Register(req.Username, req.Password, req.Name, req.Surname)
 	if err != nil {
 		if errors.Is(err, ErrUserExists) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			utils.Conflict(c, err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		utils.InternalError(c, "internal server error")
 		return
 	}
 
-	c.JSON(http.StatusCreated, user)
+	utils.Created(c, user)
 }
 
 func (h *Handler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.BadRequest(c, err.Error())
 		return
 	}
 
 	token, err := h.service.Login(req.Username, req.Password)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCreds) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			utils.Unauthorized(c, err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		utils.InternalError(c, "internal server error")
 		return
 	}
 
-	c.JSON(http.StatusOK, TokenResponse{Token: token})
+	utils.Success(c, TokenResponse{Token: token})
 }

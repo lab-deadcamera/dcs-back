@@ -6,7 +6,9 @@ import (
 
 	"dcs-back-v0/config"
 	"dcs-back-v0/internal/auth"
+	"dcs-back-v0/internal/character"
 	"dcs-back-v0/internal/db"
+	"dcs-back-v0/internal/file"
 	"dcs-back-v0/internal/image"
 	"dcs-back-v0/internal/middleware"
 	"dcs-back-v0/internal/studio"
@@ -48,6 +50,18 @@ func main() {
 	}
 	studioSvc := studio.NewService(studioStore)
 	studioHdl := studio.NewHandler(studioSvc)
+
+	fileStore, err := file.NewStore(database, cfg.UploadDir)
+	if err != nil {
+		log.Fatalf("failed to init file store: %v", err)
+	}
+	fileSvc := file.NewService(fileStore, cfg.BaseURL)
+	fileHdl := file.NewHandler(fileSvc)
+	fileSvc.StartPurgeCron()
+
+	charStore := character.NewStore(database)
+	charSvc := character.NewService(charStore)
+	charHdl := character.NewHandler(charSvc)
 
 	r := gin.Default()
 
@@ -115,6 +129,31 @@ func main() {
 			studioGroup.DELETE("/assets/:id", studioHdl.DeleteAsset)
 			studioGroup.GET("/health", studioHdl.Health)
 			studioGroup.GET("/debug", studioHdl.Debug)
+		}
+
+		filesAPI := v1.Group("/files")
+		{
+			filesAPI.POST("/upload", fileHdl.Upload)
+			filesAPI.GET("/trash", fileHdl.ListTrash)
+			filesAPI.GET("", fileHdl.ListFiles)
+			filesAPI.GET("/:id", fileHdl.GetFile)
+			filesAPI.GET("/:id/serve", fileHdl.ServeFile)
+			filesAPI.DELETE("/:id", fileHdl.SoftDelete)
+			filesAPI.POST("/:id/restore", fileHdl.Restore)
+			filesAPI.POST("/:id/recover-temp", fileHdl.RecoverTemp)
+			filesAPI.DELETE("/:id/hard", fileHdl.HardDelete)
+		}
+
+		charactersAPI := v1.Group("/characters")
+		{
+			charactersAPI.POST("", charHdl.Create)
+			charactersAPI.GET("", charHdl.List)
+			charactersAPI.GET("/:id", charHdl.GetByID)
+			charactersAPI.PATCH("/:id", charHdl.Update)
+			charactersAPI.DELETE("/:id", charHdl.SoftDelete)
+			charactersAPI.POST("/:id/files", charHdl.AddFile)
+			charactersAPI.GET("/:id/files", charHdl.ListFiles)
+			charactersAPI.DELETE("/:id/files/:fileId", charHdl.RemoveFile)
 		}
 	}
 
