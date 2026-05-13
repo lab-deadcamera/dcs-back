@@ -152,6 +152,20 @@ func (s *Service) HardDelete(id string) error {
 	return s.store.HardDeleteFile(id)
 }
 
+func (s *Service) GetServePath(id string) (string, error) {
+	f, err := s.store.GetFileByID(id)
+	if err != nil {
+		return "", err
+	}
+	if f == nil {
+		return "", fmt.Errorf("file not found")
+	}
+	if f.Trashed {
+		return "", fmt.Errorf("file has been deleted")
+	}
+	return filepath.Join(s.store.uploadDir, f.Path), nil
+}
+
 func (s *Service) ListFiles(category, storage string, trashed bool) ([]File, error) {
 	return s.store.ListFiles(category, storage, trashed)
 }

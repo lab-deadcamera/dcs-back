@@ -67,20 +67,20 @@ func (h *Handler) GetFile(c *gin.Context) {
 
 func (h *Handler) ServeFile(c *gin.Context) {
 	id := c.Param("id")
-	f, err := h.svc.GetFile(id)
+	path, err := h.svc.GetServePath(id)
 	if err != nil {
+		if err.Error() == "file not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		if err.Error() == "file has been deleted" {
+			utils.Gone(c, err.Error())
+			return
+		}
 		utils.InternalError(c, err.Error())
 		return
 	}
-	if f == nil {
-		utils.NotFound(c, "file not found")
-		return
-	}
-	if f.Trashed {
-		utils.Gone(c, "file has been deleted")
-		return
-	}
-	c.File(f.Path)
+	c.File(path)
 }
 
 func (h *Handler) SoftDelete(c *gin.Context) {

@@ -17,7 +17,7 @@ func NewService(store *Store, baseURL string) *Service {
 
 func (s *Service) enrichFileURLs(files []CharacterFile) {
 	for i := range files {
-		files[i].URL = s.baseURL + "/api/v1/files/" + files[i].FileID
+		files[i].URL = s.baseURL + "/api/v1/files/" + files[i].FileID + "/serve"
 	}
 }
 
