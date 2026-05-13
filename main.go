@@ -11,6 +11,7 @@ import (
 	"dcs-back-v0/internal/file"
 	"dcs-back-v0/internal/image"
 	"dcs-back-v0/internal/middleware"
+	"dcs-back-v0/internal/provider"
 	"dcs-back-v0/internal/studio"
 
 	"github.com/gin-contrib/cors"
@@ -62,6 +63,10 @@ func main() {
 	charStore := character.NewStore(database)
 	charSvc := character.NewService(charStore, cfg.BaseURL)
 	charHdl := character.NewHandler(charSvc)
+
+	providerStore := provider.NewStore(database)
+	providerSvc := provider.NewService(providerStore)
+	providerHdl := provider.NewHandler(providerSvc)
 
 	r := gin.Default()
 
@@ -156,6 +161,25 @@ func main() {
 			charactersAPI.POST("/:id/files", charHdl.AddFile)
 			charactersAPI.GET("/:id/files", charHdl.ListFiles)
 			charactersAPI.DELETE("/:id/files/:fileId", charHdl.RemoveFile)
+		}
+
+		providersAPI := v1.Group("/providers")
+		{
+			providersAPI.POST("", providerHdl.CreateProvider)
+			providersAPI.GET("", providerHdl.ListProviders)
+			providersAPI.GET("/:id", providerHdl.GetProvider)
+			providersAPI.PATCH("/:id", providerHdl.UpdateProvider)
+			providersAPI.DELETE("/:id", providerHdl.SoftDeleteProvider)
+			providersAPI.GET("/:id/models", providerHdl.ListModelsByProvider)
+		}
+
+		modelsAPI := v1.Group("/models")
+		{
+			modelsAPI.POST("", providerHdl.CreateModel)
+			modelsAPI.GET("", providerHdl.ListModels)
+			modelsAPI.GET("/:id", providerHdl.GetModel)
+			modelsAPI.PATCH("/:id", providerHdl.UpdateModel)
+			modelsAPI.DELETE("/:id", providerHdl.SoftDeleteModel)
 		}
 	}
 

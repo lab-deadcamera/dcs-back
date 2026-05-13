@@ -1041,6 +1041,266 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  # ─── Providers ─────────────────────────────────────────────
+  /providers:
+    post:
+      tags: [Providers]
+      summary: Create an AI provider
+      operationId: createProvider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProviderRequest"
+      responses:
+        "201":
+          description: Provider created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:    { $ref: "#/components/schemas/Provider" }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "created" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [Providers]
+      summary: List all providers with their models
+      operationId: listProviders
+      responses:
+        "200":
+          description: Provider list with models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ProviderWithModels"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+
+  /providers/{id}:
+    get:
+      tags: [Providers]
+      summary: Get provider with its models
+      operationId: getProvider
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Provider details with models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:    { $ref: "#/components/schemas/ProviderWithModels" }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Providers]
+      summary: Update provider fields
+      operationId: updateProvider
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:   { type: string }
+                active: { type: boolean }
+      responses:
+        "200":
+          description: Provider updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:    { $ref: "#/components/schemas/Provider" }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Providers]
+      summary: Soft delete a provider
+      operationId: deleteProvider
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageOK"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /providers/{id}/models:
+    get:
+      tags: [Providers]
+      summary: List models for a provider
+      operationId: listProviderModels
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Model list for provider
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Model"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── Models ────────────────────────────────────────────────
+  /models:
+    post:
+      tags: [Models]
+      summary: Create a model under a provider
+      operationId: createModel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateModelRequest"
+      responses:
+        "201":
+          description: Model created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:    { $ref: "#/components/schemas/Model" }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "created" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [Models]
+      summary: List all models across providers
+      operationId: listModels
+      responses:
+        "200":
+          description: Model list with provider names
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ModelWithProvider"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+
+  /models/{id}:
+    get:
+      tags: [Models]
+      summary: Get model by ID
+      operationId: getModel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Model details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:    { $ref: "#/components/schemas/Model" }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Models]
+      summary: Update model fields
+      operationId: updateModel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:     { type: string }
+                api_key:  { type: string }
+                url:      { type: string }
+                endpoint: { type: string }
+                active:   { type: boolean }
+      responses:
+        "200":
+          description: Model updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:    { $ref: "#/components/schemas/Model" }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Models]
+      summary: Soft delete a model
+      operationId: deleteModel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageOK"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     BearerAuth:
@@ -1061,6 +1321,64 @@ components:
         active:     { type: boolean }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+
+    # ─── Providers & Models ──────────────────────────────────
+    Provider:
+      type: object
+      properties:
+        id:         { type: string, format: uuid }
+        name:       { type: string }
+        active:     { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        deleted_at: { type: string, format: date-time, nullable: true }
+
+    Model:
+      type: object
+      properties:
+        id:          { type: string, format: uuid }
+        provider_id: { type: string, format: uuid }
+        name:        { type: string }
+        api_key:     { type: string }
+        url:         { type: string }
+        endpoint:    { type: string }
+        active:      { type: boolean }
+        created_at:  { type: string, format: date-time }
+        updated_at:  { type: string, format: date-time }
+        deleted_at:  { type: string, format: date-time, nullable: true }
+
+    ModelWithProvider:
+      allOf:
+        - $ref: "#/components/schemas/Model"
+        - type: object
+          properties:
+            provider_name: { type: string }
+
+    ProviderWithModels:
+      type: object
+      properties:
+        provider: { $ref: "#/components/schemas/Provider" }
+        models:
+          type: array
+          items:
+            $ref: "#/components/schemas/Model"
+
+    CreateProviderRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+
+    CreateModelRequest:
+      type: object
+      required: [provider_id, name, api_key, url, endpoint]
+      properties:
+        provider_id: { type: string, format: uuid }
+        name:        { type: string }
+        api_key:     { type: string }
+        url:         { type: string }
+        endpoint:    { type: string }
+        active:      { type: boolean, default: true }
 
     # ─── Images (legacy) ──────────────────────────────────────
     ImageUploadResult:
@@ -1310,3 +1628,7 @@ tags:
     description: DB-backed file management (images, videos, audio, temp)
   - name: Characters
     description: Character entity management with file associations
+  - name: Providers
+    description: AI provider management
+  - name: Models
+    description: AI model registration and configuration
