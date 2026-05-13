@@ -3,6 +3,7 @@ package character
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 type Store struct {
@@ -114,21 +115,68 @@ func (s *Store) RemoveFile(characterID, fileID string) error {
 	return err
 }
 
-func (s *Store) ListFiles(characterID string) ([]FileRef, error) {
-	rows, err := s.db.Query(`SELECT file_id, role, created_at FROM character_files
-		WHERE character_id = $1 ORDER BY created_at ASC`, characterID)
+func (s *Store) ListFiles(characterID string) ([]CharacterFile, error) {
+	rows, err := s.db.Query(`
+		SELECT cf.file_id, cf.role, cf.created_at,
+		       COALESCE(f.filename, ''), COALESCE(f.size, 0), COALESCE(f.mime_type, ''),
+		       COALESCE(f.category, ''), COALESCE(f.format, '')
+		FROM character_files cf
+		LEFT JOIN files f ON f.id = cf.file_id
+		WHERE cf.character_id = $1
+		ORDER BY cf.created_at ASC`, characterID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var refs []FileRef
+	var files []CharacterFile
 	for rows.Next() {
-		var r FileRef
-		if err := rows.Scan(&r.FileID, &r.Role, &r.CreatedAt); err != nil {
+		var f CharacterFile
+		if err := rows.Scan(&f.FileID, &f.Role, &f.CreatedAt,
+			&f.Filename, &f.Size, &f.MimeType, &f.Category, &f.Format); err != nil {
 			return nil, err
 		}
-		refs = append(refs, r)
+		files = append(files, f)
 	}
-	return refs, nil
+	return files, nil
+}
+
+func (s *Store) ListFilesForCharacters(ids []string) (map[string][]CharacterFile, error) {
+	result := make(map[string][]CharacterFile)
+	if len(ids) == 0 {
+		return result, nil
+	}
+
+	args := make([]interface{}, len(ids))
+	placeholders := make([]string, len(ids))
+	for i, id := range ids {
+		args[i] = id
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT cf.character_id, cf.file_id, cf.role, cf.created_at,
+		       COALESCE(f.filename, ''), COALESCE(f.size, 0), COALESCE(f.mime_type, ''),
+		       COALESCE(f.category, ''), COALESCE(f.format, '')
+		FROM character_files cf
+		LEFT JOIN files f ON f.id = cf.file_id
+		WHERE cf.character_id IN (%s)
+		ORDER BY cf.character_id, cf.created_at ASC`, strings.Join(placeholders, ","))
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var characterID string
+		var f CharacterFile
+		if err := rows.Scan(&characterID, &f.FileID, &f.Role, &f.CreatedAt,
+			&f.Filename, &f.Size, &f.MimeType, &f.Category, &f.Format); err != nil {
+			return nil, err
+		}
+		result[characterID] = append(result[characterID], f)
+	}
+	return result, nil
 }

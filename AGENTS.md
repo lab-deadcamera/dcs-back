@@ -43,6 +43,34 @@ All image logic lives in `internal/image/`. No database — purely filesystem-ba
 
 Hardcoded: max 10MB, allowed exts `.jpg/.jpeg/.png/.gif/.webp`, thumbnails always in `{UPLOAD_DIR}/thumbnails/`.
 
+## Standardized Response Format
+
+All endpoints return responses with the following envelope:
+
+```json
+{"data": <object|array|null>, "success": true|false, "message": "..."}
+```
+
+- **`data`**: the payload — can be a single object, an array of objects, or `null`.
+- **`success`**: `true` for 2xx responses, `false` for error responses.
+- **`message`**: human-readable status description (`"success"`, `"created"`, `"character not found"`, etc.).
+
+### Helper functions (`internal/utils/responses.go`)
+
+| Function | HTTP Status | `success` | Typical `message` |
+|----------|-------------|-----------|-------------------|
+| `Success(c, data)` | 200 | `true` | `"success"` |
+| `Created(c, data)` | 201 | `true` | `"created"` |
+| `Message(c, msg)` | 200 | `true` | custom message |
+| `BadRequest(c, msg)` | 400 | `false` | validation error |
+| `Unauthorized(c, msg)` | 401 | `false` | auth error |
+| `NotFound(c, msg)` | 404 | `false` | not found |
+| `Conflict(c, msg)` | 409 | `false` | duplicate |
+| `Gone(c, msg)` | 410 | `false` | resource deleted |
+| `InternalError(c, msg)` | 500 | `false` | server error |
+
+This applies to **all** endpoints (Auth, Images, Studio, Files, Characters).
+
 ## Notable
 
 - Filenames are random UUIDs — original name is discarded.

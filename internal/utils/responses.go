@@ -7,19 +7,19 @@ import (
 )
 
 func Success(c *gin.Context, data interface{}) {
-	c.JSON(http.StatusOK, data)
+	c.JSON(http.StatusOK, gin.H{"data": data, "success": true, "message": "success"})
 }
 
 func Created(c *gin.Context, data interface{}) {
-	c.JSON(http.StatusCreated, data)
+	c.JSON(http.StatusCreated, gin.H{"data": data, "success": true, "message": "created"})
 }
 
 func Message(c *gin.Context, msg string) {
-	c.JSON(http.StatusOK, gin.H{"message": msg})
+	c.JSON(http.StatusOK, gin.H{"data": nil, "success": true, "message": msg})
 }
 
 func Error(c *gin.Context, status int, msg string) {
-	c.JSON(status, gin.H{"error": msg})
+	c.JSON(status, gin.H{"data": nil, "success": false, "message": msg})
 }
 
 func BadRequest(c *gin.Context, msg string) {

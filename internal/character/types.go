@@ -12,15 +12,21 @@ type Character struct {
 	DeletedAt   *time.Time `json:"deleted_at"`
 }
 
-type FileRef struct {
+type CharacterFile struct {
 	FileID    string    `json:"file_id"`
 	Role      string    `json:"role"`
+	Filename  string    `json:"filename"`
+	URL       string    `json:"url"`
+	MimeType  string    `json:"mime_type"`
+	Category  string    `json:"category"`
+	Format    string    `json:"format"`
+	Size      int64     `json:"size"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
 type CharacterWithFiles struct {
-	Character Character `json:"character"`
-	Files     []FileRef `json:"files"`
+	Character Character        `json:"character"`
+	Files     []CharacterFile `json:"files"`
 }
 
 type CreateCharacterRequest struct {

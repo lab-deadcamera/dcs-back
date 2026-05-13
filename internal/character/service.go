@@ -7,11 +7,18 @@ import (
 )
 
 type Service struct {
-	store *Store
+	store   *Store
+	baseURL string
 }
 
-func NewService(store *Store) *Service {
-	return &Service{store: store}
+func NewService(store *Store, baseURL string) *Service {
+	return &Service{store: store, baseURL: baseURL}
+}
+
+func (s *Service) enrichFileURLs(files []CharacterFile) {
+	for i := range files {
+		files[i].URL = s.baseURL + "/api/v1/files/" + files[i].FileID
+	}
 }
 
 func (s *Service) Create(req CreateCharacterRequest) (*Character, error) {
@@ -47,13 +54,41 @@ func (s *Service) GetByIDWithFiles(id string) (*CharacterWithFiles, error) {
 		return nil, err
 	}
 	if files == nil {
-		files = []FileRef{}
+		files = []CharacterFile{}
 	}
+	s.enrichFileURLs(files)
 	return &CharacterWithFiles{Character: *ch, Files: files}, nil
 }
 
-func (s *Service) List() ([]Character, error) {
-	return s.store.List()
+func (s *Service) List() ([]CharacterWithFiles, error) {
+	chars, err := s.store.List()
+	if err != nil {
+		return nil, err
+	}
+	if len(chars) == 0 {
+		return []CharacterWithFiles{}, nil
+	}
+
+	ids := make([]string, len(chars))
+	for i, ch := range chars {
+		ids[i] = ch.ID
+	}
+
+	filesMap, err := s.store.ListFilesForCharacters(ids)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]CharacterWithFiles, len(chars))
+	for i, ch := range chars {
+		files := filesMap[ch.ID]
+		if files == nil {
+			files = []CharacterFile{}
+		}
+		s.enrichFileURLs(files)
+		result[i] = CharacterWithFiles{Character: ch, Files: files}
+	}
+	return result, nil
 }
 
 func (s *Service) Update(id string, req UpdateCharacterRequest) (*Character, error) {
@@ -95,6 +130,14 @@ func (s *Service) RemoveFile(characterID, fileID string) error {
 	return s.store.RemoveFile(characterID, fileID)
 }
 
-func (s *Service) ListFiles(characterID string) ([]FileRef, error) {
-	return s.store.ListFiles(characterID)
+func (s *Service) ListFiles(characterID string) ([]CharacterFile, error) {
+	files, err := s.store.ListFiles(characterID)
+	if err != nil {
+		return nil, err
+	}
+	if files == nil {
+		files = []CharacterFile{}
+	}
+	s.enrichFileURLs(files)
+	return files, nil
 }

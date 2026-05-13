@@ -167,7 +167,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Message"
+                $ref: "#/components/schemas/ApiResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -847,22 +847,31 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Character"
+                type: object
+                properties:
+                  data:    { $ref: "#/components/schemas/Character" }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "created" }
         "400":
           $ref: "#/components/responses/BadRequest"
     get:
       tags: [Characters]
-      summary: List all characters
+      summary: List all characters with their associated files
       operationId: listCharacters
       responses:
         "200":
-          description: Character list
+          description: Character list with files
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Character"
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CharacterWithFiles"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
 
   /characters/{id}:
     get:
@@ -876,17 +885,15 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
-          description: Character details + files
+          description: Character details with enriched file metadata
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  character: { $ref: "#/components/schemas/Character" }
-                  files:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/FileRef"
+                  data:    { $ref: "#/components/schemas/CharacterWithFiles" }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -914,7 +921,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Character"
+                type: object
+                properties:
+                  data:    { $ref: "#/components/schemas/Character" }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
@@ -966,7 +977,7 @@ paths:
           $ref: "#/components/responses/NotFound"
     get:
       tags: [Characters]
-      summary: List files linked to a character
+      summary: List files linked to a character (with metadata)
       operationId: listCharacterFiles
       parameters:
         - name: id
@@ -975,13 +986,18 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
-          description: File references
+          description: Character files with enriched metadata
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/FileRef"
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CharacterFile"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
 
   /characters/{id}/files/{fileId}:
     delete:
@@ -1146,12 +1162,27 @@ components:
         format:    { type: string }
         category:  { type: string }
 
-    FileRef:
+    CharacterFile:
       type: object
       properties:
         file_id:    { type: string, format: uuid }
-        role:       { type: string }
+        role:       { type: string, example: "reference" }
+        filename:   { type: string }
+        url:        { type: string, format: uri, example: "http://localhost:9099/api/v1/files/uuid" }
+        mime_type:  { type: string, example: "image/png" }
+        category:   { type: string, example: "images" }
+        format:     { type: string, example: "png" }
+        size:       { type: integer, example: 12345 }
         created_at: { type: string, format: date-time }
+
+    CharacterWithFiles:
+      type: object
+      properties:
+        character: { $ref: "#/components/schemas/Character" }
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/CharacterFile"
 
     # ─── Characters ───────────────────────────────────────────
     Character:
@@ -1173,15 +1204,27 @@ components:
         description: { type: string, default: "" }
         metadata:    { type: string, description: "JSON string for JSONB" }
 
-    # ─── Generic responses ────────────────────────────────────
-    Message:
+    # ─── Standard API Response wrapper ────────────────────────
+    ApiResponse:
       type: object
       properties:
-        message: { type: string }
-    Error:
+        data: {}
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "success"
+    ApiErrorResponse:
       type: object
       properties:
-        error: { type: string }
+        data: { nullable: true, example: null }
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "error description"
 
   responses:
     BadRequest:
@@ -1189,37 +1232,37 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/ApiErrorResponse"
     Unauthorized:
       description: Unauthorized — invalid or missing JWT
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/ApiErrorResponse"
     NotFound:
       description: Resource not found
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/ApiErrorResponse"
     Conflict:
       description: Resource already exists
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/ApiErrorResponse"
     InternalError:
       description: Internal server error
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: "#/components/schemas/ApiErrorResponse"
     MessageOK:
       description: Success
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Message"
+            $ref: "#/components/schemas/ApiResponse"
 
 tags:
   - name: Auth

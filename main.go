@@ -60,7 +60,7 @@ func main() {
 	fileSvc.StartPurgeCron()
 
 	charStore := character.NewStore(database)
-	charSvc := character.NewService(charStore)
+	charSvc := character.NewService(charStore, cfg.BaseURL)
 	charHdl := character.NewHandler(charSvc)
 
 	r := gin.Default()

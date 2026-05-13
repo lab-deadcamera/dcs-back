@@ -49,7 +49,7 @@ func (h *Handler) List(c *gin.Context) {
 		return
 	}
 	if chars == nil {
-		chars = []Character{}
+		chars = []CharacterWithFiles{}
 	}
 	utils.Success(c, chars)
 }
@@ -122,7 +122,7 @@ func (h *Handler) ListFiles(c *gin.Context) {
 		return
 	}
 	if files == nil {
-		files = []FileRef{}
+		files = []CharacterFile{}
 	}
 	utils.Success(c, files)
 }
