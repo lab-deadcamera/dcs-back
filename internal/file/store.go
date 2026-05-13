@@ -98,6 +98,10 @@ func (s *Store) GenerateThumbnail(srcSubpath string, width, height int) (string,
 
 	dst := imaging.Fit(src, width, height, imaging.Lanczos)
 
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+		return "", fmt.Errorf("failed to create thumbnail directory: %w", err)
+	}
+
 	ext := strings.ToLower(filepath.Ext(srcSubpath))
 	switch ext {
 	case ".jpg", ".jpeg":
