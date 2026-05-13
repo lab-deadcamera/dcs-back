@@ -8,6 +8,7 @@
 | 2 | Subir archivos permanentes | [`upload-persistent.md`](./upload-persistent.md) |
 | 3 | Crear personajes | [`create-characters.md`](./create-characters.md) |
 | 4 | Agregar archivos a un personaje | [`add-files-to-character.md`](./add-files-to-character.md) |
+| 5 | Proveedores y modelos de IA | [`providers-and-models.md`](./providers-and-models.md) |
 
 ## Diagrama de flujo
 
