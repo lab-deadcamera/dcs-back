@@ -775,6 +775,28 @@ paths:
         "410":
           description: File has been soft-deleted
 
+  /files/{id}/thumbnail:
+    get:
+      tags: [Files]
+      summary: Serve thumbnail (300×300, generated on-demand)
+      operationId: serveFileThumbnail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Thumbnail image binary
+          content:
+            image/*: {}
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "410":
+          description: File has been soft-deleted
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /files/{id}/restore:
     post:
       tags: [Files]
@@ -1168,12 +1190,13 @@ components:
         file_id:    { type: string, format: uuid }
         role:       { type: string, example: "reference" }
         filename:   { type: string }
-        url:        { type: string, format: uri, example: "http://localhost:9099/api/v1/files/uuid" }
-        mime_type:  { type: string, example: "image/png" }
-        category:   { type: string, example: "images" }
-        format:     { type: string, example: "png" }
-        size:       { type: integer, example: 12345 }
-        created_at: { type: string, format: date-time }
+        url:           { type: string, format: uri, example: "http://localhost:9099/api/v1/files/uuid/serve" }
+        thumbnail_url: { type: string, format: uri, example: "http://localhost:9099/api/v1/files/uuid/thumbnail" }
+        mime_type:     { type: string, example: "image/png" }
+        category:      { type: string, example: "images" }
+        format:        { type: string, example: "png" }
+        size:          { type: integer, example: 12345 }
+        created_at:    { type: string, format: date-time }
 
     CharacterWithFiles:
       type: object

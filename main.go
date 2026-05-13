@@ -139,6 +139,7 @@ func main() {
 			filesAPI.GET("", fileHdl.ListFiles)
 			filesAPI.GET("/:id", fileHdl.GetFile)
 			filesAPI.GET("/:id/serve", fileHdl.ServeFile)
+			filesAPI.GET("/:id/thumbnail", fileHdl.ServeThumbnail)
 			filesAPI.DELETE("/:id", fileHdl.SoftDelete)
 			filesAPI.POST("/:id/restore", fileHdl.Restore)
 			filesAPI.POST("/:id/recover-temp", fileHdl.RecoverTemp)

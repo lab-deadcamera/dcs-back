@@ -3,10 +3,18 @@ package file
 import (
 	"database/sql"
 	"fmt"
+	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/disintegration/imaging"
+	"golang.org/x/image/webp"
 )
 
 type Store struct {
@@ -70,6 +78,62 @@ func (s *Store) CopyFile(src io.Reader, subpath string) error {
 	defer dst.Close()
 	_, err = io.Copy(dst, src)
 	return err
+}
+
+// ─── Thumbnails ────────────────────────────────────────────────
+
+func (s *Store) GenerateThumbnail(srcSubpath string, width, height int) (string, error) {
+	srcPath := filepath.Join(s.uploadDir, srcSubpath)
+	thumbName := "thumbnails/" + srcSubpath
+	dstPath := filepath.Join(s.uploadDir, thumbName)
+
+	if _, err := os.Stat(dstPath); err == nil {
+		return dstPath, nil
+	}
+
+	src, err := decodeImage(srcPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode image: %w", err)
+	}
+
+	dst := imaging.Fit(src, width, height, imaging.Lanczos)
+
+	ext := strings.ToLower(filepath.Ext(srcSubpath))
+	switch ext {
+	case ".jpg", ".jpeg":
+		err = imaging.Save(dst, dstPath, imaging.JPEGQuality(80))
+	case ".png":
+		err = imaging.Save(dst, dstPath, imaging.PNGCompressionLevel(6))
+	default:
+		err = imaging.Save(dst, dstPath)
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to save thumbnail: %w", err)
+	}
+
+	return dstPath, nil
+}
+
+func decodeImage(path string) (image.Image, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".jpg", ".jpeg":
+		return jpeg.Decode(f)
+	case ".png":
+		return png.Decode(f)
+	case ".gif":
+		return gif.Decode(f)
+	case ".webp":
+		return webp.Decode(f)
+	default:
+		return imaging.Open(path)
+	}
 }
 
 // ─── DB operations ────────────────────────────────────────────

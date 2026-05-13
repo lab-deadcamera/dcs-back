@@ -83,6 +83,24 @@ func (h *Handler) ServeFile(c *gin.Context) {
 	c.File(path)
 }
 
+func (h *Handler) ServeThumbnail(c *gin.Context) {
+	id := c.Param("id")
+	path, err := h.svc.GetThumbnailPath(id)
+	if err != nil {
+		if err.Error() == "file not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		if err.Error() == "file has been deleted" {
+			utils.Gone(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	c.File(path)
+}
+
 func (h *Handler) SoftDelete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.svc.SoftDelete(id); err != nil {

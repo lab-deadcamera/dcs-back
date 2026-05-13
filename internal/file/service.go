@@ -166,6 +166,20 @@ func (s *Service) GetServePath(id string) (string, error) {
 	return filepath.Join(s.store.uploadDir, f.Path), nil
 }
 
+func (s *Service) GetThumbnailPath(id string) (string, error) {
+	f, err := s.store.GetFileByID(id)
+	if err != nil {
+		return "", err
+	}
+	if f == nil {
+		return "", fmt.Errorf("file not found")
+	}
+	if f.Trashed {
+		return "", fmt.Errorf("file has been deleted")
+	}
+	return s.store.GenerateThumbnail(f.Path, 300, 300)
+}
+
 func (s *Service) ListFiles(category, storage string, trashed bool) ([]File, error) {
 	return s.store.ListFiles(category, storage, trashed)
 }
