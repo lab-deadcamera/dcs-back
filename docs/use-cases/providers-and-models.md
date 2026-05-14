@@ -108,6 +108,15 @@ await fetch(`/api/v1/models/${id}`, {
 });
 ```
 
+## Marcar modelo como favorito
+
+Solo puede existir un modelo favorito a la vez. Al marcar uno nuevo, se desmarca automáticamente el anterior.
+
+```javascript
+const favorite = await fetch(`/api/v1/models/${id}/favorite`, { method: 'POST' }).then(r => r.json());
+// favorite.data → { id, name: "seedance-2-0", favorite: true, ... }
+```
+
 ## Eliminar (soft delete)
 
 ```javascript

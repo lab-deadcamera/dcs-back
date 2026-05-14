@@ -179,6 +179,7 @@ func main() {
 			modelsAPI.GET("", providerHdl.ListModels)
 			modelsAPI.GET("/:id", providerHdl.GetModel)
 			modelsAPI.PATCH("/:id", providerHdl.UpdateModel)
+			modelsAPI.POST("/:id/favorite", providerHdl.SetFavorite)
 			modelsAPI.DELETE("/:id", providerHdl.SoftDeleteModel)
 		}
 	}

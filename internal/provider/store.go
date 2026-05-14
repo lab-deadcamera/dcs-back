@@ -105,19 +105,19 @@ func (s *Store) CreateModel(m *Model) error {
 	if m.APIKey == "" {
 		m.APIKey = "pending"
 	}
-	query := `INSERT INTO models (id, provider_id, name, api_key, url, endpoint)
-		VALUES ($1, $2, $3, $4, $5, $6)
+	query := `INSERT INTO models (id, provider_id, name, api_key, url, endpoint, favorite)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, m.ID, m.ProviderID, m.Name, m.APIKey, m.URL, m.Endpoint).
+	return s.db.QueryRow(query, m.ID, m.ProviderID, m.Name, m.APIKey, m.URL, m.Endpoint, m.Favorite).
 		Scan(&m.CreatedAt, &m.UpdatedAt)
 }
 
 func (s *Store) GetModelByID(id string) (*Model, error) {
 	m := &Model{}
-	query := `SELECT id, provider_id, name, api_key, url, endpoint, active, created_at, updated_at, deleted_at
+	query := `SELECT id, provider_id, name, api_key, url, endpoint, active, favorite, created_at, updated_at, deleted_at
 		FROM models WHERE id = $1 AND deleted_at IS NULL`
 	err := s.db.QueryRow(query, id).Scan(&m.ID, &m.ProviderID, &m.Name, &m.APIKey, &m.URL, &m.Endpoint,
-		&m.Active, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt)
+		&m.Active, &m.Favorite, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -129,12 +129,12 @@ func (s *Store) GetModelByID(id string) (*Model, error) {
 
 func (s *Store) ListModels() ([]ModelWithProvider, error) {
 	rows, err := s.db.Query(`
-		SELECT m.id, m.provider_id, m.name, m.api_key, m.url, m.endpoint, m.active,
+		SELECT m.id, m.provider_id, m.name, m.api_key, m.url, m.endpoint, m.active, m.favorite,
 		       m.created_at, m.updated_at, m.deleted_at, p.name AS provider_name
 		FROM models m
 		JOIN providers p ON p.id = m.provider_id
 		WHERE m.deleted_at IS NULL
-		ORDER BY m.created_at DESC`)
+		ORDER BY m.favorite DESC, m.created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +144,7 @@ func (s *Store) ListModels() ([]ModelWithProvider, error) {
 	for rows.Next() {
 		var m ModelWithProvider
 		if err := rows.Scan(&m.ID, &m.ProviderID, &m.Name, &m.APIKey, &m.URL, &m.Endpoint,
-			&m.Active, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt, &m.ProviderName); err != nil {
+			&m.Active, &m.Favorite, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt, &m.ProviderName); err != nil {
 			return nil, err
 		}
 		models = append(models, m)
@@ -154,9 +154,9 @@ func (s *Store) ListModels() ([]ModelWithProvider, error) {
 
 func (s *Store) ListModelsByProvider(providerID string) ([]Model, error) {
 	rows, err := s.db.Query(`
-		SELECT id, provider_id, name, api_key, url, endpoint, active, created_at, updated_at, deleted_at
+		SELECT id, provider_id, name, api_key, url, endpoint, active, favorite, created_at, updated_at, deleted_at
 		FROM models WHERE provider_id = $1 AND deleted_at IS NULL
-		ORDER BY created_at DESC`, providerID)
+		ORDER BY favorite DESC, created_at DESC`, providerID)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (s *Store) ListModelsByProvider(providerID string) ([]Model, error) {
 	for rows.Next() {
 		var m Model
 		if err := rows.Scan(&m.ID, &m.ProviderID, &m.Name, &m.APIKey, &m.URL, &m.Endpoint,
-			&m.Active, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt); err != nil {
+			&m.Active, &m.Favorite, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt); err != nil {
 			return nil, err
 		}
 		models = append(models, m)
@@ -188,9 +188,9 @@ func (s *Store) ListModelsForProviders(providerIDs []string) (map[string][]Model
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, provider_id, name, api_key, url, endpoint, active, created_at, updated_at, deleted_at
+		SELECT id, provider_id, name, api_key, url, endpoint, active, favorite, created_at, updated_at, deleted_at
 		FROM models WHERE provider_id IN (%s) AND deleted_at IS NULL
-		ORDER BY created_at DESC`, strings.Join(placeholders, ","))
+		ORDER BY favorite DESC, created_at DESC`, strings.Join(placeholders, ","))
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
@@ -201,7 +201,7 @@ func (s *Store) ListModelsForProviders(providerIDs []string) (map[string][]Model
 	for rows.Next() {
 		var m Model
 		if err := rows.Scan(&m.ID, &m.ProviderID, &m.Name, &m.APIKey, &m.URL, &m.Endpoint,
-			&m.Active, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt); err != nil {
+			&m.Active, &m.Favorite, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt); err != nil {
 			return nil, err
 		}
 		result[m.ProviderID] = append(result[m.ProviderID], m)
@@ -239,6 +239,24 @@ func (s *Store) UpdateModel(id string, updates map[string]interface{}) error {
 
 func (s *Store) SoftDeleteModel(id string) error {
 	result, err := s.db.Exec(`UPDATE models SET deleted_at = NOW(), updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL`, id)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("model not found")
+	}
+	return nil
+}
+
+func (s *Store) UnfavoriteAll() error {
+	_, err := s.db.Exec(`UPDATE models SET favorite = FALSE, updated_at = NOW() WHERE favorite = TRUE`)
+	return err
+}
+
+func (s *Store) SetFavorite(id string) error {
+	result, err := s.db.Exec(`UPDATE models SET favorite = TRUE, updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL`, id)
 	if err != nil {
 		return err

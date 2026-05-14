@@ -19,6 +19,7 @@ type Model struct {
 	URL        string     `json:"url"`
 	Endpoint   string     `json:"endpoint"`
 	Active     bool       `json:"active"`
+	Favorite   bool       `json:"favorite"`
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 	DeletedAt  *time.Time `json:"deleted_at"`

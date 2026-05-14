@@ -128,6 +128,26 @@ func (s *Service) SoftDeleteModel(id string) error {
 	return s.store.SoftDeleteModel(id)
 }
 
+func (s *Service) SetFavorite(id string) (*Model, error) {
+	m, err := s.store.GetModelByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if m == nil {
+		return nil, fmt.Errorf("model not found")
+	}
+	if m.Favorite {
+		return m, nil
+	}
+	if err := s.store.UnfavoriteAll(); err != nil {
+		return nil, err
+	}
+	if err := s.store.SetFavorite(id); err != nil {
+		return nil, err
+	}
+	return s.store.GetModelByID(id)
+}
+
 // ─── Compound ───────────────────────────────────────────────────
 
 func (s *Service) GetProviderWithModels(id string) (*ProviderWithModels, error) {
