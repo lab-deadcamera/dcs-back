@@ -128,6 +128,10 @@ func (s *Service) SoftDeleteModel(id string) error {
 	return s.store.SoftDeleteModel(id)
 }
 
+func (s *Service) GetFavorite() (*Model, error) {
+	return s.store.GetFavoriteModel()
+}
+
 func (s *Service) SetFavorite(id string) (*Model, error) {
 	m, err := s.store.GetModelByID(id)
 	if err != nil {

@@ -1301,6 +1301,26 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /models/favorite:
+    get:
+      tags: [Models]
+      summary: Get the favorite model, if any
+      operationId: getFavoriteModel
+      responses:
+        "200":
+          description: Favorite model or null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: "#/components/schemas/Model"
+                      - { type: "null" }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+
   /models/{id}/favorite:
     post:
       tags: [Models]

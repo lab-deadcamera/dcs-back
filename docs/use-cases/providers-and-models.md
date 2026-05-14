@@ -117,6 +117,13 @@ const favorite = await fetch(`/api/v1/models/${id}/favorite`, { method: 'POST' }
 // favorite.data → { id, name: "seedance-2-0", favorite: true, ... }
 ```
 
+## Obtener el modelo favorito
+
+```javascript
+const fav = await fetch('/api/v1/models/favorite').then(r => r.json());
+// fav.data → { id, name, favorite: true, ... } o null si no hay favorito
+```
+
 ## Eliminar (soft delete)
 
 ```javascript

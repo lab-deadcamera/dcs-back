@@ -268,6 +268,21 @@ func (s *Store) SetFavorite(id string) error {
 	return nil
 }
 
+func (s *Store) GetFavoriteModel() (*Model, error) {
+	m := &Model{}
+	query := `SELECT id, provider_id, name, api_key, url, endpoint, active, favorite, created_at, updated_at, deleted_at
+		FROM models WHERE favorite = TRUE AND deleted_at IS NULL LIMIT 1`
+	err := s.db.QueryRow(query).Scan(&m.ID, &m.ProviderID, &m.Name, &m.APIKey, &m.URL, &m.Endpoint,
+		&m.Active, &m.Favorite, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return m, nil
+}
+
 // ─── Helpers ────────────────────────────────────────────────────
 
 func (s *Store) CreateModelWithID(m *Model) error {

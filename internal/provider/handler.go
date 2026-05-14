@@ -179,6 +179,19 @@ func (h *Handler) SoftDeleteModel(c *gin.Context) {
 	utils.Message(c, "model deleted")
 }
 
+func (h *Handler) GetFavorite(c *gin.Context) {
+	m, err := h.svc.GetFavorite()
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	if m == nil {
+		utils.Success(c, nil)
+		return
+	}
+	utils.Success(c, m)
+}
+
 func (h *Handler) SetFavorite(c *gin.Context) {
 	id := c.Param("id")
 	m, err := h.svc.SetFavorite(id)
