@@ -14,7 +14,6 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=builder /app/server .
 COPY --from=builder /app/migrations ./migrations
-COPY --from=builder /app/presets.json .
 COPY --from=builder /app/docs ./docs
 
 EXPOSE 9099

@@ -37,19 +37,20 @@ func main() {
 	authSvc := auth.NewService(authStore, cfg.JWTSecret)
 	authHdl := auth.NewHandler(authSvc)
 
-	store, err := image.NewStore(cfg.UploadDir, cfg.ThumbnailDir)
+	imageStore, err := image.NewStore(cfg.UploadDir, cfg.ThumbnailDir)
 	if err != nil {
-		log.Fatalf("failed to init store: %v", err)
+		log.Fatalf("failed to init image store: %v", err)
 	}
+	imageSvc := image.NewService(imageStore, cfg.BaseURL, cfg.ThumbnailWidth, cfg.ThumbnailHeight, cfg.AllowedExts, cfg.MaxFileSize)
+	imageHdl := image.NewHandler(imageSvc)
 
-	svc := image.NewService(store, cfg.BaseURL, cfg.ThumbnailWidth, cfg.ThumbnailHeight, cfg.AllowedExts, cfg.MaxFileSize)
-	h := image.NewHandler(svc)
+	providerStore := provider.NewStore(database)
+	providerSvc := provider.NewService(providerStore)
+	providerHdl := provider.NewHandler(providerSvc)
 
-	studioStore, err := studio.NewStore(cfg.KeysFile, cfg.PresetsFile, cfg.OutputsDir)
-	if err != nil {
-		log.Fatalf("failed to init studio store: %v", err)
-	}
-	studioSvc := studio.NewService(studioStore)
+	studioSvc := studio.NewService(providerStore, cfg.OutputsDir)
+	studioSvc.RegisterHandler(studio.NewSeedanceHandler(cfg.OutputsDir))
+	studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
 	studioHdl := studio.NewHandler(studioSvc)
 
 	fileStore, err := file.NewStore(database, cfg.UploadDir)
@@ -63,10 +64,6 @@ func main() {
 	charStore := character.NewStore(database)
 	charSvc := character.NewService(charStore, cfg.BaseURL)
 	charHdl := character.NewHandler(charSvc)
-
-	providerStore := provider.NewStore(database)
-	providerSvc := provider.NewService(providerStore)
-	providerHdl := provider.NewHandler(providerSvc)
 
 	r := gin.Default()
 
@@ -99,42 +96,23 @@ func main() {
 
 		imagesAPI := v1.Group("/images")
 		{
-			// Public image routes with Rate Limiting (e.g. 10 requests per second, burst of 20)
-			imagesAPI.GET("/:filename", middleware.RateLimit(rate.Limit(10), 20), h.Serve)
-			imagesAPI.GET("/thumbnails/:filename", middleware.RateLimit(rate.Limit(10), 20), h.ServeThumbnail)
+			imagesAPI.GET("/:filename", middleware.RateLimit(rate.Limit(10), 20), imageHdl.Serve)
+			imagesAPI.GET("/thumbnails/:filename", middleware.RateLimit(rate.Limit(10), 20), imageHdl.ServeThumbnail)
 
-			// Protected routes
 			protected := imagesAPI.Group("/")
 			protected.Use(middleware.Auth(cfg.JWTSecret))
 			{
-				protected.POST("/upload", h.Upload)
-				protected.GET("/list", h.List)
-				protected.DELETE("/:filename", h.Delete)
+				protected.POST("/upload", imageHdl.Upload)
+				protected.GET("/list", imageHdl.List)
+				protected.DELETE("/:filename", imageHdl.Delete)
 			}
 		}
 
-		studioGroup := v1.Group("/")
+		studioGroup := v1.Group("/studio")
 		{
-			studioGroup.GET("/keys", studioHdl.ListKeys)
-			studioGroup.POST("/keys", studioHdl.AddKey)
-			studioGroup.POST("/keys/:id/activate", studioHdl.ActivateKey)
-			studioGroup.DELETE("/keys/:id", studioHdl.DeleteKey)
-			studioGroup.PATCH("/keys/:id", studioHdl.UpdateKey)
-			studioGroup.GET("/presets", studioHdl.GetPresets)
-			studioGroup.POST("/compile-prompt", studioHdl.CompilePrompt)
 			studioGroup.POST("/generate", studioHdl.Generate)
 			studioGroup.GET("/status/:taskId", studioHdl.GetStatus)
 			studioGroup.DELETE("/task/:taskId", studioHdl.CancelTask)
-			studioGroup.GET("/seedream/assets", studioHdl.ListTrustedAssets)
-			studioGroup.POST("/seedream/generate", studioHdl.GenerateSeedream)
-			studioGroup.POST("/assets/groups", studioHdl.CreateAssetGroup)
-			studioGroup.GET("/assets/groups", studioHdl.ListAssetGroups)
-			studioGroup.POST("/assets", studioHdl.CreateAsset)
-			studioGroup.GET("/assets/:id", studioHdl.GetAsset)
-			studioGroup.GET("/assets", studioHdl.ListAssets)
-			studioGroup.DELETE("/assets/:id", studioHdl.DeleteAsset)
-			studioGroup.GET("/health", studioHdl.Health)
-			studioGroup.GET("/debug", studioHdl.Debug)
 		}
 
 		filesAPI := v1.Group("/files")

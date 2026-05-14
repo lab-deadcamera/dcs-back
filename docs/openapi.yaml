@@ -191,177 +191,48 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  # ─── Studio · Keys ────────────────────────────────────────────
-  /keys:
-    get:
-      tags: [Studio Keys]
-      summary: List all API keys (masked)
-      operationId: listKeys
-      responses:
-        "200":
-          description: Key list
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/KeyListResponse"
+  # ─── Studio · Generate ────────────────────────────────────────
+
+  # ─── Studio · Generate ────────────────────────────────────────
+  /studio/generate:
     post:
-      tags: [Studio Keys]
-      summary: Add a new API key
-      operationId: addKey
+      tags: [Studio Generate]
+      summary: Generate content using a registered model
+      operationId: studioGenerate
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AddKeyRequest"
+              $ref: "#/components/schemas/StudioSelection"
       responses:
-        "200":
-          description: Key added
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/KeyListResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-
-  /keys/{id}:
-    delete:
-      tags: [Studio Keys]
-      summary: Delete an API key
-      operationId: deleteKey
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Key deleted
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/KeyListResponse"
-    patch:
-      tags: [Studio Keys]
-      summary: Rename or change endpoint of a key
-      operationId: updateKey
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                name:     { type: string, example: "new-name" }
-                endpoint: { type: string, enum: [byteplus_ap, volcengine_cn] }
-      responses:
-        "200":
-          description: Key updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/KeyListResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /keys/{id}/activate:
-    post:
-      tags: [Studio Keys]
-      summary: Activate a key (set as default)
-      operationId: activateKey
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Key activated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/KeyListResponse"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  # ─── Studio · Presets ─────────────────────────────────────────
-  /presets:
-    get:
-      tags: [Studio Presets]
-      summary: Get cinematographic preset library
-      operationId: getPresets
-      responses:
-        "200":
-          description: Preset library (dynamic JSON structure)
-          content:
-            application/json: {}
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  # ─── Studio · Prompt ──────────────────────────────────────────
-  /compile-prompt:
-    post:
-      tags: [Studio Prompt]
-      summary: Compile cinematographic prompt text
-      operationId: compilePrompt
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Selection"
-      responses:
-        "200":
-          description: Compiled prompt
+        "201":
+          description: Generation task created
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  prompt: { type: string, example: "A woman walks through neon rain. Blade Runner 2049 aesthetic." }
+                  data:
+                    type: object
+                    properties:
+                      taskId:  { type: string, example: "byteplus-task-id" }
+                      modelId: { type: string, format: uuid }
+                      prompt:  { type: string }
+                      model:   { type: string }
+                      status:  { type: string }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "created" }
         "400":
           $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
-  # ─── Studio · Generate (Seedance) ─────────────────────────────
-  /generate:
-    post:
-      tags: [Studio Seedance]
-      summary: Submit a video generation task
-      operationId: generateVideo
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Selection"
-      responses:
-        "200":
-          description: Task created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  taskId: { type: string, example: "byteplus-task-id" }
-                  prompt: { type: string }
-                  model:  { type: string }
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /status/{taskId}:
+  /studio/status/{taskId}:
     get:
-      tags: [Studio Seedance]
+      tags: [Studio Generate]
       summary: Poll generation task status
-      operationId: getStatus
+      operationId: studioStatus
       parameters:
         - name: taskId
           in: path
@@ -375,21 +246,27 @@ paths:
               schema:
                 type: object
                 properties:
-                  status:
-                    type: string
-                    enum: [running, succeeded, failed, succeeded_no_url, unknown]
-                  videoUrl: { type: string, nullable: true }
-                  localUrl: { type: string, nullable: true }
-                  raw: { type: object }
-                  error: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum: [running, succeeded, failed, succeeded_no_url, unknown]
+                      videoUrl: { type: string, nullable: true }
+                      localUrl: { type: string, nullable: true }
+                      imageUrl: { type: string, nullable: true }
+                      raw:      { type: object }
+                      error:    { type: string }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /task/{taskId}:
+  /studio/task/{taskId}:
     delete:
-      tags: [Studio Seedance]
+      tags: [Studio Generate]
       summary: Cancel a generation task
-      operationId: cancelTask
+      operationId: studioCancelTask
       parameters:
         - name: taskId
           in: path
@@ -399,248 +276,11 @@ paths:
         "200":
           description: Task cancelled
           content:
-            application/json: {}
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
         "500":
           $ref: "#/components/responses/InternalError"
-
-  # ─── Studio · Seedream ────────────────────────────────────────
-  /seedream/assets:
-    get:
-      tags: [Studio Seedream]
-      summary: List trusted assets (in-memory, last 50)
-      operationId: listTrustedAssets
-      responses:
-        "200":
-          description: Trusted assets list
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  assets:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/TrustedAsset"
-
-  /seedream/generate:
-    post:
-      tags: [Studio Seedream]
-      summary: Generate an image via Seedream
-      operationId: generateSeedream
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [prompt]
-              properties:
-                prompt:
-                  type: string
-                  example: "A cinematic portrait of a woman in neon light"
-                model:
-                  type: string
-                  example: "seedream-4-0-250828"
-                size:
-                  type: string
-                  example: "2K"
-                seed:
-                  type: integer
-                  nullable: true
-                referenceImages:
-                  type: array
-                  items: { type: string, format: byte }
-                  description: Array of data URIs or asset:// URIs
-      responses:
-        "200":
-          description: Image generated and tracked as trusted asset
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/TrustedAsset"
-                  - type: object
-                    properties:
-                      raw: { type: object }
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  # ─── Studio · Assets API ──────────────────────────────────────
-  /assets/groups:
-    post:
-      tags: [Studio Assets API]
-      summary: Create BytePlus asset group
-      operationId: createAssetGroup
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name]
-              properties:
-                name:        { type: string, example: "My Characters" }
-                description: { type: string }
-                projectName: { type: string, default: "default" }
-      responses:
-        "200":
-          description: Group created
-          content:
-            application/json: {}
-        "400":
-          $ref: "#/components/responses/BadRequest"
-    get:
-      tags: [Studio Assets API]
-      summary: List asset groups
-      operationId: listAssetGroups
-      responses:
-        "200":
-          description: Group list
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  groups:
-                    type: array
-                    items: { type: object }
-                  total: { type: integer }
-        "400":
-          $ref: "#/components/responses/BadRequest"
-
-  /assets:
-    post:
-      tags: [Studio Assets API]
-      summary: Create asset (add URL to group)
-      operationId: createAsset
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [groupId, url]
-              properties:
-                groupId:            { type: string }
-                url:                { type: string, format: uri }
-                name:               { type: string }
-                assetType:          { type: string, default: "Image" }
-                moderationStrategy: { type: string, nullable: true, enum: [Skip] }
-                projectName:        { type: string, default: "default" }
-      responses:
-        "200":
-          description: Asset created
-          content:
-            application/json: {}
-        "400":
-          $ref: "#/components/responses/BadRequest"
-    get:
-      tags: [Studio Assets API]
-      summary: List assets (filter by group / status)
-      operationId: listAssets
-      parameters:
-        - name: groupId
-          in: query
-          schema: { type: string }
-        - name: statuses
-          in: query
-          schema: { type: string, description: "Comma-separated list of statuses" }
-        - name: projectName
-          in: query
-          schema: { type: string, default: "default" }
-      responses:
-        "200":
-          description: Asset list
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  assets:
-                    type: array
-                    items: { type: object }
-                  total: { type: integer }
-        "400":
-          $ref: "#/components/responses/BadRequest"
-
-  /assets/{id}:
-    get:
-      tags: [Studio Assets API]
-      summary: Get single asset
-      operationId: getAsset
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string }
-        - name: projectName
-          in: query
-          schema: { type: string, default: "default" }
-      responses:
-        "200":
-          description: Asset data
-          content:
-            application/json: {}
-        "400":
-          $ref: "#/components/responses/BadRequest"
-    delete:
-      tags: [Studio Assets API]
-      summary: Delete asset
-      operationId: deleteAsset
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string }
-        - name: projectName
-          in: query
-          schema: { type: string, default: "default" }
-      responses:
-        "200":
-          description: Asset deleted
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:      { type: boolean }
-                  deleted: { type: string }
-        "400":
-          $ref: "#/components/responses/BadRequest"
-
-  # ─── Studio · Health / Debug ──────────────────────────────────
-  /health:
-    get:
-      tags: [Studio Health]
-      summary: Health check
-      operationId: health
-      responses:
-        "200":
-          description: Health info
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:                  { type: boolean }
-                  keysCount:           { type: integer }
-                  activeKey:           { type: boolean }
-                  activeEndpoint:      { type: string }
-                  activeEndpointLabel: { type: string }
-                  defaultModel:        { type: string }
-
-  /debug:
-    get:
-      tags: [Studio Health]
-      summary: Debug info (masked keys, endpoints, config)
-      operationId: debug
-      responses:
-        "200":
-          description: Debug payload
-          content:
-            application/json: {}
 
   # ─── Files ────────────────────────────────────────────────────
   /files/upload:
@@ -1441,56 +1081,13 @@ components:
         url:           { type: string }
         thumbnail_url: { type: string }
 
-    # ─── Studio · Keys ────────────────────────────────────────
-    Endpoint:
+    # ─── Studio ─────────────────────────────────────────────
+    StudioSelection:
       type: object
+      required: [model_id]
       properties:
-        label: { type: string }
-        url:   { type: string, format: uri }
-
-    MaskedKey:
-      type: object
-      properties:
-        id:        { type: string }
-        name:      { type: string }
-        preview:   { type: string, example: "ABCD••••xyz1" }
-        endpoint:  { type: string }
-        hasAkSk:   { type: boolean }
-        akPreview: { type: string, nullable: true }
-        createdAt: { type: string, format: date-time }
-
-    KeyListResponse:
-      type: object
-      properties:
-        active:
-          type: string
-          nullable: true
-          example: "a1b2c3d4e5f6"
-        endpoints:
-          type: object
-          additionalProperties:
-            $ref: "#/components/schemas/Endpoint"
-        keys:
-          type: array
-          items:
-            $ref: "#/components/schemas/MaskedKey"
-
-    AddKeyRequest:
-      type: object
-      required: [value]
-      properties:
-        name:     { type: string }
-        value:    { type: string }
-        endpoint: { type: string, enum: [byteplus_ap, volcengine_cn] }
-        ak:       { type: string }
-        sk:       { type: string }
-
-    # ─── Studio · Prompt / Selection ──────────────────────────
-    Selection:
-      type: object
-      properties:
+        model_id:     { type: string, format: uuid, description: "ID of the registered model" }
         userPrompt:   { type: string }
-        model:        { type: string }
         duration:     { type: number, default: 5 }
         soundOn:      { type: boolean }
         aspectRatio:  { type: object, properties: { value: { type: string } } }
@@ -1505,19 +1102,6 @@ components:
         refImages:    { type: array, items: { type: object, properties: { dataUrl: { type: string } } } }
         refVideos:    { type: array, items: { type: object, properties: { dataUrl: { type: string } } } }
         refAudios:    { type: array, items: { type: object, properties: { dataUrl: { type: string } } } }
-
-    # ─── Studio · Seedream ────────────────────────────────────
-    TrustedAsset:
-      type: object
-      properties:
-        id:        { type: string }
-        url:       { type: string, format: uri }
-        prompt:    { type: string }
-        model:     { type: string }
-        seed:      { type: integer, nullable: true }
-        size:      { type: string }
-        createdAt: { type: integer, description: "Unix ms timestamp" }
-        expiresAt: { type: integer, description: "Unix ms timestamp" }
 
     # ─── Files ────────────────────────────────────────────────
     File:
@@ -1655,20 +1239,8 @@ tags:
     description: User registration and JWT login
   - name: Images
     description: Legacy filesystem-based image management (requires JWT)
-  - name: Studio Keys
-    description: BytePlus API key management
-  - name: Studio Presets
-    description: Cinematographic preset library
-  - name: Studio Prompt
-    description: Prompt compiler for cinematographic text
-  - name: Studio Seedance
-    description: Video generation via BytePlus Seedance 2.0
-  - name: Studio Seedream
-    description: Image generation via BytePlus Seedream
-  - name: Studio Assets API
-    description: BytePlus management plane for asset library (requires AK/SK)
-  - name: Studio Health
-    description: Health check and debug endpoints
+  - name: Studio Generate
+    description: Model-driven content generation (video, image)
   - name: Files
     description: DB-backed file management (images, videos, audio, temp)
   - name: Characters

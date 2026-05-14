@@ -1,57 +1,12 @@
 package studio
 
-type Endpoint struct {
-	Label string `json:"label"`
-	URL   string `json:"url"`
-}
+import "time"
 
-type APIKey struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Value     string `json:"value"`
-	Endpoint  string `json:"endpoint"`
-	AK        string `json:"ak,omitempty"`
-	SK        string `json:"sk,omitempty"`
-	CreatedAt string `json:"createdAt"`
-}
-
-type KeyStoreData struct {
-	Active string   `json:"active"`
-	Keys   []APIKey `json:"keys"`
-}
-
-type MaskedKey struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Preview   string `json:"preview"`
-	Endpoint  string `json:"endpoint"`
-	HasAkSk   bool   `json:"hasAkSk"`
-	AKPreview string `json:"akPreview"`
-	CreatedAt string `json:"createdAt"`
-}
-
-type KeyListResponse struct {
-	Active    string              `json:"active"`
-	Endpoints map[string]Endpoint `json:"endpoints"`
-	Keys      []MaskedKey         `json:"keys"`
-}
-
-type AddKeyRequest struct {
-	Name     string `json:"name"`
-	Value    string `json:"value"`
-	Endpoint string `json:"endpoint"`
-	AK       string `json:"ak"`
-	SK       string `json:"sk"`
-}
-
-type UpdateKeyRequest struct {
-	Name     string `json:"name"`
-	Endpoint string `json:"endpoint"`
-}
+// ─── Request / Response ─────────────────────────────────────────
 
 type Selection struct {
 	UserPrompt   string            `json:"userPrompt"`
-	Model        string            `json:"model"`
+	ModelID      string            `json:"model_id" binding:"required"`
 	Duration     float64           `json:"duration"`
 	SoundOn      *bool             `json:"soundOn"`
 	AspectRatio  *SelectionField   `json:"aspectRatio"`
@@ -81,19 +36,48 @@ type DataRef struct {
 	DataUrl string `json:"dataUrl"`
 }
 
-type SeedreamRequest struct {
-	Prompt          string   `json:"prompt"`
-	Model           string   `json:"model"`
-	Size            string   `json:"size"`
-	Seed            *int     `json:"seed"`
-	ReferenceImages []string `json:"referenceImages"`
+type GenerateResponse struct {
+	TaskID  string `json:"taskId"`
+	ModelID string `json:"modelId"`
+	Prompt  string `json:"prompt"`
+	Model   string `json:"model"`
+	Status  string `json:"status"`
 }
 
-type EmptySuccess struct {
-	Ok      bool   `json:"ok"`
-	Deleted string `json:"deleted,omitempty"`
+type StatusResult struct {
+	Status   string `json:"status"`
+	VideoURL string `json:"videoUrl,omitempty"`
+	LocalURL string `json:"localUrl,omitempty"`
+	ImageURL string `json:"imageUrl,omitempty"`
+	Raw      interface{} `json:"raw,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
-type ErrorResponse struct {
-	Error string `json:"error"`
+type TaskCancelResult struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+// ─── Model Handler Interface ────────────────────────────────────
+
+type ModelHandler interface {
+	// Matches returns true if this handler should be used for the given model
+	Matches(modelName string) bool
+	// Generate submits a generation task and returns the task ID
+	Generate(sel *Selection, apiKey, baseURL, endpoint string) (*GenerateResponse, error)
+	// GetStatus polls the task status
+	GetStatus(taskID string, apiKey, baseURL, endpoint string) (*StatusResult, error)
+	// CancelTask cancels a running task
+	CancelTask(taskID string, apiKey, baseURL, endpoint string) error
+}
+
+// ─── In-memory task tracking ────────────────────────────────────
+
+type TaskRecord struct {
+	TaskID    string
+	ModelID   string
+	ModelName string
+	CreatedAt time.Time
+	Status    string
+	Result    *StatusResult
 }
