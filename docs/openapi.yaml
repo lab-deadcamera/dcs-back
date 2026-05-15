@@ -1561,6 +1561,11 @@ components:
         format:        { type: string, example: "png" }
         size:          { type: integer, example: 12345 }
         created_at:    { type: string, format: date-time }
+        synced_models:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelBrief"
+          description: "Modelos con los que este archivo está sincronizado (visible en GET /characters)"
 
     CharacterWithFiles:
       type: object

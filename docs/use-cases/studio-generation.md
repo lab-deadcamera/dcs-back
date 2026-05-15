@@ -307,9 +307,11 @@ const files = await fetch('/api/v1/studio/files-with-sync?category=images').then
 
 ### Character files with sync
 
+Los endpoints regulares de characters (`GET /api/v1/characters/:id`, `GET /api/v1/characters`) ya incluyen `synced_models` en cada archivo automáticamente:
+
 ```javascript
-const files = await fetch(`/api/v1/studio/characters/${charId}/files-with-sync`).then(r => r.json());
-// files.data → [
+const character = await fetch(`/api/v1/characters/${charId}`).then(r => r.json());
+// character.data.files → [
 //   {
 //     "file_id": "uuid",
 //     "role": "portrait",
@@ -319,6 +321,12 @@ const files = await fetch(`/api/v1/studio/characters/${charId}/files-with-sync`)
 //     ]
 //   }
 // ]
+```
+
+Si necesitas solo los archivos con su sync info sin el resto del personaje, usa:
+
+```javascript
+const files = await fetch(`/api/v1/studio/characters/${charId}/files-with-sync`).then(r => r.json());
 ```
 
 ## Sincronizar todos los archivos de un personaje
