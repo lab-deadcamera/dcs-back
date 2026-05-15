@@ -14,7 +14,7 @@ import (
 )
 
 var videoURLPattern = regexp.MustCompile(`^https?://`)
-var nameModeldreamina = "dreamina-seedance-2-0-fast-260128"
+var nameModeldreamina = "dreamina-seedance-2-0-260128"
 
 type SeedanceGenerator struct {
 	httpClient *http.Client
