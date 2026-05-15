@@ -12,17 +12,23 @@ type Character struct {
 	DeletedAt   *time.Time `json:"deleted_at"`
 }
 
+type SyncModelItem struct {
+	ModelID string `json:"model_id"`
+	Name    string `json:"name"`
+}
+
 type CharacterFile struct {
-	FileID       string    `json:"file_id"`
-	Role         string    `json:"role"`
-	Filename     string    `json:"filename"`
-	URL          string    `json:"url"`
-	ThumbnailURL string    `json:"thumbnail_url"`
-	MimeType     string    `json:"mime_type"`
-	Category     string    `json:"category"`
-	Format       string    `json:"format"`
-	Size         int64     `json:"size"`
-	CreatedAt    time.Time `json:"created_at"`
+	FileID       string          `json:"file_id"`
+	Role         string          `json:"role"`
+	Filename     string          `json:"filename"`
+	URL          string          `json:"url"`
+	ThumbnailURL string          `json:"thumbnail_url"`
+	MimeType     string          `json:"mime_type"`
+	Category     string          `json:"category"`
+	Format       string          `json:"format"`
+	Size         int64           `json:"size"`
+	CreatedAt    time.Time       `json:"created_at"`
+	SyncedModels []SyncModelItem `json:"synced_models,omitempty"`
 }
 
 type CharacterWithFiles struct {

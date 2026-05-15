@@ -6,19 +6,32 @@ import (
 	"github.com/google/uuid"
 )
 
+// FileEnricher is a callback to enrich files with additional data (e.g. sync info).
+type FileEnricher func(files []CharacterFile)
+
 type Service struct {
-	store   *Store
-	baseURL string
+	store     *Store
+	baseURL   string
+	enricher  FileEnricher
 }
 
 func NewService(store *Store, baseURL string) *Service {
 	return &Service{store: store, baseURL: baseURL}
 }
 
+// SetFileEnricher sets an optional callback that enriches files after loading.
+// Used from main.go to attach sync info from the asset library.
+func (s *Service) SetFileEnricher(fn FileEnricher) {
+	s.enricher = fn
+}
+
 func (s *Service) enrichFileURLs(files []CharacterFile) {
 	for i := range files {
 		files[i].URL = s.baseURL + "/api/v1/files/" + files[i].FileID + "/serve"
 		files[i].ThumbnailURL = s.baseURL + "/api/v1/files/" + files[i].FileID + "/thumbnail"
+	}
+	if s.enricher != nil {
+		s.enricher(files)
 	}
 }
 

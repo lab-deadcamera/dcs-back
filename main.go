@@ -57,11 +57,44 @@ func main() {
 	fileHdl := file.NewHandler(fileSvc)
 	fileSvc.StartPurgeCron()
 
+	assetSyncStore := studio.NewAssetSyncStore(database)
+
 	charStore := character.NewStore(database)
 	charSvc := character.NewService(charStore, cfg.BaseURL)
+	// Enricher: attaches synced model info to character files
+	charSvc.SetFileEnricher(func(files []character.CharacterFile) {
+		fileIDs := make([]string, len(files))
+		for i, f := range files {
+			fileIDs[i] = f.FileID
+		}
+		syncMap, err := assetSyncStore.GetByFileIDs(fileIDs)
+		if err != nil {
+			return
+		}
+		for i, f := range files {
+			assets := syncMap[f.FileID]
+			if len(assets) == 0 {
+				continue
+			}
+			seen := make(map[string]bool)
+			for _, a := range assets {
+				if seen[a.ModelID] {
+					continue
+				}
+				seen[a.ModelID] = true
+				m, _ := providerStore.GetModelByID(a.ModelID)
+				name := "unknown"
+				if m != nil {
+					name = m.Name
+				}
+				files[i].SyncedModels = append(files[i].SyncedModels, character.SyncModelItem{
+					ModelID: a.ModelID,
+					Name:    name,
+				})
+			}
+		}
+	})
 	charHdl := character.NewHandler(charSvc)
-
-	assetSyncStore := studio.NewAssetSyncStore(database)
 
 	studioSvc := studio.NewService(providerStore, fileSvc, cfg.OutputsDir, cfg.BaseURL)
 	studioSvc.SetAssetSyncStore(assetSyncStore)
