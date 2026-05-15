@@ -13,6 +13,7 @@ import (
 	"dcs-back-v0/internal/middleware"
 	"dcs-back-v0/internal/provider"
 	"dcs-back-v0/internal/studio"
+	"dcs-back-v0/internal/studio/generators"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -48,11 +49,6 @@ func main() {
 	providerSvc := provider.NewService(providerStore)
 	providerHdl := provider.NewHandler(providerSvc)
 
-	studioSvc := studio.NewService(providerStore, cfg.OutputsDir)
-	studioSvc.RegisterHandler(studio.NewSeedanceHandler(cfg.OutputsDir))
-	studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
-	studioHdl := studio.NewHandler(studioSvc)
-
 	fileStore, err := file.NewStore(database, cfg.UploadDir)
 	if err != nil {
 		log.Fatalf("failed to init file store: %v", err)
@@ -60,6 +56,18 @@ func main() {
 	fileSvc := file.NewService(fileStore, cfg.BaseURL)
 	fileHdl := file.NewHandler(fileSvc)
 	fileSvc.StartPurgeCron()
+
+	assetSyncStore := studio.NewAssetSyncStore(database)
+
+	studioSvc := studio.NewService(providerStore, fileSvc, cfg.OutputsDir, cfg.BaseURL)
+	studioSvc.SetAssetSyncStore(assetSyncStore)
+	// Register legacy handlers (keep for backward compat)
+	studioSvc.RegisterHandler(studio.NewSeedanceHandler(cfg.OutputsDir))
+	studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
+	// Register new generators
+	studioSvc.RegisterGenerator(generators.NewSeedanceGenerator(cfg.OutputsDir))
+	studioSvc.RegisterGenerator(generators.NewSeedreamGenerator(cfg.OutputsDir))
+	studioHdl := studio.NewHandler(studioSvc)
 
 	charStore := character.NewStore(database)
 	charSvc := character.NewService(charStore, cfg.BaseURL)
@@ -110,9 +118,18 @@ func main() {
 
 		studioGroup := v1.Group("/studio")
 		{
-			studioGroup.POST("/generate", studioHdl.Generate)
+			// New unified payload endpoint
+			studioGroup.POST("/generate", studioHdl.GenerateUnified)
+			// Legacy Selection-based endpoint
+			studioGroup.POST("/generate-legacy", studioHdl.Generate)
+			// Status — returns StudioStatusResponse (list of outputs)
 			studioGroup.GET("/status/:taskId", studioHdl.GetStatus)
+			// Legacy status format
+			studioGroup.GET("/status-legacy/:taskId", studioHdl.GetStatusLegacy)
 			studioGroup.DELETE("/task/:taskId", studioHdl.CancelTask)
+			// Asset sync — upload file to model's asset library
+			studioGroup.POST("/sync-asset", studioHdl.SyncAsset)
+			studioGroup.GET("/synced-assets", studioHdl.ListSyncedAssets)
 		}
 
 		filesAPI := v1.Group("/files")

@@ -1,28 +1,43 @@
 package studio
 
 import (
+	"encoding/base64"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
+	"time"
 
+	"dcs-back-v0/internal/file"
 	"dcs-back-v0/internal/provider"
+	"dcs-back-v0/internal/studio/generators"
 )
 
 type Service struct {
-	providerStore *provider.Store
-	outputsDir    string
-	handlers      []ModelHandler
-	tasks         map[string]*TaskRecord
-	mu            sync.RWMutex
+	providerStore  *provider.Store
+	fileService    *file.Service
+	outputsDir     string
+	handlers       []ModelHandler
+	generatorsList []generators.Generator
+	tasks          map[string]*TaskRecord
+	assetSyncStore *AssetSyncStore
+	baseURL        string
+	mu             sync.RWMutex
 }
 
-func NewService(providerStore *provider.Store, outputsDir string) *Service {
+func NewService(providerStore *provider.Store, fileService *file.Service, outputsDir, baseURL string) *Service {
 	return &Service{
-		providerStore: providerStore,
-		outputsDir:    outputsDir,
-		handlers:      []ModelHandler{},
-		tasks:         make(map[string]*TaskRecord),
+		providerStore:  providerStore,
+		fileService:    fileService,
+		outputsDir:     outputsDir,
+		baseURL:        baseURL,
+		handlers:       []ModelHandler{},
+		generatorsList: []generators.Generator{},
+		tasks:          make(map[string]*TaskRecord),
 	}
 }
+
+// ─── Legacy handler registration ──────────────────────────────────
 
 func (s *Service) RegisterHandler(h ModelHandler) {
 	s.handlers = append(s.handlers, h)
@@ -36,6 +51,104 @@ func (s *Service) pickHandler(modelName string) ModelHandler {
 	}
 	return nil
 }
+
+// ─── Asset sync store ────────────────────────────────────────────
+
+func (s *Service) SetAssetSyncStore(store *AssetSyncStore) {
+	s.assetSyncStore = store
+}
+
+// ─── Generator registration ──────────────────────────────────────
+
+func (s *Service) RegisterGenerator(gen generators.Generator) {
+	s.generatorsList = append(s.generatorsList, gen)
+}
+
+func (s *Service) pickGenerator(modelName string) generators.Generator {
+	for _, g := range s.generatorsList {
+		if g.Match(modelName) {
+			return g
+		}
+	}
+	return nil
+}
+
+// ─── Unified payload generation ──────────────────────────────────
+
+func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateResponse, error) {
+	// Look up model by name (the user sends model name, not UUID)
+	m, err := s.providerStore.GetModelByName(req.Model)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get model: %w", err)
+	}
+	if m == nil {
+		return nil, fmt.Errorf("model not found: %s", req.Model)
+	}
+
+	// Resolve file IDs in content to data URLs (or asset:// URIs if synced)
+	resolvedContent, err := s.resolveContent(req.Content, m.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve content: %w", err)
+	}
+
+	// Convert to generator request
+	genReq := &generators.GeneratorRequest{
+		Model:       m.Name,
+		Content:     resolvedContent,
+		Ratio:       req.Ratio,
+		Duration:    int(req.Duration),
+		CameraFixed: req.CameraFixed != nil && *req.CameraFixed,
+		Seed:        req.Seed,
+		Quality:     req.Quality,
+		Quantity:    req.Quantity,
+		Watermark:   req.Watermark != nil && *req.Watermark,
+		Resolution:  req.Resolution,
+		ImageMode:   req.ImageMode,
+		APIKey:      m.APIKey,
+		BaseURL:     m.URL,
+		Endpoint:    m.Endpoint,
+	}
+	if req.GenerateAudio != nil {
+		genReq.GenerateAudio = *req.GenerateAudio
+	}
+
+	// Pick generator
+	gen := s.pickGenerator(m.Name)
+	if gen == nil {
+		return nil, fmt.Errorf("no generator available for model: %s", m.Name)
+	}
+
+	result, err := gen.Generate(genReq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Track the task for status polling
+	s.mu.Lock()
+	s.tasks[result.TaskID] = &TaskRecord{
+		TaskID:    result.TaskID,
+		ModelID:   m.ID,
+		ModelName: m.Name,
+		Status:    result.Status,
+		Result: &StatusResult{
+			Status: result.Status,
+			Raw:    result.Raw,
+		},
+	}
+	s.mu.Unlock()
+
+	// Convert outputs
+	outputs := convertOutputs(result.Outputs)
+
+	return &StudioGenerateResponse{
+		TaskID:  result.TaskID,
+		Model:   result.Model,
+		Status:  result.Status,
+		Outputs: outputs,
+	}, nil
+}
+
+// ─── Legacy generation ───────────────────────────────────────────
 
 func (s *Service) Generate(sel *Selection) (*GenerateResponse, error) {
 	m, err := s.providerStore.GetModelByID(sel.ModelID)
@@ -68,14 +181,134 @@ func (s *Service) Generate(sel *Selection) (*GenerateResponse, error) {
 	return resp, nil
 }
 
+// ─── Asset sync ──────────────────────────────────────────────────
+
+// SyncAsset uploads a local file to the model's asset library and stores the mapping.
+func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
+	if s.assetSyncStore == nil {
+		return nil, fmt.Errorf("asset sync store not available")
+	}
+
+	m, err := s.providerStore.GetModelByID(req.ModelID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get model: %w", err)
+	}
+	if m == nil {
+		return nil, fmt.Errorf("model not found")
+	}
+	if m.AccessKeyID == "" || m.SecretAccessKey == "" {
+		return nil, fmt.Errorf("model has no AK/SK configured. Set access_key_id and secret_access_key on the model")
+	}
+	if m.DefaultAssetGroupID == "" {
+		return nil, fmt.Errorf("model has no default_asset_group_id. Create an asset group and set it on the model")
+	}
+
+	f, err := s.fileService.GetFile(req.FileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file: %w", err)
+	}
+	if f == nil {
+		return nil, fmt.Errorf("file not found")
+	}
+
+	// Create the sync record
+	assetID := ""
+	record := &ModelAsset{
+		ModelID:      req.ModelID,
+		FileID:       req.FileID,
+		AssetGroupID: m.DefaultAssetGroupID,
+		Status:       "syncing",
+	}
+	if err := s.assetSyncStore.Create(record); err != nil {
+		return nil, fmt.Errorf("failed to create sync record: %w", err)
+	}
+
+	// Build the publicly accessible URL for the file
+	fileURL := s.baseURL + "/api/v1/files/" + req.FileID + "/serve"
+
+	// Upload to the asset library
+	api := generators.NewAssetAPI(m.AccessKeyID, m.SecretAccessKey, m.DefaultAssetGroupID)
+	result, err := api.CreateAsset(fileURL, f.Filename, detectAssetType(f.MimeType), "")
+	if err != nil {
+		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error())
+		return &SyncAssetResponse{
+			ID:           record.ID,
+			ModelID:      req.ModelID,
+			FileID:       req.FileID,
+			Status:       "failed",
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	assetID, _ = result["id"].(string)
+	record.AssetID = assetID
+
+	// Poll until Active (up to ~2 min)
+	assetStatus := ""
+	for i := 0; i < 20; i++ {
+		statusResult, err := api.GetAsset(assetID, "")
+		if err != nil {
+			time.Sleep(3 * time.Second)
+			continue
+		}
+		assetStatus, _ = statusResult["Status"].(string)
+		if assetStatus == "Active" || assetStatus == "Failed" {
+			break
+		}
+		time.Sleep(3 * time.Second)
+	}
+
+	finalStatus := "active"
+	errMsg := ""
+	if assetStatus != "Active" {
+		finalStatus = "failed"
+		errMsg = fmt.Sprintf("asset did not become Active, last status: %s", assetStatus)
+	}
+
+	// Update the record
+	if err := s.assetSyncStore.UpdateStatus(record.ID, finalStatus, errMsg); err != nil {
+		return nil, fmt.Errorf("failed to update sync status: %w", err)
+	}
+
+	// Also update the in-memory record
+	record.Status = finalStatus
+	record.ErrorMessage = errMsg
+
+	return &SyncAssetResponse{
+		ID:           record.ID,
+		ModelID:      req.ModelID,
+		FileID:       req.FileID,
+		AssetID:      assetID,
+		AssetGroupID: m.DefaultAssetGroupID,
+		Status:       finalStatus,
+		ErrorMessage: errMsg,
+	}, nil
+}
+
+// ListSyncedAssets returns all synced assets for a model.
+func (s *Service) ListSyncedAssets(modelID string) ([]ModelAsset, error) {
+	if s.assetSyncStore == nil {
+		return nil, fmt.Errorf("asset sync store not available")
+	}
+	return s.assetSyncStore.ListByModel(modelID)
+}
+
+// GetSyncedAsset checks if a file is synced with a model.
+func (s *Service) GetSyncedAsset(modelID, fileID string) (*ModelAsset, error) {
+	if s.assetSyncStore == nil {
+		return nil, nil
+	}
+	return s.assetSyncStore.GetByModelAndFile(modelID, fileID)
+}
+
+// ─── Status and cancellation (shared) ────────────────────────────
+
 func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	s.mu.RLock()
 	record, ok := s.tasks[taskID]
 	s.mu.RUnlock()
 
 	if !ok {
-		// Try to find model ID — we need it for the handler lookup
-		// For now, iterate all tasks
 		return nil, fmt.Errorf("unknown task: %s", taskID)
 	}
 
@@ -87,6 +320,32 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 		return nil, fmt.Errorf("model for task %s not found", taskID)
 	}
 
+	// Try generator first, then fall back to legacy handler
+	gen := s.pickGenerator(m.Name)
+	if gen != nil {
+		result, err := gen.GetStatus(taskID, m.APIKey, m.URL, m.Endpoint)
+		if err != nil {
+			return nil, err
+		}
+		statusResult := &StatusResult{
+			Status: result.Status,
+			Error:  result.Error,
+			Raw:    result.Raw,
+		}
+		if len(result.Outputs) > 0 {
+			statusResult.VideoURL = result.Outputs[0].URL
+			statusResult.LocalURL = result.Outputs[0].LocalURL
+		}
+		if result.Status == "succeeded" || result.Status == "failed" {
+			s.mu.Lock()
+			record.Status = result.Status
+			record.Result = statusResult
+			s.mu.Unlock()
+		}
+		return statusResult, nil
+	}
+
+	// Fall back to legacy handler
 	handler := s.pickHandler(m.Name)
 	if handler == nil {
 		return nil, fmt.Errorf("no handler available for model: %s", m.Name)
@@ -107,6 +366,35 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	return result, nil
 }
 
+func (s *Service) GetStatusUnified(taskID string) (*StudioStatusResponse, error) {
+	sr, err := s.GetStatus(taskID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &StudioStatusResponse{
+		Status: sr.Status,
+		Error:  sr.Error,
+		Outputs: []OutputResource{},
+	}
+
+	if sr.VideoURL != "" {
+		resp.Outputs = append(resp.Outputs, OutputResource{
+			URL:      sr.VideoURL,
+			LocalURL: sr.LocalURL,
+			Type:     "video",
+		})
+	}
+	if sr.ImageURL != "" {
+		resp.Outputs = append(resp.Outputs, OutputResource{
+			URL:  sr.ImageURL,
+			Type: "image",
+		})
+	}
+
+	return resp, nil
+}
+
 func (s *Service) CancelTask(taskID string) error {
 	s.mu.RLock()
 	record, ok := s.tasks[taskID]
@@ -124,10 +412,111 @@ func (s *Service) CancelTask(taskID string) error {
 		return fmt.Errorf("model for task %s not found", taskID)
 	}
 
+	// Try generator first
+	gen := s.pickGenerator(m.Name)
+	if gen != nil {
+		return gen.CancelTask(taskID, m.APIKey, m.URL, m.Endpoint)
+	}
+
+	// Fall back to legacy handler
 	handler := s.pickHandler(m.Name)
 	if handler == nil {
 		return fmt.Errorf("no handler available for model: %s", m.Name)
 	}
 
 	return handler.CancelTask(taskID, m.APIKey, m.URL, m.Endpoint)
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────
+
+func (s *Service) resolveContent(items []ContentItem, modelID string) ([]generators.ContentItem, error) {
+	resolved := make([]generators.ContentItem, len(items))
+	for i, item := range items {
+		ci := generators.ContentItem{
+			Type: item.Type,
+			Text: item.Text,
+			Name: item.Name,
+			ID:   item.ID,
+		}
+
+		if item.Type != "text" && item.ID != "" {
+			// Check if file is synced to this model's asset library
+			if modelID != "" && s.assetSyncStore != nil {
+				synced, err := s.assetSyncStore.GetByModelAndFile(modelID, item.ID)
+				if err == nil && synced != nil && synced.Status == "active" && synced.AssetID != "" {
+					ci.DataURL = "asset://" + synced.AssetID
+					resolved[i] = ci
+					continue
+				}
+			}
+
+			// Not synced — fall back to data URL
+			f, err := s.fileService.GetFile(item.ID)
+			if err != nil {
+				return nil, fmt.Errorf("content[%d] file %s: %w", i, item.ID, err)
+			}
+			if f == nil {
+				return nil, fmt.Errorf("content[%d] file %s not found", i, item.ID)
+			}
+
+			path, err := s.fileService.GetServePath(item.ID)
+			if err != nil {
+				return nil, fmt.Errorf("content[%d] failed to resolve path for %s: %w", i, item.ID, err)
+			}
+
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("content[%d] failed to read file %s: %w", i, item.ID, err)
+			}
+
+			mimeType := f.MimeType
+			if mimeType == "" {
+				switch strings.ToLower(f.Format) {
+				case "png":
+					mimeType = "image/png"
+				case "jpg", "jpeg":
+					mimeType = "image/jpeg"
+				case "gif":
+					mimeType = "image/gif"
+				case "webp":
+					mimeType = "image/webp"
+				case "mp4":
+					mimeType = "video/mp4"
+				case "mp3":
+					mimeType = "audio/mpeg"
+				default:
+					mimeType = "application/octet-stream"
+				}
+			}
+
+			ci.DataURL = fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(data))
+		}
+		resolved[i] = ci
+	}
+	return resolved, nil
+}
+
+func detectAssetType(mimeType string) string {
+	if strings.HasPrefix(mimeType, "video") {
+		return "Video"
+	}
+	if strings.HasPrefix(mimeType, "audio") {
+		return "Audio"
+	}
+	return "Image"
+}
+
+func convertOutputs(src []generators.OutputResource) []OutputResource {
+	if src == nil {
+		return []OutputResource{}
+	}
+	dst := make([]OutputResource, len(src))
+	for i, o := range src {
+		dst[i] = OutputResource{
+			URL:      o.URL,
+			LocalURL: o.LocalURL,
+			Type:     o.Type,
+		}
+	}
+	return dst
 }

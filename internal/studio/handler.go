@@ -1,6 +1,9 @@
 package studio
 
 import (
+	"errors"
+	"strings"
+
 	"dcs-back-v0/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -13,6 +16,8 @@ type Handler struct {
 func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
+
+// ─── Legacy endpoint (Selection-based) ─────────────────────────
 
 func (h *Handler) Generate(c *gin.Context) {
 	var req Selection
@@ -34,7 +39,73 @@ func (h *Handler) Generate(c *gin.Context) {
 	utils.Created(c, result)
 }
 
+// ─── New unified endpoint ───────────────────────────────────────
+
+// GenerateUnified handles POST /studio/generate with the unified payload.
+//
+//	{
+//	  "model": "dreamina-seedance-2-0-fast-260128",
+//	  "content": [
+//	    {"type": "text", "text": "prompt here"},
+//	    {"type": "image", "id": "uuid", "name": "img.png", "text": "description"}
+//	  ],
+//	  "ratio": "16:9",
+//	  "duration": 5,
+//	  "camerafixed": false,
+//	  "seed": "22",
+//	  "quality": "standard",
+//	  "quantity": 1,
+//	  "watermark": false,
+//	  "resolution": "480p",
+//	  "generate_audio": true,
+//	  "image_mode": "PIL"
+//	}
+func (h *Handler) GenerateUnified(c *gin.Context) {
+	var req StudioGenerateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.svc.GenerateUnified(&req)
+	if err != nil {
+		if strings.Contains(err.Error(), "model not found") {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	if len(result.Outputs) > 0 {
+		utils.Created(c, result)
+		return
+	}
+
+	utils.Created(c, result)
+}
+
+// ─── Status and cancellation ─────────────────────────────────────
+
 func (h *Handler) GetStatus(c *gin.Context) {
+	taskID := c.Param("taskId")
+	if taskID == "" {
+		utils.BadRequest(c, "taskId is required")
+		return
+	}
+
+	// Try unified first, fall back to legacy
+	result, err := h.svc.GetStatusUnified(taskID)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, result)
+}
+
+// GetStatusLegacy handles the legacy status response format.
+func (h *Handler) GetStatusLegacy(c *gin.Context) {
 	taskID := c.Param("taskId")
 	if taskID == "" {
 		utils.BadRequest(c, "taskId is required")
@@ -50,6 +121,40 @@ func (h *Handler) GetStatus(c *gin.Context) {
 	utils.Success(c, result)
 }
 
+// ─── Asset sync ─────────────────────────────────────────────────
+
+func (h *Handler) SyncAsset(c *gin.Context) {
+	var req SyncAssetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.svc.SyncAsset(&req)
+	if err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	utils.Success(c, result)
+}
+
+func (h *Handler) ListSyncedAssets(c *gin.Context) {
+	modelID := c.Query("model_id")
+	if modelID == "" {
+		utils.BadRequest(c, "model_id query parameter is required")
+		return
+	}
+
+	assets, err := h.svc.ListSyncedAssets(modelID)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, assets)
+}
+
 func (h *Handler) CancelTask(c *gin.Context) {
 	taskID := c.Param("taskId")
 	if taskID == "" {
@@ -58,7 +163,7 @@ func (h *Handler) CancelTask(c *gin.Context) {
 	}
 
 	if err := h.svc.CancelTask(taskID); err != nil {
-		if err.Error() == "unknown task" {
+		if errors.Is(err, errors.New("unknown task")) {
 			utils.NotFound(c, err.Error())
 			return
 		}

@@ -1,8 +1,12 @@
 package studio
 
-import "time"
+import (
+	"time"
 
-// ─── Request / Response ─────────────────────────────────────────
+	"dcs-back-v0/internal/studio/generators"
+)
+
+// ─── Legacy types (Selection-based) ─────────────────────────────
 
 type Selection struct {
 	UserPrompt   string            `json:"userPrompt"`
@@ -36,6 +40,56 @@ type DataRef struct {
 	DataUrl string `json:"dataUrl"`
 }
 
+// ─── Unified payload types ──────────────────────────────────────
+
+// ContentItem represents a single entry in the content array.
+type ContentItem struct {
+	Type string `json:"type" binding:"required"` // "text", "image", "video", "audio"
+	Text string `json:"text,omitempty"`           // prompt text or asset description
+	Name string `json:"name,omitempty"`           // original filename (file types)
+	ID   string `json:"id,omitempty"`             // file UUID from the file store
+}
+
+// StudioGenerateRequest is the new unified payload for /studio/generate.
+type StudioGenerateRequest struct {
+	Model         string        `json:"model" binding:"required"`
+	Content       []ContentItem `json:"content" binding:"required"`
+	Ratio         string        `json:"ratio"`
+	Duration      float64       `json:"duration"`
+	CameraFixed   *bool         `json:"camerafixed"`
+	Seed          string        `json:"seed"`
+	Quality       string        `json:"quality"`
+	Quantity      int           `json:"quantity"`
+	Watermark     *bool         `json:"watermark"`
+	Resolution    string        `json:"resolution"`
+	GenerateAudio *bool         `json:"generate_audio"`
+	ImageMode     string        `json:"image_mode"`
+}
+
+// OutputResource represents a single generated output (video, image, audio).
+type OutputResource struct {
+	URL      string `json:"url"`
+	LocalURL string `json:"localUrl,omitempty"`
+	Type     string `json:"type"` // "video", "image", "audio"
+}
+
+// StudioGenerateResponse is returned by POST /studio/generate.
+type StudioGenerateResponse struct {
+	TaskID  string           `json:"taskId"`
+	Model   string           `json:"model"`
+	Status  string           `json:"status"`
+	Outputs []OutputResource `json:"outputs,omitempty"`
+}
+
+// StudioStatusResponse is returned by GET /studio/status/:taskId.
+type StudioStatusResponse struct {
+	Status  string           `json:"status"`
+	Outputs []OutputResource `json:"outputs,omitempty"`
+	Error   string           `json:"error,omitempty"`
+}
+
+// ─── Legacy response types ──────────────────────────────────────
+
 type GenerateResponse struct {
 	TaskID  string `json:"taskId"`
 	ModelID string `json:"modelId"`
@@ -45,12 +99,12 @@ type GenerateResponse struct {
 }
 
 type StatusResult struct {
-	Status   string `json:"status"`
-	VideoURL string `json:"videoUrl,omitempty"`
-	LocalURL string `json:"localUrl,omitempty"`
-	ImageURL string `json:"imageUrl,omitempty"`
+	Status   string      `json:"status"`
+	VideoURL string      `json:"videoUrl,omitempty"`
+	LocalURL string      `json:"localUrl,omitempty"`
+	ImageURL string      `json:"imageUrl,omitempty"`
 	Raw      interface{} `json:"raw,omitempty"`
-	Error    string `json:"error,omitempty"`
+	Error    string      `json:"error,omitempty"`
 }
 
 type TaskCancelResult struct {
@@ -58,17 +112,70 @@ type TaskCancelResult struct {
 	Message string `json:"message"`
 }
 
-// ─── Model Handler Interface ────────────────────────────────────
+// ─── Model Handler Interface (legacy) ───────────────────────────
 
 type ModelHandler interface {
-	// Matches returns true if this handler should be used for the given model
 	Matches(modelName string) bool
-	// Generate submits a generation task and returns the task ID
 	Generate(sel *Selection, apiKey, baseURL, endpoint string) (*GenerateResponse, error)
-	// GetStatus polls the task status
 	GetStatus(taskID string, apiKey, baseURL, endpoint string) (*StatusResult, error)
-	// CancelTask cancels a running task
 	CancelTask(taskID string, apiKey, baseURL, endpoint string) error
+}
+
+// ─── Generator adapter ──────────────────────────────────────────
+
+// GeneratorAdapter wraps a generators.Generator to be used as a ModelHandler.
+type GeneratorAdapter struct {
+	gen generators.Generator
+}
+
+func NewGeneratorAdapter(gen generators.Generator) *GeneratorAdapter {
+	return &GeneratorAdapter{gen: gen}
+}
+
+func (a *GeneratorAdapter) Matches(modelName string) bool {
+	return a.gen.Match(modelName)
+}
+
+func (a *GeneratorAdapter) Generate(sel *Selection, apiKey, baseURL, endpoint string) (*GenerateResponse, error) {
+	return nil, nil
+}
+
+func (a *GeneratorAdapter) GetStatus(taskID, apiKey, baseURL, endpoint string) (*StatusResult, error) {
+	result, err := a.gen.GetStatus(taskID, apiKey, baseURL, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	sr := &StatusResult{
+		Status: result.Status,
+		Error:  result.Error,
+		Raw:    result.Raw,
+	}
+	if len(result.Outputs) > 0 {
+		sr.VideoURL = result.Outputs[0].URL
+		sr.LocalURL = result.Outputs[0].LocalURL
+	}
+	return sr, nil
+}
+
+func (a *GeneratorAdapter) CancelTask(taskID, apiKey, baseURL, endpoint string) error {
+	return a.gen.CancelTask(taskID, apiKey, baseURL, endpoint)
+}
+
+// ─── Asset sync ─────────────────────────────────────────────────
+
+type SyncAssetRequest struct {
+	ModelID string `json:"model_id" binding:"required"`
+	FileID  string `json:"file_id" binding:"required"`
+}
+
+type SyncAssetResponse struct {
+	ID           string `json:"id"`
+	ModelID      string `json:"model_id"`
+	FileID       string `json:"file_id"`
+	AssetID      string `json:"asset_id,omitempty"`
+	AssetGroupID string `json:"asset_group_id,omitempty"`
+	Status       string `json:"status"`
+	ErrorMessage string `json:"error_message,omitempty"`
 }
 
 // ─── In-memory task tracking ────────────────────────────────────

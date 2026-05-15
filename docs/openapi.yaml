@@ -193,12 +193,39 @@ paths:
 
   # ─── Studio · Generate ────────────────────────────────────────
 
-  # ─── Studio · Generate ────────────────────────────────────────
   /studio/generate:
     post:
       tags: [Studio Generate]
-      summary: Generate content using a registered model
+      summary: Generate content using a registered model (unified payload)
       operationId: studioGenerate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudioGenerateRequest"
+      responses:
+        "201":
+          description: Generation task created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/StudioGenerateResponse"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "created" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /studio/generate-legacy:
+    post:
+      tags: [Studio Generate]
+      summary: Generate content using legacy Selection payload
+      operationId: studioGenerateLegacy
       requestBody:
         required: true
         content:
@@ -207,7 +234,7 @@ paths:
               $ref: "#/components/schemas/StudioSelection"
       responses:
         "201":
-          description: Generation task created
+          description: Generation task created (legacy format)
           content:
             application/json:
               schema:
@@ -231,7 +258,7 @@ paths:
   /studio/status/{taskId}:
     get:
       tags: [Studio Generate]
-      summary: Poll generation task status
+      summary: Poll generation task status (returns outputs array)
       operationId: studioStatus
       parameters:
         - name: taskId
@@ -241,6 +268,31 @@ paths:
       responses:
         "200":
           description: Task status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/StudioStatusResponse"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /studio/status-legacy/{taskId}:
+    get:
+      tags: [Studio Generate]
+      summary: Poll generation task status (legacy flat format)
+      operationId: studioStatusLegacy
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Task status (legacy)
           content:
             application/json:
               schema:
@@ -281,6 +333,85 @@ paths:
                 $ref: "#/components/schemas/ApiResponse"
         "500":
           $ref: "#/components/responses/InternalError"
+
+  /studio/sync-asset:
+    post:
+      tags: [Studio Assets]
+      summary: Sync a file to a model's asset library
+      description: |
+        Uploads a file to the BytePlus asset library (using the model's AK/SK),
+        polls until Active, and stores the mapping for future generation.
+        Subsequent generations with this file+model will use `asset://` URIs instead of data URLs.
+      operationId: studioSyncAsset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model_id, file_id]
+              properties:
+                model_id: { type: string, format: uuid, description: "Model UUID (must have AK/SK and default_asset_group_id configured)" }
+                file_id:  { type: string, format: uuid, description: "File UUID from /api/v1/files/upload" }
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:           { type: string, format: uuid }
+                      model_id:     { type: string, format: uuid }
+                      file_id:      { type: string, format: uuid }
+                      asset_id:     { type: string, example: "asset-20260318-xxxxx" }
+                      asset_group_id: { type: string, example: "group-20260318-xxxxx" }
+                      status:       { type: string, enum: [active, syncing, failed] }
+                      error_message: { type: string }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /studio/synced-assets:
+    get:
+      tags: [Studio Assets]
+      summary: List all synced assets for a model
+      operationId: studioListSyncedAssets
+      parameters:
+        - name: model_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Synced asset list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:            { type: string, format: uuid }
+                        model_id:      { type: string, format: uuid }
+                        file_id:       { type: string, format: uuid }
+                        asset_id:      { type: string }
+                        asset_group_id: { type: string }
+                        status:        { type: string }
+                        error_message: { type: string }
+                        created_at:    { type: string, format: date-time }
+                        updated_at:    { type: string, format: date-time }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
 
   # ─── Files ────────────────────────────────────────────────────
   /files/upload:
@@ -1020,17 +1151,20 @@ components:
     Model:
       type: object
       properties:
-        id:          { type: string, format: uuid }
-        provider_id: { type: string, format: uuid }
-        name:        { type: string }
-        api_key:     { type: string }
-        url:         { type: string }
-        endpoint:    { type: string }
-        active:      { type: boolean }
-        favorite:    { type: boolean }
-        created_at:  { type: string, format: date-time }
-        updated_at:  { type: string, format: date-time }
-        deleted_at:  { type: string, format: date-time, nullable: true }
+        id:                   { type: string, format: uuid }
+        provider_id:          { type: string, format: uuid }
+        name:                 { type: string }
+        api_key:              { type: string }
+        url:                  { type: string }
+        endpoint:             { type: string }
+        access_key_id:        { type: string, description: "AK for BytePlus asset library API" }
+        secret_access_key:    { type: string, description: "SK for BytePlus asset library API" }
+        default_asset_group_id: { type: string, description: "Default asset group ID for asset sync" }
+        active:               { type: boolean }
+        favorite:             { type: boolean }
+        created_at:           { type: string, format: date-time }
+        updated_at:           { type: string, format: date-time }
+        deleted_at:           { type: string, format: date-time, nullable: true }
 
     ModelWithProvider:
       allOf:
@@ -1058,12 +1192,15 @@ components:
       type: object
       required: [provider_id, name, api_key, url, endpoint]
       properties:
-        provider_id: { type: string, format: uuid }
-        name:        { type: string }
-        api_key:     { type: string }
-        url:         { type: string }
-        endpoint:    { type: string }
-        active:      { type: boolean, default: true }
+        provider_id:          { type: string, format: uuid }
+        name:                 { type: string }
+        api_key:              { type: string }
+        url:                  { type: string }
+        endpoint:             { type: string }
+        access_key_id:        { type: string }
+        secret_access_key:    { type: string }
+        default_asset_group_id: { type: string }
+        active:               { type: boolean, default: true }
 
     # ─── Images (legacy) ──────────────────────────────────────
     ImageUploadResult:
@@ -1082,6 +1219,135 @@ components:
         thumbnail_url: { type: string }
 
     # ─── Studio ─────────────────────────────────────────────
+
+    # New unified payload types
+
+    StudioContentItem:
+      type: object
+      required: [type]
+      description: "Item in the content array — text prompt or file reference"
+      properties:
+        type:
+          type: string
+          enum: [text, image, video, audio]
+          description: "text para prompt, image/video/audio para archivos de referencia"
+        text:
+          type: string
+          description: "Prompt textual o descripción del asset de referencia"
+        name:
+          type: string
+          description: "Nombre original del archivo (solo image/video/audio)"
+        id:
+          type: string
+          format: uuid
+          description: "UUID del archivo en file store (solo image/video/audio)"
+
+    StudioGenerateRequest:
+      type: object
+      required: [model, content]
+      properties:
+        model:
+          type: string
+          example: "dreamina-seedance-2-0-260128"
+          description: "Nombre del modelo registrado en el provider store"
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioContentItem"
+          description: "Array de prompts de texto y/o referencias a archivos"
+        ratio:
+          type: string
+          example: "16:9"
+          description: "Relación de aspecto"
+        duration:
+          type: number
+          default: 5
+          description: "Duración en segundos (modelos de video)"
+        camerafixed:
+          type: boolean
+          default: false
+          description: "Cámara fija sin movimiento"
+        seed:
+          type: string
+          example: "22"
+          description: "Semilla para reproducibilidad"
+        quality:
+          type: string
+          enum: [standard, high]
+          default: standard
+        quantity:
+          type: integer
+          default: 1
+          description: "Cantidad de outputs a generar"
+        watermark:
+          type: boolean
+          default: false
+        resolution:
+          type: string
+          example: "480p"
+          description: "Resolución: 480p, 720p, 1080p, etc."
+        generate_audio:
+          type: boolean
+          description: "Generar audio para el video"
+        image_mode:
+          type: string
+          example: "PIL"
+          description: "Modo de procesamiento de imagen"
+
+    OutputResource:
+      type: object
+      description: "Recurso generado (video, imagen o audio)"
+      properties:
+        url:
+          type: string
+          format: uri
+          description: "URL pública del recurso generado"
+        localUrl:
+          type: string
+          nullable: true
+          description: "URL local del recurso descargado (cuando aplica)"
+        type:
+          type: string
+          enum: [video, image, audio]
+          description: "Tipo de recurso"
+
+    StudioGenerateResponse:
+      type: object
+      description: "Respuesta de POST /studio/generate"
+      properties:
+        taskId:
+          type: string
+          example: "cgt-20260515-abc123"
+        model:
+          type: string
+          example: "dreamina-seedance-2-0-260128"
+        status:
+          type: string
+          enum: [running, succeeded, failed, queued]
+        outputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/OutputResource"
+          description: "Outputs generados (vacío si la tarea está en progreso). Siempre es un array."
+
+    StudioStatusResponse:
+      type: object
+      description: "Respuesta de GET /studio/status/{taskId}"
+      properties:
+        status:
+          type: string
+          enum: [running, succeeded, failed, succeeded_no_url, queued]
+        outputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/OutputResource"
+          description: "Outputs generados. Siempre es un array."
+        error:
+          type: string
+          description: "Mensaje de error si la tarea falló"
+
+    # Legacy types
+
     StudioSelection:
       type: object
       required: [model_id]
@@ -1249,3 +1515,5 @@ tags:
     description: AI provider management
   - name: Models
     description: AI model registration and configuration
+  - name: Studio Assets
+    description: Asset library sync — upload files to BytePlus asset library for optimized generation

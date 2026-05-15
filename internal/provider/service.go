@@ -65,13 +65,16 @@ func (s *Service) CreateModel(req CreateModelRequest) (*Model, error) {
 		active = *req.Active
 	}
 	m := &Model{
-		ID:         uuid.New().String(),
-		ProviderID: req.ProviderID,
-		Name:       req.Name,
-		APIKey:     req.APIKey,
-		URL:        req.URL,
-		Endpoint:   req.Endpoint,
-		Active:     active,
+		ID:                 uuid.New().String(),
+		ProviderID:         req.ProviderID,
+		Name:               req.Name,
+		APIKey:             req.APIKey,
+		URL:                req.URL,
+		Endpoint:           req.Endpoint,
+		AccessKeyID:        req.AccessKeyID,
+		SecretAccessKey:    req.SecretAccessKey,
+		DefaultAssetGroupID: req.DefaultAssetGroupID,
+		Active:             active,
 	}
 	if err := s.store.CreateModel(m); err != nil {
 		return nil, err
@@ -81,6 +84,10 @@ func (s *Service) CreateModel(req CreateModelRequest) (*Model, error) {
 
 func (s *Service) GetModelByID(id string) (*Model, error) {
 	return s.store.GetModelByID(id)
+}
+
+func (s *Service) GetModelByName(name string) (*Model, error) {
+	return s.store.GetModelByName(name)
 }
 
 func (s *Service) ListModels() ([]ModelWithProvider, error) {
@@ -111,6 +118,15 @@ func (s *Service) UpdateModel(id string, req UpdateModelRequest) (*Model, error)
 	}
 	if req.Endpoint != nil {
 		updates["endpoint"] = *req.Endpoint
+	}
+	if req.AccessKeyID != nil {
+		updates["access_key_id"] = *req.AccessKeyID
+	}
+	if req.SecretAccessKey != nil {
+		updates["secret_access_key"] = *req.SecretAccessKey
+	}
+	if req.DefaultAssetGroupID != nil {
+		updates["default_asset_group_id"] = *req.DefaultAssetGroupID
 	}
 	if req.Active != nil {
 		updates["active"] = *req.Active

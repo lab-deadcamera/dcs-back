@@ -9,6 +9,7 @@
 | 3 | Crear personajes | [`create-characters.md`](./create-characters.md) |
 | 4 | Agregar archivos a un personaje | [`add-files-to-character.md`](./add-files-to-character.md) |
 | 5 | Proveedores y modelos de IA | [`providers-and-models.md`](./providers-and-models.md) |
+| 6 | Generación Studio (unified payload) | [`studio-generation.md`](./studio-generation.md) |
 
 ## Diagrama de flujo
 
