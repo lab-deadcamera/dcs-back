@@ -63,7 +63,7 @@ func (g *SeedanceGenerator) Validate(req *GeneratorRequest) error {
 func (g *SeedanceGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, error) {
 	payload := g.buildPayload(req)
 
-	result, err := g.arkRequest(req.BaseURL+req.Endpoint+"/contents/generations/tasks", "POST", payload, req.APIKey)
+	result, err := g.arkRequest(req.BaseURL+req.Endpoint, "POST", payload, req.APIKey)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (g *SeedanceGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, e
 }
 
 func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*GeneratorResult, error) {
-	result, err := g.arkRequest(baseURL+endpoint+"/contents/generations/tasks/"+taskID, "GET", nil, apiKey)
+	result, err := g.arkRequest(baseURL+endpoint+"/"+taskID, "GET", nil, apiKey)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 }
 
 func (g *SeedanceGenerator) CancelTask(taskID, apiKey, baseURL, endpoint string) error {
-	_, err := g.arkRequest(baseURL+endpoint+"/contents/generations/tasks/"+taskID, "DELETE", nil, apiKey)
+	_, err := g.arkRequest(baseURL+endpoint+"/"+taskID, "DELETE", nil, apiKey)
 	return err
 }
 
