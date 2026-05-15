@@ -23,6 +23,7 @@ type Generator interface {
 |--------|-----------|
 | `Name()` | Nombre legible del generador (ej: `"seedance"`) |
 | `Match(modelName)` | Devuelve `true` si este generador debe manejar el modelo |
+| `Validate(req)` | Valida el payload contra el modelo específico antes de generar |
 | `Generate(req)` | Envía la solicitud al modelo y devuelve el resultado |
 | `GetStatus(...)` | Consulta el estado de una tarea asíncrona |
 | `CancelTask(...)` | Cancela una tarea en ejecución |

@@ -124,6 +124,11 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		return nil, fmt.Errorf("no generator available for model: %s", m.Name)
 	}
 
+	// Validate request against the generator
+	if err := gen.Validate(genReq); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
 	result, err := gen.Generate(genReq)
 	if err != nil {
 		return nil, err

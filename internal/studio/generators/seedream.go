@@ -28,6 +28,31 @@ func (g *SeedreamGenerator) Match(modelName string) bool {
 	return strings.Contains(strings.ToLower(modelName), nameModelSeedream)
 }
 
+func (g *SeedreamGenerator) Validate(req *GeneratorRequest) error {
+	errs := validateCommon(req)
+	if errs.HasErrors() {
+		return errs
+	}
+
+	if req.Resolution != "" && !validResolutionsImage[req.Resolution] {
+		errs.Add("resolution", "must be one of: 2K, 1080p, 720p")
+	}
+	if req.Duration > 0 {
+		errs.Add("duration", "not supported for image generation")
+	}
+	if req.CameraFixed {
+		errs.Add("camerafixed", "not supported for image generation")
+	}
+	if req.GenerateAudio {
+		errs.Add("generate_audio", "not supported for image generation")
+	}
+
+	if errs.HasErrors() {
+		return errs
+	}
+	return nil
+}
+
 func (g *SeedreamGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, error) {
 	payload := map[string]interface{}{
 		"model":           req.Model,

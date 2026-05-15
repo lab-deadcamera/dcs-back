@@ -35,6 +35,31 @@ func (g *SeedanceGenerator) Match(modelName string) bool {
 	return strings.Contains(lower, nameModeldreamina)
 }
 
+func (g *SeedanceGenerator) Validate(req *GeneratorRequest) error {
+	errs := validateCommon(req)
+	if errs.HasErrors() {
+		return errs
+	}
+
+	if req.Duration < 1 || req.Duration > 60 {
+		errs.Add("duration", "must be between 1 and 60 seconds")
+	}
+	if req.Ratio != "" && !validRatios[req.Ratio] {
+		errs.Add("ratio", "unsupported value: "+req.Ratio)
+	}
+	if req.Resolution != "" && !validResolutionsVideo[req.Resolution] {
+		errs.Add("resolution", "must be one of: 480p, 720p, 1080p")
+	}
+	if req.GenerateAudio && isFastModel(req.Model) {
+		errs.Add("generate_audio", "only supported on pro models (non-fast)")
+	}
+
+	if errs.HasErrors() {
+		return errs
+	}
+	return nil
+}
+
 func (g *SeedanceGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, error) {
 	payload := g.buildPayload(req)
 
@@ -339,6 +364,10 @@ func compileContentText(items []ContentItem) string {
 		textBlock += "."
 	}
 	return textBlock
+}
+
+func isFastModel(model string) bool {
+	return strings.Contains(strings.ToLower(model), "fast")
 }
 
 func safeSuffix(taskID string) string {
