@@ -8,21 +8,23 @@ import (
 	"sync"
 	"time"
 
+	"dcs-back-v0/internal/character"
 	"dcs-back-v0/internal/file"
 	"dcs-back-v0/internal/provider"
 	"dcs-back-v0/internal/studio/generators"
 )
 
 type Service struct {
-	providerStore  *provider.Store
-	fileService    *file.Service
-	outputsDir     string
-	handlers       []ModelHandler
-	generatorsList []generators.Generator
-	tasks          map[string]*TaskRecord
-	assetSyncStore *AssetSyncStore
-	baseURL        string
-	mu             sync.RWMutex
+	providerStore    *provider.Store
+	fileService      *file.Service
+	charService      *character.Service
+	outputsDir       string
+	handlers         []ModelHandler
+	generatorsList   []generators.Generator
+	tasks            map[string]*TaskRecord
+	assetSyncStore   *AssetSyncStore
+	baseURL          string
+	mu               sync.RWMutex
 }
 
 func NewService(providerStore *provider.Store, fileService *file.Service, outputsDir, baseURL string) *Service {
@@ -56,6 +58,10 @@ func (s *Service) pickHandler(modelName string) ModelHandler {
 
 func (s *Service) SetAssetSyncStore(store *AssetSyncStore) {
 	s.assetSyncStore = store
+}
+
+func (s *Service) SetCharacterService(cs *character.Service) {
+	s.charService = cs
 }
 
 // ─── Generator registration ──────────────────────────────────────
@@ -299,6 +305,201 @@ func (s *Service) GetSyncedAsset(modelID, fileID string) (*ModelAsset, error) {
 		return nil, nil
 	}
 	return s.assetSyncStore.GetByModelAndFile(modelID, fileID)
+}
+
+// ─── Enriched file listing ───────────────────────────────────────
+
+// resolveModelBriefs resolves a set of model IDs to ModelBrief objects.
+func (s *Service) resolveModelBriefs(modelIDs map[string]bool) []ModelBrief {
+	var briefs []ModelBrief
+	for id := range modelIDs {
+		m, err := s.providerStore.GetModelByID(id)
+		if err != nil || m == nil {
+			briefs = append(briefs, ModelBrief{ModelID: id, Name: "unknown"})
+			continue
+		}
+		briefs = append(briefs, ModelBrief{ModelID: id, Name: m.Name})
+	}
+	return briefs
+}
+
+// GetFilesWithSync returns files with their synced model info.
+func (s *Service) GetFilesWithSync(category, storage string, trashed bool) ([]FileWithSync, error) {
+	files, err := s.fileService.ListFiles(category, storage, trashed)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.assetSyncStore == nil {
+		// Return files without sync info
+		result := make([]FileWithSync, len(files))
+		for i, f := range files {
+			result[i] = fileToFileWithSync(f, nil)
+		}
+		return result, nil
+	}
+
+	fileIDs := make([]string, len(files))
+	for i, f := range files {
+		fileIDs[i] = f.ID
+	}
+
+	syncMap, err := s.assetSyncStore.GetByFileIDs(fileIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]FileWithSync, len(files))
+	for i, f := range files {
+		briefs := s.modelAssetsToBriefs(syncMap[f.ID])
+		result[i] = fileToFileWithSync(f, briefs)
+	}
+	return result, nil
+}
+
+// GetCharacterFilesWithSync returns a character's files with their synced model info.
+func (s *Service) GetCharacterFilesWithSync(characterID string) ([]CharacterFileWithSync, error) {
+	if s.charService == nil {
+		return nil, fmt.Errorf("character service not available")
+	}
+
+	files, err := s.charService.ListFiles(characterID)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.assetSyncStore == nil {
+		result := make([]CharacterFileWithSync, len(files))
+		for i, f := range files {
+			result[i] = charFileToCharFileWithSync(f, nil)
+		}
+		return result, nil
+	}
+
+	fileIDs := make([]string, len(files))
+	for i, f := range files {
+		fileIDs[i] = f.FileID
+	}
+
+	syncMap, err := s.assetSyncStore.GetByFileIDs(fileIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]CharacterFileWithSync, len(files))
+	for i, f := range files {
+		briefs := s.modelAssetsToBriefs(syncMap[f.FileID])
+		result[i] = charFileToCharFileWithSync(f, briefs)
+	}
+	return result, nil
+}
+
+// SyncCharacterAssets syncs all files linked to a character to a model's asset library.
+func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSummary, error) {
+	if s.charService == nil {
+		return nil, fmt.Errorf("character service not available")
+	}
+
+	// Verify model exists and has AK/SK
+	m, err := s.providerStore.GetModelByID(req.ModelID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get model: %w", err)
+	}
+	if m == nil {
+		return nil, fmt.Errorf("model not found")
+	}
+	if m.AccessKeyID == "" || m.SecretAccessKey == "" {
+		return nil, fmt.Errorf("model has no AK/SK configured")
+	}
+	if m.DefaultAssetGroupID == "" {
+		return nil, fmt.Errorf("model has no default_asset_group_id")
+	}
+
+	// Get character files
+	charFiles, err := s.charService.ListFiles(req.CharacterID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get character files: %w", err)
+	}
+
+	var results []SyncAssetResponse
+	for _, cf := range charFiles {
+		r, err := s.SyncAsset(&SyncAssetRequest{
+			ModelID: req.ModelID,
+			FileID:  cf.FileID,
+		})
+		if err != nil {
+			results = append(results, SyncAssetResponse{
+				FileID:       cf.FileID,
+				Status:       "failed",
+				ErrorMessage: err.Error(),
+			})
+			continue
+		}
+		results = append(results, *r)
+	}
+
+	summary := &SyncResultSummary{
+		ModelID:    req.ModelID,
+		Total:      len(charFiles),
+		Successful: 0,
+		Failed:     0,
+		Results:    results,
+	}
+	for _, r := range results {
+		if r.Status == "active" {
+			summary.Successful++
+		} else {
+			summary.Failed++
+		}
+	}
+	return summary, nil
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────
+
+func (s *Service) modelAssetsToBriefs(assets []ModelAsset) []ModelBrief {
+	if len(assets) == 0 {
+		return nil
+	}
+	modelIDs := make(map[string]bool)
+	for _, a := range assets {
+		modelIDs[a.ModelID] = true
+	}
+	return s.resolveModelBriefs(modelIDs)
+}
+
+func fileToFileWithSync(f file.File, briefs []ModelBrief) FileWithSync {
+	return FileWithSync{
+		ID:           f.ID,
+		Filename:     f.Filename,
+		Path:         f.Path,
+		Size:         f.Size,
+		MimeType:     f.MimeType,
+		Category:     f.Category,
+		Format:       f.Format,
+		Storage:      f.Storage,
+		Trashed:      f.Trashed,
+		CreatedAt:    f.CreatedAt,
+		UpdatedAt:    f.UpdatedAt,
+		DeletedAt:    f.DeletedAt,
+		SyncedModels: briefs,
+	}
+}
+
+func charFileToCharFileWithSync(f character.CharacterFile, briefs []ModelBrief) CharacterFileWithSync {
+	return CharacterFileWithSync{
+		FileID:       f.FileID,
+		Role:         f.Role,
+		Filename:     f.Filename,
+		URL:          f.URL,
+		ThumbnailURL: f.ThumbnailURL,
+		MimeType:     f.MimeType,
+		Category:     f.Category,
+		Format:       f.Format,
+		Size:         f.Size,
+		CreatedAt:    f.CreatedAt,
+		SyncedModels: briefs,
+	}
 }
 
 // ─── Status and cancellation (shared) ────────────────────────────

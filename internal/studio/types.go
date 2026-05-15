@@ -161,6 +161,61 @@ func (a *GeneratorAdapter) CancelTask(taskID, apiKey, baseURL, endpoint string) 
 	return a.gen.CancelTask(taskID, apiKey, baseURL, endpoint)
 }
 
+// ─── Enriched file listing with sync info ───────────────────────
+
+// ModelBrief is a lightweight model reference for sync status responses.
+type ModelBrief struct {
+	ModelID string `json:"model_id"`
+	Name    string `json:"name"`
+}
+
+// FileWithSync wraps a file.File with its synced model list.
+type FileWithSync struct {
+	ID           string       `json:"id"`
+	Filename     string       `json:"filename"`
+	Path         string       `json:"path"`
+	Size         int64        `json:"size"`
+	MimeType     string       `json:"mime_type"`
+	Category     string       `json:"category"`
+	Format       string       `json:"format"`
+	Storage      string       `json:"storage"`
+	Trashed      bool         `json:"trashed"`
+	CreatedAt    time.Time    `json:"created_at"`
+	UpdatedAt    time.Time    `json:"updated_at"`
+	DeletedAt    *time.Time   `json:"deleted_at"`
+	SyncedModels []ModelBrief `json:"synced_models"`
+}
+
+// CharacterFileWithSync wraps character file data with its synced model list.
+type CharacterFileWithSync struct {
+	FileID       string       `json:"file_id"`
+	Role         string       `json:"role"`
+	Filename     string       `json:"filename"`
+	URL          string       `json:"url"`
+	ThumbnailURL string       `json:"thumbnail_url"`
+	MimeType     string       `json:"mime_type"`
+	Category     string       `json:"category"`
+	Format       string       `json:"format"`
+	Size         int64        `json:"size"`
+	CreatedAt    time.Time    `json:"created_at"`
+	SyncedModels []ModelBrief `json:"synced_models"`
+}
+
+// SyncCharacterRequest is the payload for syncing all character assets to a model.
+type SyncCharacterRequest struct {
+	CharacterID string `json:"character_id" binding:"required"`
+	ModelID     string `json:"model_id" binding:"required"`
+}
+
+// SyncResultSummary is the result of syncing multiple files to a model.
+type SyncResultSummary struct {
+	ModelID    string              `json:"model_id"`
+	Total      int                 `json:"total"`
+	Successful int                 `json:"successful"`
+	Failed     int                 `json:"failed"`
+	Results    []SyncAssetResponse `json:"results"`
+}
+
 // ─── Asset sync ─────────────────────────────────────────────────
 
 type SyncAssetRequest struct {

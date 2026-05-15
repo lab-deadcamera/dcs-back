@@ -155,6 +155,52 @@ func (h *Handler) ListSyncedAssets(c *gin.Context) {
 	utils.Success(c, assets)
 }
 
+// ─── Enriched file listing ──────────────────────────────────────
+
+func (h *Handler) ListFilesWithSync(c *gin.Context) {
+	category := c.Query("category")
+	storage := c.Query("storage")
+	trashed := c.Query("trashed") == "true"
+
+	files, err := h.svc.GetFilesWithSync(category, storage, trashed)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Success(c, files)
+}
+
+func (h *Handler) ListCharacterFilesWithSync(c *gin.Context) {
+	characterID := c.Param("id")
+	if characterID == "" {
+		utils.BadRequest(c, "character id is required")
+		return
+	}
+
+	files, err := h.svc.GetCharacterFilesWithSync(characterID)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Success(c, files)
+}
+
+func (h *Handler) SyncCharacterAssets(c *gin.Context) {
+	var req SyncCharacterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.svc.SyncCharacterAssets(&req)
+	if err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	utils.Success(c, result)
+}
+
 func (h *Handler) CancelTask(c *gin.Context) {
 	taskID := c.Param("taskId")
 	if taskID == "" {

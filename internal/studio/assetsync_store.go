@@ -2,6 +2,8 @@ package studio
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -114,4 +116,40 @@ func (s *AssetSyncStore) UpdateStatus(id, status, errorMessage string) error {
 func (s *AssetSyncStore) Delete(id string) error {
 	_, err := s.db.Exec(deleteModelAssetSQL, id)
 	return err
+}
+
+// getByFileIDsSQL returns all active sync records for the given file IDs.
+// Returns a map of file_id → []ModelAsset.
+func (s *AssetSyncStore) GetByFileIDs(fileIDs []string) (map[string][]ModelAsset, error) {
+	result := make(map[string][]ModelAsset)
+	if len(fileIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := make([]string, len(fileIDs))
+	args := make([]interface{}, len(fileIDs))
+	for i, id := range fileIDs {
+		args[i] = id
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+	}
+
+	query := fmt.Sprintf(`SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, created_at, updated_at
+		FROM model_assets WHERE file_id IN (%s) AND status = 'active' ORDER BY created_at DESC`,
+		strings.Join(placeholders, ","))
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ma ModelAsset
+		if err := rows.Scan(&ma.ID, &ma.ModelID, &ma.FileID, &ma.AssetID,
+			&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.CreatedAt, &ma.UpdatedAt); err != nil {
+			return nil, err
+		}
+		result[ma.FileID] = append(result[ma.FileID], ma)
+	}
+	return result, nil
 }

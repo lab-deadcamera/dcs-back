@@ -57,10 +57,15 @@ func main() {
 	fileHdl := file.NewHandler(fileSvc)
 	fileSvc.StartPurgeCron()
 
+	charStore := character.NewStore(database)
+	charSvc := character.NewService(charStore, cfg.BaseURL)
+	charHdl := character.NewHandler(charSvc)
+
 	assetSyncStore := studio.NewAssetSyncStore(database)
 
 	studioSvc := studio.NewService(providerStore, fileSvc, cfg.OutputsDir, cfg.BaseURL)
 	studioSvc.SetAssetSyncStore(assetSyncStore)
+	studioSvc.SetCharacterService(charSvc)
 	// Register legacy handlers (keep for backward compat)
 	studioSvc.RegisterHandler(studio.NewSeedanceHandler(cfg.OutputsDir))
 	studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
@@ -68,10 +73,6 @@ func main() {
 	studioSvc.RegisterGenerator(generators.NewSeedanceGenerator(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(generators.NewSeedreamGenerator(cfg.OutputsDir))
 	studioHdl := studio.NewHandler(studioSvc)
-
-	charStore := character.NewStore(database)
-	charSvc := character.NewService(charStore, cfg.BaseURL)
-	charHdl := character.NewHandler(charSvc)
 
 	r := gin.Default()
 
@@ -130,6 +131,12 @@ func main() {
 			// Asset sync — upload file to model's asset library
 			studioGroup.POST("/sync-asset", studioHdl.SyncAsset)
 			studioGroup.GET("/synced-assets", studioHdl.ListSyncedAssets)
+			// Sync-aware file listing (includes synced_models)
+			studioGroup.GET("/files-with-sync", studioHdl.ListFilesWithSync)
+			// Character files with sync info
+			studioGroup.GET("/characters/:id/files-with-sync", studioHdl.ListCharacterFilesWithSync)
+			// Sync all character assets to a model
+			studioGroup.POST("/sync-character-assets", studioHdl.SyncCharacterAssets)
 		}
 
 		filesAPI := v1.Group("/files")

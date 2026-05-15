@@ -11,8 +11,11 @@ Flujo completo usando el payload unificado de `/api/v1/studio/generate`.
 | GET | `/api/v1/studio/status/{taskId}` | Polling de estado con `outputs[]` |
 | GET | `/api/v1/studio/status-legacy/{taskId}` | Polling formato legacy |
 | DELETE | `/api/v1/studio/task/{taskId}` | Cancelar tarea |
-| POST | `/api/v1/studio/sync-asset` | Sincronizar archivo a la galería del modelo |
-| GET | `/api/v1/studio/synced-assets?model_id=x` | Listar assets sincronizados |
+| POST | `/api/v1/studio/sync-asset` | Sincronizar un archivo a la galería del modelo |
+| POST | `/api/v1/studio/sync-character-assets` | Sincronizar TODOS los archivos de un personaje a un modelo |
+| GET | `/api/v1/studio/synced-assets?model_id=x` | Listar assets sincronizados de un modelo |
+| GET | `/api/v1/studio/files-with-sync?category=&storage=&trashed=` | Listar archivos con sus modelos sincronizados |
+| GET | `/api/v1/studio/characters/:id/files-with-sync` | Listar archivos de un personaje con sus modelos sincronizados |
 
 ## Arquitectura de generadores
 
@@ -273,6 +276,85 @@ const result = await fetch('/api/v1/studio/generate', {
 });
 // → { data: { taskId: "seedream_xxx", model: "dreamina-seedream-4-pro-251224",
 //     status: "succeeded", outputs: [{ url: "https://...", type: "image" }] } }
+```
+
+## Generadores disponibles
+
+| Generador | Modelos | Match | Tipo de output |
+|-----------|---------|-------|----------------|
+| Seedance | `dreamina-seedance-2-0-fast-260128`, `dreamina-seedance-2-0-260128` | Nombre contiene "dreamina-seedance-2-0-fast-260128" | video (asíncrono) |
+| Seedream | `dreamina-seedream-4-pro-251224` | Nombre contiene "dreamina-seedream-4-pro-251224" | image (síncrono) |
+
+## Listar archivos con info de sincronización
+
+Los endpoints `/api/v1/studio/files-with-sync` y `/api/v1/studio/characters/:id/files-with-sync` devuelven los mismos archivos que los endpoints regulares de `/api/v1/files` y `/api/v1/characters/:id/files`, pero incluyen el campo `synced_models` con los modelos con los que cada archivo está sincronizado.
+
+### Files with sync
+
+```javascript
+const files = await fetch('/api/v1/studio/files-with-sync?category=images').then(r => r.json());
+// files.data → [
+//   {
+//     "id": "uuid",
+//     "filename": "photo.png",
+//     "mime_type": "image/png",
+//     "synced_models": [
+//       { "model_id": "uuid", "name": "dreamina-seedance-2-0-fast-260128" }
+//     ]
+//   }
+// ]
+```
+
+### Character files with sync
+
+```javascript
+const files = await fetch(`/api/v1/studio/characters/${charId}/files-with-sync`).then(r => r.json());
+// files.data → [
+//   {
+//     "file_id": "uuid",
+//     "role": "portrait",
+//     "url": "http://.../serve",
+//     "synced_models": [
+//       { "model_id": "uuid", "name": "dreamina-seedance-2-0-260128" }
+//     ]
+//   }
+// ]
+```
+
+## Sincronizar todos los archivos de un personaje
+
+Para sincronizar todas las imágenes de un personaje a un modelo de una sola vez:
+
+```javascript
+const result = await fetch('/api/v1/studio/sync-character-assets', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    character_id: "uuid-del-personaje",
+    model_id: "uuid-del-modelo"
+  })
+});
+
+// result.data → {
+//   "model_id": "uuid",
+//   "total": 5,
+//   "successful": 4,
+//   "failed": 1,
+//   "results": [
+//     { "file_id": "uuid", "status": "active", "asset_id": "asset-xxx" },
+//     { "file_id": "uuid", "status": "failed", "error_message": "..." },
+//     ...
+//   ]
+// }
+```
+
+Para sincronizar solo una imagen específica, usa el endpoint individual:
+
+```javascript
+await fetch('/api/v1/studio/sync-asset', {
+  method: 'POST',
+  body: JSON.stringify({ model_id: modelId, file_id: fileId })
+});
 ```
 
 ## Generadores disponibles

@@ -376,6 +376,100 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
 
+  /studio/sync-character-assets:
+    post:
+      tags: [Studio Assets]
+      summary: Sync all files of a character to a model's asset library
+      operationId: studioSyncCharacterAssets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [character_id, model_id]
+              properties:
+                character_id: { type: string, format: uuid }
+                model_id:     { type: string, format: uuid }
+      responses:
+        "200":
+          description: Sync result summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      model_id:  { type: string, format: uuid }
+                      total:     { type: integer }
+                      successful: { type: integer }
+                      failed:    { type: integer }
+                      results:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SyncAssetResult"
+                  success: { type: boolean }
+                  message: { type: string }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /studio/files-with-sync:
+    get:
+      tags: [Studio Assets]
+      summary: List files with synced model info
+      operationId: studioListFilesWithSync
+      parameters:
+        - name: category
+          in: query
+          schema: { type: string, enum: [images, videos, audio, temp] }
+        - name: storage
+          in: query
+          schema: { type: string, enum: [persistent, temp] }
+        - name: trashed
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: File list with synced_models per file
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FileWithSync"
+                  success: { type: boolean }
+                  message: { type: string }
+
+  /studio/characters/{id}/files-with-sync:
+    get:
+      tags: [Studio Assets]
+      summary: List character files with synced model info
+      operationId: studioListCharacterFilesWithSync
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Character files with synced_models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CharacterFileWithSync"
+                  success: { type: boolean }
+                  message: { type: string }
+
   /studio/synced-assets:
     get:
       tags: [Studio Assets]
@@ -1368,6 +1462,63 @@ components:
         refImages:    { type: array, items: { type: object, properties: { dataUrl: { type: string } } } }
         refVideos:    { type: array, items: { type: object, properties: { dataUrl: { type: string } } } }
         refAudios:    { type: array, items: { type: object, properties: { dataUrl: { type: string } } } }
+
+    # ─── Studio enriched file listing ─────────────────────────
+    FileWithSync:
+      type: object
+      properties:
+        id:            { type: string, format: uuid }
+        filename:      { type: string }
+        path:          { type: string }
+        size:          { type: integer }
+        mime_type:     { type: string }
+        category:      { type: string }
+        format:        { type: string }
+        storage:       { type: string }
+        trashed:       { type: boolean }
+        created_at:    { type: string, format: date-time }
+        updated_at:    { type: string, format: date-time }
+        deleted_at:    { type: string, format: date-time, nullable: true }
+        synced_models:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelBrief"
+          description: "Modelos con los que este archivo está sincronizado"
+
+    CharacterFileWithSync:
+      type: object
+      properties:
+        file_id:       { type: string, format: uuid }
+        role:          { type: string }
+        filename:      { type: string }
+        url:           { type: string, format: uri }
+        thumbnail_url: { type: string, format: uri }
+        mime_type:     { type: string }
+        category:      { type: string }
+        format:        { type: string }
+        size:          { type: integer }
+        created_at:    { type: string, format: date-time }
+        synced_models:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelBrief"
+
+    ModelBrief:
+      type: object
+      properties:
+        model_id: { type: string, format: uuid }
+        name:     { type: string, example: "dreamina-seedance-2-0-fast-260128" }
+
+    SyncAssetResult:
+      type: object
+      properties:
+        id:            { type: string, format: uuid }
+        model_id:      { type: string, format: uuid }
+        file_id:       { type: string, format: uuid }
+        asset_id:      { type: string, example: "asset-20260318-xxxxx" }
+        asset_group_id: { type: string }
+        status:        { type: string, enum: [active, syncing, failed] }
+        error_message: { type: string }
 
     # ─── Files ────────────────────────────────────────────────
     File:
