@@ -13,6 +13,8 @@ services:
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS}
       - DATABASE_URL=${DATABASE_URL}
       - JWT_SECRET=${JWT_SECRET}
+      - SUPER_ADMIN_PASSWORD=${SUPER_ADMIN_PASSWORD}
+      - SUPER_ADMIN_USERNAME=${SUPER_ADMIN_USERNAME}
     volumes:
       - uploads:/app/uploads
 
