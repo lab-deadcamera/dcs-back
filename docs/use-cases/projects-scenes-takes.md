@@ -108,6 +108,7 @@ Proyecto
 | `name` | string | Nombre del proyecto |
 | `description` | string | Descripción |
 | `metadata` | TEXT (JSON) | Metadatos adicionales |
+| `active` | bool | Si el proyecto está activo |
 | `created_at` | datetime | Fecha de creación |
 | `updated_at` | datetime | Última actualización |
 
@@ -120,6 +121,7 @@ Proyecto
 | `number` | int | Número de escena (único por proyecto) |
 | `name` | string | Nombre de la escena |
 | `description` | string | Descripción |
+| `active` | bool | Si la escena está activa |
 | `created_at` | datetime | Fecha de creación |
 | `updated_at` | datetime | Última actualización |
 
@@ -133,6 +135,7 @@ Proyecto
 | `video_url` | string | URL pública del video generado |
 | `video_local_url` | string | URL local del video (si aplica) |
 | `status` | string | Estado: `pending`, `processing`, `completed`, `failed` |
+| `active` | bool | Si la toma está activa |
 | `created_at` | datetime | Fecha de creación |
 | `updated_at` | datetime | Última actualización |
 

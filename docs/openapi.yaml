@@ -2092,6 +2092,7 @@ components:
         name:        { type: string }
         description: { type: string }
         metadata:    { type: string }
+        active:      { type: boolean, default: true }
         created_at:  { type: string, format: date-time }
         updated_at:  { type: string, format: date-time }
         deleted_at:  { type: string, format: date-time, nullable: true }
@@ -2128,6 +2129,7 @@ components:
         number:      { type: integer }
         name:        { type: string }
         description: { type: string }
+        active:      { type: boolean, default: true }
         created_at:  { type: string, format: date-time }
         updated_at:  { type: string, format: date-time }
         deleted_at:  { type: string, format: date-time, nullable: true }
@@ -2164,6 +2166,7 @@ components:
         video_url:       { type: string }
         video_local_url: { type: string }
         status:          { type: string, enum: [pending, processing, completed, failed] }
+        active:          { type: boolean, default: true }
         created_at:      { type: string, format: date-time }
         updated_at:      { type: string, format: date-time }
         deleted_at:      { type: string, format: date-time, nullable: true }
