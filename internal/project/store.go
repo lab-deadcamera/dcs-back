@@ -16,18 +16,18 @@ func NewStore(db *sql.DB) *ProjectStore {
 }
 
 const projectCols = `id, name, COALESCE(description, '') AS description,
-	COALESCE(metadata, '') AS metadata,
+	COALESCE(metadata, '') AS metadata, active,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanProject(p *Project, scanner interface{ Scan(dest ...interface{}) error }) error {
-	return scanner.Scan(&p.ID, &p.Name, &p.Description, &p.Metadata, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt)
+	return scanner.Scan(&p.ID, &p.Name, &p.Description, &p.Metadata, &p.Active, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt)
 }
 
 func (s *ProjectStore) Create(p *Project) error {
-	query := `INSERT INTO projects (id, name, description, metadata)
-		VALUES ($1, $2, $3, $4)
+	query := `INSERT INTO projects (id, name, description, metadata, active)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, p.ID, p.Name, p.Description, nullIfEmpty(p.Metadata)).
+	return s.db.QueryRow(query, p.ID, p.Name, p.Description, nullIfEmpty(p.Metadata), p.Active).
 		Scan(&p.CreatedAt, &p.UpdatedAt)
 }
 
@@ -102,18 +102,18 @@ func (s *ProjectStore) SoftDelete(id string) error {
 // ─── Scene Store ────────────────────────────────────────────────
 
 const sceneCols = `id, project_id, number, COALESCE(name, '') AS name,
-	COALESCE(description, '') AS description,
+	COALESCE(description, '') AS description, active,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanScene(sc *Scene, scanner interface{ Scan(dest ...interface{}) error }) error {
-	return scanner.Scan(&sc.ID, &sc.ProjectID, &sc.Number, &sc.Name, &sc.Description, &sc.CreatedAt, &sc.UpdatedAt, &sc.DeletedAt)
+	return scanner.Scan(&sc.ID, &sc.ProjectID, &sc.Number, &sc.Name, &sc.Description, &sc.Active, &sc.CreatedAt, &sc.UpdatedAt, &sc.DeletedAt)
 }
 
 func (s *ProjectStore) CreateScene(sc *Scene) error {
-	query := `INSERT INTO scenes (id, project_id, number, name, description)
-		VALUES ($1, $2, $3, $4, $5)
+	query := `INSERT INTO scenes (id, project_id, number, name, description, active)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, sc.ID, sc.ProjectID, sc.Number, sc.Name, sc.Description).
+	return s.db.QueryRow(query, sc.ID, sc.ProjectID, sc.Number, sc.Name, sc.Description, sc.Active).
 		Scan(&sc.CreatedAt, &sc.UpdatedAt)
 }
 
@@ -189,18 +189,18 @@ func (s *ProjectStore) SoftDeleteScene(id string) error {
 
 const takeCols = `id, scene_id, number, COALESCE(video_url, '') AS video_url,
 	COALESCE(video_local_url, '') AS video_local_url,
-	COALESCE(status, 'pending') AS status,
+	COALESCE(status, 'pending') AS status, active,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanTake(t *Take, scanner interface{ Scan(dest ...interface{}) error }) error {
-	return scanner.Scan(&t.ID, &t.SceneID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
+	return scanner.Scan(&t.ID, &t.SceneID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
 }
 
 func (s *ProjectStore) CreateTake(t *Take) error {
-	query := `INSERT INTO takes (id, scene_id, number, video_url, video_local_url, status)
-		VALUES ($1, $2, $3, $4, $5, $6)
+	query := `INSERT INTO takes (id, scene_id, number, video_url, video_local_url, status, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, t.ID, t.SceneID, t.Number, t.VideoURL, t.VideoLocalURL, t.Status).
+	return s.db.QueryRow(query, t.ID, t.SceneID, t.Number, t.VideoURL, t.VideoLocalURL, t.Status, t.Active).
 		Scan(&t.CreatedAt, &t.UpdatedAt)
 }
 

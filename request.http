@@ -1,0 +1,32 @@
+
+@BASE_URL = https://back.road2theoscars.tech
+
+### TESTEAR GENERACION DE PROMPTS
+POST {{BASE_URL}}/api/v1/studio/preview
+Content-Type: application/json
+
+{
+    "model": "dreamina-seedance-2-0-260128",
+    "content": [
+        {
+            "type": "text",
+            "text": "crea este gato bailando bachata"
+        },
+        {
+            "type": "image",
+            "id": "f9214b91-5327-45f2-b2b8-78054e7dcbfa",
+            "name": "descarga (2).jpg",
+            "text": "Personaje 1"
+        }
+    ],
+    "ratio": "16:9",
+    "duration": 5,
+    "camerafixed": false,
+    "seed": "",
+    "quality": "standard",
+    "quantity": 1,
+    "watermark": false,
+    "resolution": "480p",
+    "generate_audio": false,
+    "image_mode": "PIL"
+}

@@ -22,6 +22,7 @@ func (s *Service) Create(req *CreateProjectRequest) (*Project, error) {
 		Name:        req.Name,
 		Description: req.Description,
 		Metadata:    req.Metadata,
+		Active:      true,
 	}
 	if err := s.store.Create(p); err != nil {
 		return nil, err
@@ -62,6 +63,9 @@ func (s *Service) Update(id string, req *UpdateProjectRequest) (*Project, error)
 	if req.Metadata != nil {
 		updates["metadata"] = *req.Metadata
 	}
+	if req.Active != nil {
+		updates["active"] = *req.Active
+	}
 
 	if err := s.store.Update(id, updates); err != nil {
 		return nil, err
@@ -91,6 +95,7 @@ func (s *Service) CreateScene(projectID string, req *CreateSceneRequest) (*Scene
 		Number:      req.Number,
 		Name:        req.Name,
 		Description: req.Description,
+		Active:      true,
 	}
 	if err := s.store.CreateScene(sc); err != nil {
 		return nil, err
@@ -140,6 +145,9 @@ func (s *Service) UpdateScene(id string, req *UpdateSceneRequest) (*Scene, error
 	if req.Description != nil {
 		updates["description"] = *req.Description
 	}
+	if req.Active != nil {
+		updates["active"] = *req.Active
+	}
 
 	if err := s.store.UpdateScene(id, updates); err != nil {
 		return nil, err
@@ -173,6 +181,7 @@ func (s *Service) CreateTake(sceneID string, req *CreateTakeRequest) (*Take, err
 		SceneID: sceneID,
 		Number:  req.Number,
 		Status:  status,
+		Active:  true,
 	}
 	if err := s.store.CreateTake(t); err != nil {
 		return nil, err
@@ -221,6 +230,9 @@ func (s *Service) UpdateTake(id string, req *UpdateTakeRequest) (*Take, error) {
 	}
 	if req.Status != nil {
 		updates["status"] = *req.Status
+	}
+	if req.Active != nil {
+		updates["active"] = *req.Active
 	}
 
 	if err := s.store.UpdateTake(id, updates); err != nil {
