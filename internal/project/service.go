@@ -6,11 +6,32 @@ import (
 	"github.com/google/uuid"
 )
 
-type Service struct {
-	store *ProjectStore
+// projectStore defines the storage interface needed by Service.
+type projectStore interface {
+	Create(p *Project) error
+	GetByID(id string) (*Project, error)
+	List() ([]Project, error)
+	Update(id string, updates map[string]interface{}) error
+	SoftDelete(id string) error
+
+	CreateScene(sc *Scene) error
+	GetSceneByID(id string) (*Scene, error)
+	ListScenes(projectID string) ([]Scene, error)
+	UpdateScene(id string, updates map[string]interface{}) error
+	SoftDeleteScene(id string) error
+
+	CreateTake(t *Take) error
+	GetTakeByID(id string) (*Take, error)
+	ListTakes(sceneID string) ([]Take, error)
+	UpdateTake(id string, updates map[string]interface{}) error
+	SoftDeleteTake(id string) error
 }
 
-func NewService(store *ProjectStore) *Service {
+type Service struct {
+	store projectStore
+}
+
+func NewService(store projectStore) *Service {
 	return &Service{store: store}
 }
 

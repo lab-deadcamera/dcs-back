@@ -467,6 +467,7 @@ func (s *Service) GetCharacterFilesWithSync(characterID string) ([]CharacterFile
 }
 
 // SyncCharacterAssets syncs all files linked to a character to a model's asset library.
+// Validates existing groups and assets before creating new ones.
 func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSummary, error) {
 	if s.charService == nil {
 		return nil, fmt.Errorf("character service not available")
@@ -481,10 +482,16 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 		return nil, fmt.Errorf("model not found")
 	}
 	if m.AccessKeyID == "" || m.SecretAccessKey == "" {
-		return nil, fmt.Errorf("model has no AK/SK configured")
+		return nil, fmt.Errorf("model has no AK/SK configured. Set access_key_id and secret_access_key on the model")
 	}
-	if m.DefaultAssetGroupID == "" {
-		return nil, fmt.Errorf("model has no default_asset_group_id")
+
+	// Get character info for the asset group name and description
+	char, err := s.charService.GetByID(req.CharacterID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get character: %w", err)
+	}
+	if char == nil {
+		return nil, fmt.Errorf("character not found")
 	}
 
 	// Get character files
@@ -492,13 +499,82 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 	if err != nil {
 		return nil, fmt.Errorf("failed to get character files: %w", err)
 	}
+	if len(charFiles) == 0 {
+		return &SyncResultSummary{
+			ModelID:    req.ModelID,
+			Total:      0,
+			Successful: 0,
+			Failed:     0,
+			Results:    []SyncAssetResponse{},
+		}, nil
+	}
 
+	// Collect file IDs for batch lookup
+	fileIDs := make([]string, len(charFiles))
+	for i, cf := range charFiles {
+		fileIDs[i] = cf.FileID
+	}
+
+	// Check existing sync records to find an existing group or determine what needs syncing
+	syncMap, _ := s.assetSyncStore.GetByFileIDs(fileIDs)
+
+	// Look for an existing asset group ID from previous syncs
+	var groupID string
+	for _, assets := range syncMap {
+		for _, a := range assets {
+			if a.ModelID == req.ModelID && a.AssetGroupID != "" {
+				groupID = a.AssetGroupID
+				break
+			}
+		}
+		if groupID != "" {
+			break
+		}
+	}
+
+	// Create API client (with or without existing group)
+	api := generators.NewAssetAPI(m.AccessKeyID, m.SecretAccessKey, groupID)
+
+	// Create asset group only if none exists for this character+model
+	if groupID == "" {
+		groupResult, err := api.CreateAssetGroup(char.Name, char.Description, "")
+		if err != nil {
+			return nil, fmt.Errorf("failed to create asset group: %w", err)
+		}
+		groupID, _ = groupResult["id"].(string)
+		if groupID == "" {
+			return nil, fmt.Errorf("no asset group ID returned from CreateAssetGroup")
+		}
+		api = generators.NewAssetAPI(m.AccessKeyID, m.SecretAccessKey, groupID)
+	}
+
+	// Process each file — skip if already synced, upload if new or failed
 	var results []SyncAssetResponse
 	for _, cf := range charFiles {
-		r, err := s.SyncAsset(&SyncAssetRequest{
-			ModelID: req.ModelID,
-			FileID:  cf.FileID,
-		})
+		existing := syncMap[cf.FileID]
+
+		// Check if this file is already synced and active for this model
+		alreadySynced := false
+		for _, a := range existing {
+			if a.ModelID == req.ModelID && a.Status == "active" && a.AssetID != "" {
+				alreadySynced = true
+				results = append(results, SyncAssetResponse{
+					ID:           a.ID,
+					ModelID:      req.ModelID,
+					FileID:       cf.FileID,
+					AssetID:      a.AssetID,
+					AssetGroupID: groupID,
+					Status:       "active",
+				})
+				break
+			}
+		}
+		if alreadySynced {
+			continue
+		}
+
+		// Not synced or previously failed — upload
+		r, err := s.uploadAndTrackAsset(req.ModelID, cf.FileID, groupID, api)
 		if err != nil {
 			results = append(results, SyncAssetResponse{
 				FileID:       cf.FileID,
@@ -525,6 +601,92 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 		}
 	}
 	return summary, nil
+}
+
+// uploadAndTrackAsset uploads a file to the BytePlus asset library via CreateAsset,
+// polls until Active or Failed, and stores the mapping in model_assets.
+func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *generators.AssetAPI) (*SyncAssetResponse, error) {
+	if s.assetSyncStore == nil {
+		return nil, fmt.Errorf("asset sync store not available")
+	}
+
+	f, err := s.fileService.GetFile(fileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file: %w", err)
+	}
+	if f == nil {
+		return nil, fmt.Errorf("file not found")
+	}
+
+	// Create the sync record (asset_id empty until upload completes)
+	record := &ModelAsset{
+		ModelID:      modelID,
+		FileID:       fileID,
+		AssetGroupID: groupID,
+		Status:       "syncing",
+	}
+	if err := s.assetSyncStore.Create(record); err != nil {
+		return nil, fmt.Errorf("failed to create sync record: %w", err)
+	}
+
+	// Build the publicly accessible file URL
+	fileURL := s.baseURL + "/api/v1/files/" + fileID + "/serve"
+
+	// Upload to the asset library
+	result, err := api.CreateAsset(fileURL, f.Filename, detectAssetType(f.MimeType), "")
+	if err != nil {
+		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error())
+		return &SyncAssetResponse{
+			ID:           record.ID,
+			ModelID:      modelID,
+			FileID:       fileID,
+			Status:       "failed",
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	assetID, _ := result["id"].(string)
+	record.AssetID = assetID
+
+	// Poll until Active (up to ~2 min)
+	assetStatus := ""
+	for i := 0; i < 20; i++ {
+		statusResult, err := api.GetAsset(assetID, "")
+		if err != nil {
+			time.Sleep(3 * time.Second)
+			continue
+		}
+		assetStatus, _ = statusResult["Status"].(string)
+		if assetStatus == "Active" || assetStatus == "Failed" {
+			break
+		}
+		time.Sleep(3 * time.Second)
+	}
+
+	finalStatus := "active"
+	errMsg := ""
+	if assetStatus != "Active" {
+		finalStatus = "failed"
+		errMsg = fmt.Sprintf("asset did not become Active, last status: %s", assetStatus)
+	}
+
+	// Update the record
+	if err := s.assetSyncStore.UpdateStatus(record.ID, finalStatus, errMsg); err != nil {
+		return nil, fmt.Errorf("failed to update sync status: %w", err)
+	}
+
+	record.Status = finalStatus
+	record.ErrorMessage = errMsg
+
+	return &SyncAssetResponse{
+		ID:           record.ID,
+		ModelID:      modelID,
+		FileID:       fileID,
+		AssetID:      assetID,
+		AssetGroupID: groupID,
+		Status:       finalStatus,
+		ErrorMessage: errMsg,
+	}, nil
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
