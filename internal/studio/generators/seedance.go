@@ -224,21 +224,6 @@ func (g *SeedanceGenerator) BuildPayload(req *GeneratorRequest) map[string]inter
 		"text": textPart,
 	})
 
-	if imageIndex > 0 {
-		firstImage := firstImageItem(req.Content)
-		imageURL := ""
-		if firstImage != nil {
-			imageURL = firstImage.DataURL
-		}
-		content = append([]map[string]interface{}{
-			{
-				"type":      "image_url",
-				"image_url": map[string]string{"url": imageURL},
-				"role":      "reference_image",
-			},
-		}, content...)
-	}
-
 	duration := req.Duration
 	if duration <= 0 {
 		duration = 5
@@ -353,15 +338,8 @@ func (g *SeedanceGenerator) findVideoURL(obj interface{}, depth int) string {
 func compileContentText(items []ContentItem) string {
 	var parts []string
 	for _, item := range items {
-		switch item.Type {
-		case "text":
-			if strings.TrimSpace(item.Text) != "" {
-				parts = append(parts, strings.TrimSpace(item.Text))
-			}
-		case "image", "video", "audio":
-			if strings.TrimSpace(item.Text) != "" {
-				parts = append(parts, strings.TrimSpace(item.Text))
-			}
+		if item.Type == "text" && strings.TrimSpace(item.Text) != "" {
+			parts = append(parts, strings.TrimSpace(item.Text))
 		}
 	}
 	textBlock := strings.Join(parts, ". ")
@@ -373,16 +351,6 @@ func compileContentText(items []ContentItem) string {
 
 func isFastModel(model string) bool {
 	return strings.Contains(strings.ToLower(model), "fast")
-}
-
-// firstImageItem returns the first ContentItem of type "image" with a non-empty DataURL.
-func firstImageItem(items []ContentItem) *ContentItem {
-	for i := range items {
-		if items[i].Type == "image" && items[i].DataURL != "" {
-			return &items[i]
-		}
-	}
-	return nil
 }
 
 func safeSuffix(taskID string) string {

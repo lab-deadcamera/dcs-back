@@ -93,49 +93,6 @@ func TestValidationError_Error(t *testing.T) {
 	}
 }
 
-func TestFirstImageItem_Found(t *testing.T) {
-	items := []ContentItem{
-		{Type: "text", Text: "a prompt"},
-		{Type: "image", Text: "ref", DataURL: "data:image/png;base64,abc123"},
-		{Type: "video", DataURL: "data:video/mp4;base64,xyz"},
-	}
-	result := firstImageItem(items)
-	if result == nil {
-		t.Fatal("expected to find an image item")
-	}
-	if result.DataURL != "data:image/png;base64,abc123" {
-		t.Errorf("wrong DataURL: %s", result.DataURL)
-	}
-}
-
-func TestFirstImageItem_NotFound(t *testing.T) {
-	items := []ContentItem{
-		{Type: "text", Text: "a prompt"},
-		{Type: "video", DataURL: "data:video/mp4;base64,xyz"},
-	}
-	result := firstImageItem(items)
-	if result != nil {
-		t.Fatal("expected nil when no image item exists")
-	}
-}
-
-func TestFirstImageItem_EmptyDataURL(t *testing.T) {
-	items := []ContentItem{
-		{Type: "image", Text: "ref", DataURL: ""},
-	}
-	result := firstImageItem(items)
-	if result != nil {
-		t.Fatal("expected nil when image has empty DataURL")
-	}
-}
-
-func TestFirstImageItem_EmptySlice(t *testing.T) {
-	result := firstImageItem([]ContentItem{})
-	if result != nil {
-		t.Fatal("expected nil for empty slice")
-	}
-}
-
 func TestIsFastModel(t *testing.T) {
 	tests := []struct {
 		model string
@@ -201,8 +158,10 @@ func TestCompileContentText_WithFileDescriptions(t *testing.T) {
 		{Type: "text", Text: "additional details"},
 	}
 	got := compileContentText(items)
-	if got == "" {
-		t.Fatal("expected non-empty result")
+	// Only text-type items are concatenated, not descriptions from non-text items
+	want := "main prompt. additional details."
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
@@ -219,9 +178,9 @@ func TestCompileContentText_OnlyNonText(t *testing.T) {
 		{Type: "video", Text: "video desc", DataURL: "data:...", ID: "uuid"},
 	}
 	got := compileContentText(items)
-	want := "image desc. video desc."
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
+	// Only text-type items are included, non-text items are ignored
+	if got != "" {
+		t.Errorf("expected empty string for non-text items only, got %q", got)
 	}
 }
 

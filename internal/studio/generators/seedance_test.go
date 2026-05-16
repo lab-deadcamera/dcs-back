@@ -121,7 +121,7 @@ func TestSeedanceBuildPayload_WithImage(t *testing.T) {
 		Duration: 5,
 		Content: []ContentItem{
 			{Type: "text", Text: "a dog on the beach"},
-			{Type: "image", Text: "reference", DataURL: "data:image/png;base64,img123", ID: "uuid"},
+			{Type: "image", Text: "", DataURL: "https://example.com/img123.png", ID: "uuid"},
 		},
 	}
 	payload := g.BuildPayload(req)
@@ -131,41 +131,52 @@ func TestSeedanceBuildPayload_WithImage(t *testing.T) {
 		t.Fatal("content is not []map[string]interface{}")
 	}
 
-	// Should have: duplicate image ref + image_url + text = 3 items
-	if len(content) != 3 {
-		t.Fatalf("expected 3 content items (dup image, image_url, text), got %d", len(content))
+	// Should have: image_url + text = 2 items (no duplication)
+	if len(content) != 2 {
+		t.Fatalf("expected 2 content items (image_url, text), got %d", len(content))
 	}
 
-	// First item should be the duplicated image reference
 	if content[0]["type"] != "image_url" {
 		t.Errorf("content[0].type = %v, want image_url", content[0]["type"])
 	}
 	imageURL, ok := content[0]["image_url"].(map[string]string)
-	if !ok || imageURL["url"] != "data:image/png;base64,img123" {
-		t.Errorf("content[0].image_url.url = %v, want data:image/png;base64,img123", imageURL)
+	if !ok || imageURL["url"] != "https://example.com/img123.png" {
+		t.Errorf("content[0].image_url.url = %v, want https://example.com/img123.png", imageURL)
+	}
+
+	if content[1]["type"] != "text" {
+		t.Errorf("content[1].type = %v, want text", content[1]["type"])
 	}
 }
 
-func TestSeedanceBuildPayload_FirstImageWithTextFirst(t *testing.T) {
-	// Regression test: first content item is text, image is second
+func TestSeedanceBuildPayload_WithMultipleImages(t *testing.T) {
 	g := &SeedanceGenerator{}
 	req := &GeneratorRequest{
 		Model:    "dreamina-seedance-2-0-260128",
 		Duration: 5,
 		Content: []ContentItem{
-			{Type: "text", Text: "a dog on the beach"},
-			{Type: "image", Text: "reference", DataURL: "data:image/png;base64,img456", ID: "uuid"},
+			{Type: "text", Text: "a prompt"},
+			{Type: "image", DataURL: "https://example.com/img1.png", ID: "u1"},
+			{Type: "image", DataURL: "https://example.com/img2.png", ID: "u2"},
 		},
 	}
 	payload := g.BuildPayload(req)
 
 	content := payload["content"].([]map[string]interface{})
 
-	// First item = duplicated image ref, should use the image item's DataURL, not text item
-	first := content[0]
-	imageURL := first["image_url"].(map[string]string)
-	if imageURL["url"] != "data:image/png;base64,img456" {
-		t.Errorf("first duplicated image url = %q, want data:image/png;base64,img456", imageURL["url"])
+	// Should have: 2 image_url + 1 text = 3 items
+	if len(content) != 3 {
+		t.Fatalf("expected 3 content items, got %d", len(content))
+	}
+
+	imageCount := 0
+	for _, item := range content {
+		if item["type"] == "image_url" {
+			imageCount++
+		}
+	}
+	if imageCount != 2 {
+		t.Errorf("expected 2 image_url items, got %d", imageCount)
 	}
 }
 
@@ -199,8 +210,8 @@ func TestSeedanceBuildPayload_WithVideoAndAudio(t *testing.T) {
 		Duration: 5,
 		Content: []ContentItem{
 			{Type: "text", Text: "a cinematic scene"},
-			{Type: "video", DataURL: "data:video/mp4;base64,vid1", ID: "vid-uuid"},
-			{Type: "audio", DataURL: "data:audio/mpeg;base64,aud1", ID: "aud-uuid"},
+			{Type: "video", DataURL: "https://example.com/vid1.mp4", ID: "vid-uuid"},
+			{Type: "audio", DataURL: "https://example.com/aud1.mp3", ID: "aud-uuid"},
 		},
 	}
 	payload := g.BuildPayload(req)
