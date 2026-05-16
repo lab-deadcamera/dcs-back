@@ -225,10 +225,15 @@ func (g *SeedanceGenerator) buildPayload(req *GeneratorRequest) map[string]inter
 	})
 
 	if imageIndex > 0 {
+		firstImage := firstImageItem(req.Content)
+		imageURL := ""
+		if firstImage != nil {
+			imageURL = firstImage.DataURL
+		}
 		content = append([]map[string]interface{}{
 			{
 				"type":      "image_url",
-				"image_url": map[string]string{"url": req.Content[0].DataURL},
+				"image_url": map[string]string{"url": imageURL},
 				"role":      "reference_image",
 			},
 		}, content...)
@@ -368,6 +373,16 @@ func compileContentText(items []ContentItem) string {
 
 func isFastModel(model string) bool {
 	return strings.Contains(strings.ToLower(model), "fast")
+}
+
+// firstImageItem returns the first ContentItem of type "image" with a non-empty DataURL.
+func firstImageItem(items []ContentItem) *ContentItem {
+	for i := range items {
+		if items[i].Type == "image" && items[i].DataURL != "" {
+			return &items[i]
+		}
+	}
+	return nil
 }
 
 func safeSuffix(taskID string) string {
