@@ -83,9 +83,11 @@ type StudioGenerateResponse struct {
 
 // StudioStatusResponse is returned by GET /studio/status/:taskId.
 type StudioStatusResponse struct {
-	Status  string           `json:"status"`
-	Outputs []OutputResource `json:"outputs,omitempty"`
-	Error   string           `json:"error,omitempty"`
+	Status   string           `json:"status"`
+	Outputs  []OutputResource `json:"outputs,omitempty"`
+	Error    string           `json:"error,omitempty"`
+	Raw      interface{}      `json:"raw,omitempty"`
+	Progress interface{}      `json:"progress,omitempty"`
 }
 
 // ─── Legacy response types ──────────────────────────────────────

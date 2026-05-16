@@ -649,9 +649,20 @@ func (s *Service) GetStatusUnified(taskID string) (*StudioStatusResponse, error)
 	}
 
 	resp := &StudioStatusResponse{
-		Status: sr.Status,
-		Error:  sr.Error,
+		Status:  sr.Status,
+		Error:   sr.Error,
+		Raw:     sr.Raw,
 		Outputs: []OutputResource{},
+	}
+
+	// Extract optional progress from raw response
+	if rawMap, ok := sr.Raw.(map[string]interface{}); ok {
+		for _, key := range []string{"progress", "percentage", "task_progress"} {
+			if v, exists := rawMap[key]; exists {
+				resp.Progress = v
+				break
+			}
+		}
 	}
 
 	if sr.VideoURL != "" {
