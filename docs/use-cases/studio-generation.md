@@ -16,6 +16,8 @@ Flujo completo usando el payload unificado de `/api/v1/studio/generate`.
 | GET | `/api/v1/studio/synced-assets?model_id=x` | Listar assets sincronizados de un modelo |
 | GET | `/api/v1/studio/files-with-sync?category=&storage=&trashed=` | Listar archivos con sus modelos sincronizados |
 | GET | `/api/v1/studio/characters/:id/files-with-sync` | Listar archivos de un personaje con sus modelos sincronizados |
+| GET | `/api/v1/studio/logs/generation` | Listar logs de generación (paginado) |
+| GET | `/api/v1/studio/logs/generation/:id` | Ver detalle de un log de generación |
 
 ## Arquitectura de generadores
 
@@ -364,6 +366,32 @@ await fetch('/api/v1/studio/sync-asset', {
   body: JSON.stringify({ model_id: modelId, file_id: fileId })
 });
 ```
+
+## Generation logs
+
+Cada vez que se ejecuta `POST /api/v1/studio/generate` se guarda automáticamente un log en la base de datos con el payload enviado, la respuesta de la IA y los outputs generados. Para tareas asíncronas (Seedance), el log se actualiza cuando la tarea se completa.
+
+```javascript
+// Listar logs (paginado, más recientes primero)
+const list = await fetch('/api/v1/studio/logs/generation?page=1&limit=20').then(r => r.json());
+// list.data → { logs: [...], total, page, limit, total_pages }
+
+// Ver detalle de un log por ID
+const detail = await fetch(`/api/v1/studio/logs/generation/${logId}`).then(r => r.json());
+// detail.data → { id, task_id, model_name, request, ai_response, ai_call_payload, outputs, status, error_message, created_at, updated_at }
+```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `id` | UUID | ID del registro |
+| `task_id` | string | ID de la tarea de generación |
+| `model_name` | string | Nombre del modelo usado |
+| `request` | TEXT (JSON) | Payload original enviado al endpoint |
+| `ai_call_payload` | TEXT (JSON) | Payload enviado a la API de IA |
+| `ai_response` | TEXT (JSON) | Respuesta cruda de la API de IA |
+| `outputs` | TEXT (JSON) | Outputs generados (URLs, tipos) |
+| `status` | string | Estado: `running`, `succeeded`, `failed` |
+| `error_message` | string | Mensaje de error si falló |
 
 ## Generadores disponibles
 

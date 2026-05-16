@@ -219,3 +219,50 @@ func (h *Handler) CancelTask(c *gin.Context) {
 
 	utils.Message(c, "task cancelled")
 }
+
+// ─── Generation log CRUD ──────────────────────────────────────────
+
+// ListGenerationLogs returns paginated generation logs.
+func (h *Handler) ListGenerationLogs(c *gin.Context) {
+	var req ListGenerationLogsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	if req.Page < 1 {
+		req.Page = 1
+	}
+	if req.Limit < 1 || req.Limit > 100 {
+		req.Limit = 20
+	}
+
+	result, err := h.svc.ListGenerationLogs(req.Page, req.Limit)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, result)
+}
+
+// GetGenerationLog returns a single generation log by its ID.
+func (h *Handler) GetGenerationLog(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		utils.BadRequest(c, "id is required")
+		return
+	}
+
+	log, err := h.svc.GetGenerationLog(id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, log)
+}

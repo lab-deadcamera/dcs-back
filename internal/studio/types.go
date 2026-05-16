@@ -243,3 +243,37 @@ type TaskRecord struct {
 	Status    string
 	Result    *StatusResult
 }
+
+// ─── Generation log types ───────────────────────────────────────
+
+// GenerationLog stores the complete log for a generation task,
+// linking the client payload with the AI response via task ID.
+type GenerationLog struct {
+	ID            string     `json:"id"`
+	TaskID        string     `json:"task_id"`
+	ModelName     string     `json:"model_name"`
+	Request       string     `json:"request"`                     // original client payload (JSON)
+	AIResponse    string     `json:"ai_response"`                 // raw AI API response (JSON)
+	AICallPayload string     `json:"ai_call_payload,omitempty"`  // payload sent to AI API (JSON)
+	Outputs       string     `json:"outputs,omitempty"`
+	Status        string     `json:"status"`
+	ErrorMessage  string     `json:"error_message,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
+}
+
+// ListGenerationLogsRequest holds pagination params for listing logs.
+type ListGenerationLogsRequest struct {
+	Page  int `form:"page"`
+	Limit int `form:"limit"`
+}
+
+// ListGenerationLogsResponse holds the paginated response for listing logs.
+type ListGenerationLogsResponse struct {
+	Logs       []GenerationLog `json:"logs"`
+	Total      int             `json:"total"`
+	Page       int             `json:"page"`
+	Limit      int             `json:"limit"`
+	TotalPages int             `json:"total_pages"`
+}

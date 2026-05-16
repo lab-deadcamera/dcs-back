@@ -2,6 +2,7 @@ package studio
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -24,6 +25,7 @@ type Service struct {
 	tasks            map[string]*TaskRecord
 	assetSyncStore   *AssetSyncStore
 	baseURL          string
+	logStore         *GenerationLogStore
 	mu               sync.RWMutex
 }
 
@@ -62,6 +64,10 @@ func (s *Service) SetAssetSyncStore(store *AssetSyncStore) {
 
 func (s *Service) SetCharacterService(cs *character.Service) {
 	s.charService = cs
+}
+
+func (s *Service) SetLogStore(store *GenerationLogStore) {
+	s.logStore = store
 }
 
 // ─── Generator registration ──────────────────────────────────────
@@ -130,6 +136,46 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 	}
 
 	result, err := gen.Generate(genReq)
+
+	// ─── Save generation log (request + AI response) ──────────────
+	if s.logStore != nil {
+		reqBytes, _ := json.Marshal(req)
+		genReqBytes, _ := json.Marshal(genReq)
+		logEntry := &GenerationLog{
+			TaskID:       "<error>",
+			ModelName:    m.Name,
+			Request:      string(reqBytes),
+			Status:       "failed",
+			ErrorMessage: "generation returned no result",
+		}
+
+		if result != nil {
+			logEntry.TaskID = result.TaskID
+			logEntry.Status = result.Status
+			logEntry.ErrorMessage = ""
+			logEntry.AICallPayload = string(genReqBytes)
+			if result.Raw != nil {
+				rawBytes, _ := json.Marshal(result.Raw)
+				logEntry.AIResponse = string(rawBytes)
+			}
+			if len(result.Outputs) > 0 {
+				outBytes, _ := json.Marshal(result.Outputs)
+				logEntry.Outputs = string(outBytes)
+			}
+		}
+		if err != nil {
+			logEntry.Status = "failed"
+			logEntry.ErrorMessage = err.Error()
+		}
+
+		if logEntry.TaskID != "<error>" {
+			if saveErr := s.logStore.Create(logEntry); saveErr != nil {
+				fmt.Printf("failed to save generation log: %v\n", saveErr)
+			}
+		}
+	}
+	// ──────────────────────────────────────────────────────────────
+
 	if err != nil {
 		return nil, err
 	}
@@ -547,6 +593,9 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 			record.Status = result.Status
 			record.Result = statusResult
 			s.mu.Unlock()
+
+			// Update generation log with final AI response
+			s.updateLogWithFinalStatus(taskID, result)
 		}
 		return statusResult, nil
 	}
@@ -633,7 +682,83 @@ func (s *Service) CancelTask(taskID string) error {
 	return handler.CancelTask(taskID, m.APIKey, m.URL, m.Endpoint)
 }
 
+// ─── Log listing ─────────────────────────────────────────────────
+
+// ListGenerationLogs returns paginated generation logs.
+func (s *Service) ListGenerationLogs(page, limit int) (*ListGenerationLogsResponse, error) {
+	if s.logStore == nil {
+		return nil, fmt.Errorf("log store not available")
+	}
+
+	logs, total, err := s.logStore.List(page, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list generation logs: %w", err)
+	}
+
+	totalPages := (total + limit - 1) / limit
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	return &ListGenerationLogsResponse{
+		Logs:       logs,
+		Total:      total,
+		Page:       page,
+		Limit:      limit,
+		TotalPages: totalPages,
+	}, nil
+}
+
+// GetGenerationLog returns a single generation log by ID.
+func (s *Service) GetGenerationLog(id string) (*GenerationLog, error) {
+	if s.logStore == nil {
+		return nil, fmt.Errorf("log store not available")
+	}
+
+	log, err := s.logStore.GetByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get generation log: %w", err)
+	}
+	if log == nil {
+		return nil, fmt.Errorf("generation log not found: %s", id)
+	}
+
+	return log, nil
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────
+
+// updateLogWithFinalStatus updates the generation log with the final AI response
+// when an async task completes (succeeded or failed).
+func (s *Service) updateLogWithFinalStatus(taskID string, result *generators.GeneratorResult) {
+	if s.logStore == nil {
+		return
+	}
+
+	log, logErr := s.logStore.GetByTaskID(taskID)
+	if logErr != nil || log == nil {
+		// No log entry (e.g. legacy path) — skip
+		return
+	}
+
+	aiResponse := ""
+	if result.Raw != nil {
+		rawBytes, _ := json.Marshal(result.Raw)
+		aiResponse = string(rawBytes)
+	}
+
+	outputs := ""
+	if len(result.Outputs) > 0 {
+		outBytes, _ := json.Marshal(result.Outputs)
+		outputs = string(outBytes)
+	}
+
+	errorMsg := result.Error
+
+	if saveErr := s.logStore.UpdateByTaskID(taskID, aiResponse, outputs, result.Status, errorMsg); saveErr != nil {
+		fmt.Printf("failed to update generation log for task %s: %v\n", taskID, saveErr)
+	}
+}
 
 func (s *Service) resolveContent(items []ContentItem, modelID string) ([]generators.ContentItem, error) {
 	resolved := make([]generators.ContentItem, len(items))

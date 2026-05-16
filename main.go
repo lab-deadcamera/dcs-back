@@ -99,6 +99,8 @@ func main() {
 	studioSvc := studio.NewService(providerStore, fileSvc, cfg.OutputsDir, cfg.BaseURL)
 	studioSvc.SetAssetSyncStore(assetSyncStore)
 	studioSvc.SetCharacterService(charSvc)
+	// Set up generation log store (request + AI response logs in DB)
+	studioSvc.SetLogStore(studio.NewGenerationLogStore(database))
 	// Register legacy handlers (keep for backward compat)
 	studioSvc.RegisterHandler(studio.NewSeedanceHandler(cfg.OutputsDir))
 	studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
@@ -170,6 +172,9 @@ func main() {
 			studioGroup.GET("/characters/:id/files-with-sync", studioHdl.ListCharacterFilesWithSync)
 			// Sync all character assets to a model
 			studioGroup.POST("/sync-character-assets", studioHdl.SyncCharacterAssets)
+			// Generation log CRUD (no delete)
+			studioGroup.GET("/logs/generation", studioHdl.ListGenerationLogs)
+			studioGroup.GET("/logs/generation/:id", studioHdl.GetGenerationLog)
 		}
 
 		filesAPI := v1.Group("/files")
