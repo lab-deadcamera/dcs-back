@@ -172,6 +172,34 @@ func (m *mockStore) UpdateTake(id string, updates map[string]interface{}) error 
 	return nil
 }
 
+func (m *mockStore) ListActiveTakes(sceneID string) ([]Take, error) {
+	var list []Take
+	for _, t := range m.takes {
+		if t.SceneID == sceneID && t.Active {
+			list = append(list, *t)
+		}
+	}
+	return list, nil
+}
+
+func (m *mockStore) GetActiveTakeByNumber(sceneID string, number int) (*Take, error) {
+	for _, t := range m.takes {
+		if t.SceneID == sceneID && t.Number == number && t.Active {
+			return t, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockStore) DeactivateTakesByNumber(sceneID string, number int) error {
+	for _, t := range m.takes {
+		if t.SceneID == sceneID && t.Number == number && t.Active {
+			t.Active = false
+		}
+	}
+	return nil
+}
+
 func (m *mockStore) SoftDeleteTake(id string) error {
 	if _, ok := m.takes[id]; !ok {
 		return errors.New("take not found")

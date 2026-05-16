@@ -309,6 +309,44 @@ func (h *Handler) UpdateTake(c *gin.Context) {
 	utils.Success(c, result)
 }
 
+func (h *Handler) SaveGeneration(c *gin.Context) {
+	sceneID := c.Param("sceneId")
+
+	var req SaveGenerationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.svc.SaveGeneration(sceneID, &req)
+	if err != nil {
+		if err.Error() == "scene not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Created(c, result)
+}
+
+func (h *Handler) ToggleTakeActive(c *gin.Context) {
+	takeID := c.Param("takeId")
+
+	result, err := h.svc.ToggleTakeActive(takeID)
+	if err != nil {
+		if err.Error() == "take not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, result)
+}
+
 func (h *Handler) SoftDeleteTake(c *gin.Context) {
 	takeID := c.Param("takeId")
 	if takeID == "" {

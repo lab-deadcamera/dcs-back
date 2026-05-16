@@ -217,7 +217,7 @@ func (s *ProjectStore) GetTakeByID(id string) (*Take, error) {
 }
 
 func (s *ProjectStore) ListTakes(sceneID string) ([]Take, error) {
-	query := `SELECT ` + takeCols + ` FROM takes WHERE scene_id = $1 AND deleted_at IS NULL ORDER BY number ASC`
+	query := `SELECT ` + takeCols + ` FROM takes WHERE scene_id = $1 AND deleted_at IS NULL ORDER BY number ASC, created_at DESC`
 	rows, err := s.db.Query(query, sceneID)
 	if err != nil {
 		return nil, err
@@ -233,6 +233,51 @@ func (s *ProjectStore) ListTakes(sceneID string) ([]Take, error) {
 		takes = append(takes, t)
 	}
 	return takes, rows.Err()
+}
+
+// ListActiveTakes returns only active (non-discarded) takes for a scene,
+// at most one per number due to the partial unique index.
+func (s *ProjectStore) ListActiveTakes(sceneID string) ([]Take, error) {
+	query := `SELECT ` + takeCols + ` FROM takes WHERE scene_id = $1 AND deleted_at IS NULL AND active = true ORDER BY number ASC`
+	rows, err := s.db.Query(query, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var takes []Take
+	for rows.Next() {
+		var t Take
+		if err := s.scanTake(&t, rows); err != nil {
+			return nil, err
+		}
+		takes = append(takes, t)
+	}
+	return takes, rows.Err()
+}
+
+// GetActiveTakeByNumber returns the active take for a scene+number pair,
+// or nil if none exists.
+func (s *ProjectStore) GetActiveTakeByNumber(sceneID string, number int) (*Take, error) {
+	t := &Take{}
+	query := `SELECT ` + takeCols + ` FROM takes WHERE scene_id = $1 AND number = $2 AND deleted_at IS NULL AND active = true`
+	if err := s.scanTake(t, s.db.QueryRow(query, sceneID, number)); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return t, nil
+}
+
+// DeactivateTakesByNumber sets active=false on all active takes matching
+// scene+number. Used before inserting a new generation for the same take slot.
+func (s *ProjectStore) DeactivateTakesByNumber(sceneID string, number int) error {
+	_, err := s.db.Exec(
+		`UPDATE takes SET active = false, updated_at = NOW() WHERE scene_id = $1 AND number = $2 AND deleted_at IS NULL AND active = true`,
+		sceneID, number,
+	)
+	return err
 }
 
 func (s *ProjectStore) UpdateTake(id string, updates map[string]interface{}) error {

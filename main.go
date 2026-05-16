@@ -37,6 +37,10 @@ func main() {
 
 	authStore := auth.NewStore(database)
 	authSvc := auth.NewService(authStore, cfg.JWTSecret)
+	authSvc.SetSuperAdminConfig(cfg.SuperAdminUsername, cfg.SuperAdminPassword, cfg.SuperAdminName, cfg.SuperAdminSurname, cfg.SuperAdminUserName, cfg.SuperAdminEmail)
+	if err := authSvc.SeedSuperAdmin(); err != nil {
+		log.Printf("warning: super admin seed: %v", err)
+	}
 	authHdl := auth.NewHandler(authSvc)
 
 	imageStore, err := image.NewStore(cfg.UploadDir, cfg.ThumbnailDir)
@@ -62,7 +66,6 @@ func main() {
 
 	charStore := character.NewStore(database)
 	charSvc := character.NewService(charStore, cfg.BaseURL)
-	// Enricher: attaches synced model info to character files
 	charSvc.SetFileEnricher(func(files []character.CharacterFile) {
 		fileIDs := make([]string, len(files))
 		for i, f := range files {
@@ -100,12 +103,9 @@ func main() {
 	studioSvc := studio.NewService(providerStore, fileSvc, cfg.OutputsDir, cfg.BaseURL)
 	studioSvc.SetAssetSyncStore(assetSyncStore)
 	studioSvc.SetCharacterService(charSvc)
-	// Set up generation log store (request + AI response logs in DB)
 	studioSvc.SetLogStore(studio.NewGenerationLogStore(database))
-	// Register legacy handlers (keep for backward compat)
 	studioSvc.RegisterHandler(studio.NewSeedanceHandler(cfg.OutputsDir))
 	studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
-	// Register new generators
 	studioSvc.RegisterGenerator(generators.NewSeedanceGenerator(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(generators.NewSeedreamGenerator(cfg.OutputsDir))
 	studioHdl := studio.NewHandler(studioSvc)
@@ -141,6 +141,15 @@ func main() {
 		{
 			authGroup.POST("/register", authHdl.Register)
 			authGroup.POST("/login", authHdl.Login)
+			authGroup.GET("/profile", middleware.Auth(cfg.JWTSecret), authHdl.GetProfile)
+		}
+
+		adminGroup := v1.Group("/admin")
+		adminGroup.Use(middleware.Auth(cfg.JWTSecret), middleware.RequireRole(1))
+		{
+			adminGroup.POST("/users", authHdl.CreateUser)
+			adminGroup.GET("/users", authHdl.ListUsers)
+			adminGroup.GET("/roles", authHdl.ListRoles)
 		}
 
 		imagesAPI := v1.Group("/images")
@@ -159,28 +168,18 @@ func main() {
 
 		studioGroup := v1.Group("/studio")
 		{
-			// New unified payload endpoint
 			studioGroup.POST("/generate", studioHdl.GenerateUnified)
-			// Legacy Selection-based endpoint
 			studioGroup.POST("/generate-legacy", studioHdl.Generate)
-			// Status — returns StudioStatusResponse (list of outputs)
 			studioGroup.GET("/status/:taskId", studioHdl.GetStatus)
-			// Legacy status format
 			studioGroup.GET("/status-legacy/:taskId", studioHdl.GetStatusLegacy)
 			studioGroup.DELETE("/task/:taskId", studioHdl.CancelTask)
-			// Asset sync — upload file to model's asset library
 			studioGroup.POST("/sync-asset", studioHdl.SyncAsset)
 			studioGroup.GET("/synced-assets", studioHdl.ListSyncedAssets)
-			// Sync-aware file listing (includes synced_models)
 			studioGroup.GET("/files-with-sync", studioHdl.ListFilesWithSync)
-			// Character files with sync info
 			studioGroup.GET("/characters/:id/files-with-sync", studioHdl.ListCharacterFilesWithSync)
-			// Sync all character assets to a model
 			studioGroup.POST("/sync-character-assets", studioHdl.SyncCharacterAssets)
-			// Generation log CRUD (no delete)
 			studioGroup.GET("/logs/generation", studioHdl.ListGenerationLogs)
 			studioGroup.GET("/logs/generation/:id", studioHdl.GetGenerationLog)
-			// Preview: returns the AI API payload without sending it
 			studioGroup.POST("/preview", studioHdl.PreviewPayload)
 		}
 
@@ -246,6 +245,8 @@ func main() {
 				projectsAPI.GET("/:id/scenes/:sceneId/takes/:takeId", projectHdl.GetTakeByID)
 				projectsAPI.PATCH("/:id/scenes/:sceneId/takes/:takeId", projectHdl.UpdateTake)
 				projectsAPI.DELETE("/:id/scenes/:sceneId/takes/:takeId", projectHdl.SoftDeleteTake)
+				projectsAPI.POST("/:id/scenes/:sceneId/takes/save-generation", projectHdl.SaveGeneration)
+				projectsAPI.POST("/:id/scenes/:sceneId/takes/:takeId/toggle-active", projectHdl.ToggleTakeActive)
 			}
 		}
 	}

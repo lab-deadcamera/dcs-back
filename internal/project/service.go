@@ -23,6 +23,9 @@ type projectStore interface {
 	CreateTake(t *Take) error
 	GetTakeByID(id string) (*Take, error)
 	ListTakes(sceneID string) ([]Take, error)
+	ListActiveTakes(sceneID string) ([]Take, error)
+	GetActiveTakeByNumber(sceneID string, number int) (*Take, error)
+	DeactivateTakesByNumber(sceneID string, number int) error
 	UpdateTake(id string, updates map[string]interface{}) error
 	SoftDeleteTake(id string) error
 }
@@ -308,4 +311,68 @@ func (s *Service) GetSceneWithTakes(id string) (*SceneWithTakes, error) {
 		Scene: *sc,
 		Takes: takes,
 	}, nil
+}
+
+// ─── Take: discard / re-generation ─────────────────────────────
+
+// SaveGenerationRequest is the payload for associating a generated
+// video URL with a take slot (scene+number).
+type SaveGenerationRequest struct {
+	Number   int    `json:"number"`
+	VideoURL string `json:"video_url"`
+}
+
+// SaveGeneration saves a generated video URL to a take slot. If an
+// active take already exists for this scene+number, it is marked as
+// inactive (discarded) and a new take is created.
+func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*Take, error) {
+	sc, err := s.store.GetSceneByID(sceneID)
+	if err != nil {
+		return nil, err
+	}
+	if sc == nil {
+		return nil, fmt.Errorf("scene not found")
+	}
+
+	// Deactivate any existing active take for this scene+number
+	if err := s.store.DeactivateTakesByNumber(sceneID, req.Number); err != nil {
+		return nil, err
+	}
+
+	t := &Take{
+		ID:       uuid.New().String(),
+		SceneID:  sceneID,
+		Number:   req.Number,
+		VideoURL: req.VideoURL,
+		Status:   "completed",
+		Active:   true,
+	}
+	if err := s.store.CreateTake(t); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// ToggleTakeActive sets the specified take as the active one and
+// deactivates all other takes with the same scene+number.
+func (s *Service) ToggleTakeActive(id string) (*Take, error) {
+	t, err := s.store.GetTakeByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if t == nil {
+		return nil, fmt.Errorf("take not found")
+	}
+
+	// Deactivate any active take with the same scene+number
+	if err := s.store.DeactivateTakesByNumber(t.SceneID, t.Number); err != nil {
+		return nil, err
+	}
+
+	// Activate this take
+	active := true
+	if _, err := s.UpdateTake(id, &UpdateTakeRequest{Active: &active}); err != nil {
+		return nil, err
+	}
+	return s.store.GetTakeByID(id)
 }

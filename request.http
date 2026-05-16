@@ -6,7 +6,7 @@ POST {{BASE_URL}}/api/v1/studio/preview
 Content-Type: application/json
 
 {
-    "model": "dreamina-seedance-2-0-260128",
+    "model": "dreamina-seedream-4-pro-251224",
     "content": [
         {
             "type": "text",

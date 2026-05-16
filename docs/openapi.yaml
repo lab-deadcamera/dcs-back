@@ -13,7 +13,7 @@ info:
 servers:
   - url: http://localhost:9099/api/v1
     description: Development
-  - url: https://dcs-back.cloudtecnology.cloud/api/v1
+  - url: https://back.road2theoscars.tech/api/v1
     description: Production
 
 paths:

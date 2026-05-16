@@ -14,6 +14,14 @@ type Config struct {
 	DatabaseURL     string
 	JWTSecret       string
 	OutputsDir      string
+
+	// Super admin seed
+	SuperAdminUsername string
+	SuperAdminPassword string
+	SuperAdminName     string
+	SuperAdminSurname  string
+	SuperAdminUserName string
+	SuperAdminEmail    string
 }
 
 func Load() *Config {
@@ -47,6 +55,15 @@ func Load() *Config {
 		outputsDir = "./outputs"
 	}
 
+	superAdminUsername := os.Getenv("SUPER_ADMIN_USERNAME")
+	if superAdminUsername == "" {
+		superAdminUsername = "superadmin"
+	}
+	superAdminPassword := os.Getenv("SUPER_ADMIN_PASSWORD")
+	if superAdminPassword == "" {
+		superAdminPassword = "superadmin_pass_123"
+	}
+
 	return &Config{
 		Port:            port,
 		UploadDir:       uploadDir,
@@ -65,5 +82,11 @@ func Load() *Config {
 			".gif":  true,
 			".webp": true,
 		},
+		SuperAdminUsername: superAdminUsername,
+		SuperAdminPassword: superAdminPassword,
+		SuperAdminName:     os.Getenv("SUPER_ADMIN_NAME"),
+		SuperAdminSurname:  os.Getenv("SUPER_ADMIN_SURNAME"),
+		SuperAdminUserName: os.Getenv("SUPER_ADMIN_USER_NAME"),
+		SuperAdminEmail:    os.Getenv("SUPER_ADMIN_EMAIL"),
 	}
 }
