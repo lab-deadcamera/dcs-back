@@ -88,23 +88,68 @@ func (s *Service) pickGenerator(modelName string) generators.Generator {
 // ─── Unified payload generation ──────────────────────────────────
 
 func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateResponse, error) {
-	// Look up model by name (the user sends model name, not UUID)
+	var (
+		genReq    *generators.GeneratorRequest
+		modelName string
+		taskID    string
+		status    = "failed"
+		aiResp    string
+		outputs   string
+		aiCall    string
+		errLog    string
+	)
+
+	// Defer log save — runs on every return path (including early errors)
+	defer func() {
+		if s.logStore == nil {
+			return
+		}
+		reqBytes, _ := json.Marshal(req)
+		if modelName == "" {
+			modelName = req.Model
+		}
+		if modelName == "" {
+			return
+		}
+		if taskID == "" {
+			taskID = "<no-task>"
+		}
+		logEntry := &GenerationLog{
+			TaskID:        taskID,
+			ModelName:     modelName,
+			Request:       string(reqBytes),
+			AIResponse:    aiResp,
+			AICallPayload: aiCall,
+			Outputs:       outputs,
+			Status:        status,
+			ErrorMessage:  errLog,
+		}
+		if saveErr := s.logStore.Create(logEntry); saveErr != nil {
+			fmt.Printf("failed to save generation log: %v\n", saveErr)
+		}
+	}()
+
+	// Look up model by name
 	m, err := s.providerStore.GetModelByName(req.Model)
 	if err != nil {
+		errLog = fmt.Sprintf("failed to get model: %v", err)
 		return nil, fmt.Errorf("failed to get model: %w", err)
 	}
 	if m == nil {
+		errLog = fmt.Sprintf("model not found: %s", req.Model)
 		return nil, fmt.Errorf("model not found: %s", req.Model)
 	}
+	modelName = m.Name
 
 	// Resolve file IDs in content to data URLs (or asset:// URIs if synced)
 	resolvedContent, err := s.resolveContent(req.Content, m.ID)
 	if err != nil {
+		errLog = fmt.Sprintf("failed to resolve content: %v", err)
 		return nil, fmt.Errorf("failed to resolve content: %w", err)
 	}
 
 	// Convert to generator request
-	genReq := &generators.GeneratorRequest{
+	genReq = &generators.GeneratorRequest{
 		Model:       m.Name,
 		Content:     resolvedContent,
 		Ratio:       req.Ratio,
@@ -127,56 +172,35 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 	// Pick generator
 	gen := s.pickGenerator(m.Name)
 	if gen == nil {
+		errLog = fmt.Sprintf("no generator available for model: %s", m.Name)
 		return nil, fmt.Errorf("no generator available for model: %s", m.Name)
 	}
 
 	// Validate request against the generator
 	if err := gen.Validate(genReq); err != nil {
+		errLog = fmt.Sprintf("invalid request: %v", err)
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
 	result, err := gen.Generate(genReq)
 
-	// ─── Save generation log (request + AI response) ──────────────
-	if s.logStore != nil {
-		reqBytes, _ := json.Marshal(req)
-		genReqBytes, _ := json.Marshal(genReq)
-		logEntry := &GenerationLog{
-			TaskID:       "<error>",
-			ModelName:    m.Name,
-			Request:      string(reqBytes),
-			Status:       "failed",
-			ErrorMessage: "generation returned no result",
+	// Capture result data for the log
+	genReqBytes, _ := json.Marshal(genReq)
+	aiCall = string(genReqBytes)
+	if result != nil {
+		taskID = result.TaskID
+		status = result.Status
+		if result.Raw != nil {
+			rawBytes, _ := json.Marshal(result.Raw)
+			aiResp = string(rawBytes)
 		}
-
-		if result != nil {
-			logEntry.TaskID = result.TaskID
-			logEntry.Status = result.Status
-			logEntry.ErrorMessage = ""
-			logEntry.AICallPayload = string(genReqBytes)
-			if result.Raw != nil {
-				rawBytes, _ := json.Marshal(result.Raw)
-				logEntry.AIResponse = string(rawBytes)
-			}
-			if len(result.Outputs) > 0 {
-				outBytes, _ := json.Marshal(result.Outputs)
-				logEntry.Outputs = string(outBytes)
-			}
-		}
-		if err != nil {
-			logEntry.Status = "failed"
-			logEntry.ErrorMessage = err.Error()
-		}
-
-		if logEntry.TaskID != "<error>" {
-			if saveErr := s.logStore.Create(logEntry); saveErr != nil {
-				fmt.Printf("failed to save generation log: %v\n", saveErr)
-			}
+		if len(result.Outputs) > 0 {
+			outBytes, _ := json.Marshal(result.Outputs)
+			outputs = string(outBytes)
 		}
 	}
-	// ──────────────────────────────────────────────────────────────
-
 	if err != nil {
+		errLog = err.Error()
 		return nil, err
 	}
 
@@ -194,14 +218,13 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 	}
 	s.mu.Unlock()
 
-	// Convert outputs
-	outputs := convertOutputs(result.Outputs)
+	out := convertOutputs(result.Outputs)
 
 	return &StudioGenerateResponse{
 		TaskID:  result.TaskID,
 		Model:   result.Model,
 		Status:  result.Status,
-		Outputs: outputs,
+		Outputs: out,
 	}, nil
 }
 
