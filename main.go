@@ -11,6 +11,7 @@ import (
 	"dcs-back-v0/internal/file"
 	"dcs-back-v0/internal/image"
 	"dcs-back-v0/internal/middleware"
+	"dcs-back-v0/internal/project"
 	"dcs-back-v0/internal/provider"
 	"dcs-back-v0/internal/studio"
 	"dcs-back-v0/internal/studio/generators"
@@ -108,6 +109,10 @@ func main() {
 	studioSvc.RegisterGenerator(generators.NewSeedanceGenerator(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(generators.NewSeedreamGenerator(cfg.OutputsDir))
 	studioHdl := studio.NewHandler(studioSvc)
+
+	projectStore := project.NewStore(database)
+	projectSvc := project.NewService(projectStore)
+	projectHdl := project.NewHandler(projectSvc)
 
 	r := gin.Default()
 
@@ -224,6 +229,24 @@ func main() {
 			modelsAPI.GET("/favorite", providerHdl.GetFavorite)
 			modelsAPI.POST("/:id/favorite", providerHdl.SetFavorite)
 			modelsAPI.DELETE("/:id", providerHdl.SoftDeleteModel)
+			projectsAPI := v1.Group("/projects")
+			{
+				projectsAPI.POST("", projectHdl.Create)
+				projectsAPI.GET("", projectHdl.List)
+				projectsAPI.GET("/:id", projectHdl.GetByID)
+				projectsAPI.PATCH("/:id", projectHdl.Update)
+				projectsAPI.DELETE("/:id", projectHdl.SoftDelete)
+				projectsAPI.POST("/:id/scenes", projectHdl.CreateScene)
+				projectsAPI.GET("/:id/scenes", projectHdl.ListScenes)
+				projectsAPI.GET("/:id/scenes/:sceneId", projectHdl.GetSceneByID)
+				projectsAPI.PATCH("/:id/scenes/:sceneId", projectHdl.UpdateScene)
+				projectsAPI.DELETE("/:id/scenes/:sceneId", projectHdl.SoftDeleteScene)
+				projectsAPI.POST("/:id/scenes/:sceneId/takes", projectHdl.CreateTake)
+				projectsAPI.GET("/:id/scenes/:sceneId/takes", projectHdl.ListTakes)
+				projectsAPI.GET("/:id/scenes/:sceneId/takes/:takeId", projectHdl.GetTakeByID)
+				projectsAPI.PATCH("/:id/scenes/:sceneId/takes/:takeId", projectHdl.UpdateTake)
+				projectsAPI.DELETE("/:id/scenes/:sceneId/takes/:takeId", projectHdl.SoftDeleteTake)
+			}
 		}
 	}
 

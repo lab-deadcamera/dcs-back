@@ -1275,6 +1275,376 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  # ─── Projects ─────────────────────────────────────────────────
+  /projects:
+    post:
+      tags: [Projects]
+      summary: Create a project
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [Projects]
+      summary: List all projects
+      operationId: listProjects
+      responses:
+        "200":
+          description: Project list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Project"
+                  success: { type: boolean }
+                  message: { type: string }
+
+  /projects/{id}:
+    get:
+      tags: [Projects]
+      summary: Get project with scenes
+      operationId: getProject
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Project with scenes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectWithScenes"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Projects]
+      summary: Update project fields
+      operationId: updateProject
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Projects]
+      summary: Soft delete a project
+      operationId: deleteProject
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageOK"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /projects/{id}/scenes:
+    post:
+      tags: [Projects]
+      summary: Create a scene in a project
+      operationId: createScene
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSceneRequest"
+      responses:
+        "201":
+          description: Scene created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scene"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    get:
+      tags: [Projects]
+      summary: List scenes for a project
+      operationId: listScenes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Scene list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Scene"
+                  success: { type: boolean }
+                  message: { type: string }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /projects/{id}/scenes/{sceneId}:
+    get:
+      tags: [Projects]
+      summary: Get scene with takes
+      operationId: getScene
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: sceneId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Scene with takes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SceneWithTakes"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Projects]
+      summary: Update scene fields
+      operationId: updateScene
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: sceneId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSceneRequest"
+      responses:
+        "200":
+          description: Scene updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Scene"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Projects]
+      summary: Soft delete a scene
+      operationId: deleteScene
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: sceneId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageOK"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /projects/{id}/scenes/{sceneId}/takes:
+    post:
+      tags: [Projects]
+      summary: Create a take in a scene
+      operationId: createTake
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: sceneId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTakeRequest"
+      responses:
+        "201":
+          description: Take created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Take"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    get:
+      tags: [Projects]
+      summary: List takes for a scene
+      operationId: listTakes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: sceneId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Take list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Take"
+                  success: { type: boolean }
+                  message: { type: string }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /projects/{id}/scenes/{sceneId}/takes/{takeId}:
+    get:
+      tags: [Projects]
+      summary: Get a take by ID
+      operationId: getTake
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: sceneId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: takeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Take details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Take"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Projects]
+      summary: Update take fields (video_url, status)
+      operationId: updateTake
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: sceneId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: takeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTakeRequest"
+      responses:
+        "200":
+          description: Take updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Take"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Projects]
+      summary: Soft delete a take
+      operationId: deleteTake
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: sceneId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: takeId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          $ref: "#/components/responses/MessageOK"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   securitySchemes:
     BearerAuth:
@@ -1699,6 +2069,106 @@ components:
           type: string
           example: "error description"
 
+    # --- Projects -------------------------------------------------
+    CreateProjectRequest:
+      type: object
+      required: [name]
+      properties:
+        name:        { type: string }
+        description: { type: string }
+        metadata:    { type: string, description: "JSON string" }
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:        { type: string }
+        description: { type: string }
+        metadata:    { type: string }
+
+    Project:
+      type: object
+      properties:
+        id:          { type: string, format: uuid }
+        name:        { type: string }
+        description: { type: string }
+        metadata:    { type: string }
+        created_at:  { type: string, format: date-time }
+        updated_at:  { type: string, format: date-time }
+        deleted_at:  { type: string, format: date-time, nullable: true }
+
+    ProjectWithScenes:
+      type: object
+      properties:
+        project: { $ref: "#/components/schemas/Project" }
+        scenes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Scene"
+
+    CreateSceneRequest:
+      type: object
+      required: [number]
+      properties:
+        number:      { type: integer }
+        name:        { type: string }
+        description: { type: string }
+
+    UpdateSceneRequest:
+      type: object
+      properties:
+        number:      { type: integer }
+        name:        { type: string }
+        description: { type: string }
+
+    Scene:
+      type: object
+      properties:
+        id:          { type: string, format: uuid }
+        project_id:  { type: string, format: uuid }
+        number:      { type: integer }
+        name:        { type: string }
+        description: { type: string }
+        created_at:  { type: string, format: date-time }
+        updated_at:  { type: string, format: date-time }
+        deleted_at:  { type: string, format: date-time, nullable: true }
+
+    SceneWithTakes:
+      type: object
+      properties:
+        scene: { $ref: "#/components/schemas/Scene" }
+        takes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Take"
+
+    CreateTakeRequest:
+      type: object
+      required: [number]
+      properties:
+        number: { type: integer, minimum: 1, maximum: 100 }
+        status: { type: string, default: "pending" }
+
+    UpdateTakeRequest:
+      type: object
+      properties:
+        video_url:       { type: string }
+        video_local_url: { type: string }
+        status:          { type: string }
+
+    Take:
+      type: object
+      properties:
+        id:              { type: string, format: uuid }
+        scene_id:        { type: string, format: uuid }
+        number:          { type: integer }
+        video_url:       { type: string }
+        video_local_url: { type: string }
+        status:          { type: string, enum: [pending, processing, completed, failed] }
+        created_at:      { type: string, format: date-time }
+        updated_at:      { type: string, format: date-time }
+        deleted_at:      { type: string, format: date-time, nullable: true }
+
+
   responses:
     BadRequest:
       description: Bad request — missing or invalid fields
@@ -1756,3 +2226,5 @@ tags:
     description: Asset library sync — upload files to BytePlus asset library for optimized generation
   - name: Studio Logs
     description: Generation task logs — payload and AI response history
+  - name: Projects
+    description: Project, scene, and take management for video production

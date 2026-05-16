@@ -1,0 +1,278 @@
+package project
+
+import (
+	"fmt"
+
+	"github.com/google/uuid"
+)
+
+type Service struct {
+	store *ProjectStore
+}
+
+func NewService(store *ProjectStore) *Service {
+	return &Service{store: store}
+}
+
+// ─── Projects ───────────────────────────────────────────────────
+
+func (s *Service) Create(req *CreateProjectRequest) (*Project, error) {
+	p := &Project{
+		ID:          uuid.New().String(),
+		Name:        req.Name,
+		Description: req.Description,
+		Metadata:    req.Metadata,
+	}
+	if err := s.store.Create(p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (s *Service) GetByID(id string) (*Project, error) {
+	p, err := s.store.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil {
+		return nil, fmt.Errorf("project not found")
+	}
+	return p, nil
+}
+
+func (s *Service) List() ([]Project, error) {
+	projects, err := s.store.List()
+	if err != nil {
+		return nil, err
+	}
+	if projects == nil {
+		projects = []Project{}
+	}
+	return projects, nil
+}
+
+func (s *Service) Update(id string, req *UpdateProjectRequest) (*Project, error) {
+	updates := make(map[string]interface{})
+	if req.Name != nil {
+		updates["name"] = *req.Name
+	}
+	if req.Description != nil {
+		updates["description"] = *req.Description
+	}
+	if req.Metadata != nil {
+		updates["metadata"] = *req.Metadata
+	}
+
+	if err := s.store.Update(id, updates); err != nil {
+		return nil, err
+	}
+	return s.store.GetByID(id)
+}
+
+func (s *Service) SoftDelete(id string) error {
+	return s.store.SoftDelete(id)
+}
+
+// ─── Scenes ─────────────────────────────────────────────────────
+
+func (s *Service) CreateScene(projectID string, req *CreateSceneRequest) (*Scene, error) {
+	// Verify project exists
+	p, err := s.store.GetByID(projectID)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil {
+		return nil, fmt.Errorf("project not found")
+	}
+
+	sc := &Scene{
+		ID:          uuid.New().String(),
+		ProjectID:   projectID,
+		Number:      req.Number,
+		Name:        req.Name,
+		Description: req.Description,
+	}
+	if err := s.store.CreateScene(sc); err != nil {
+		return nil, err
+	}
+	return sc, nil
+}
+
+func (s *Service) GetSceneByID(id string) (*Scene, error) {
+	sc, err := s.store.GetSceneByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if sc == nil {
+		return nil, fmt.Errorf("scene not found")
+	}
+	return sc, nil
+}
+
+func (s *Service) ListScenes(projectID string) ([]Scene, error) {
+	// Verify project exists
+	p, err := s.store.GetByID(projectID)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil {
+		return nil, fmt.Errorf("project not found")
+	}
+
+	scenes, err := s.store.ListScenes(projectID)
+	if err != nil {
+		return nil, err
+	}
+	if scenes == nil {
+		scenes = []Scene{}
+	}
+	return scenes, nil
+}
+
+func (s *Service) UpdateScene(id string, req *UpdateSceneRequest) (*Scene, error) {
+	updates := make(map[string]interface{})
+	if req.Number != nil {
+		updates["number"] = *req.Number
+	}
+	if req.Name != nil {
+		updates["name"] = *req.Name
+	}
+	if req.Description != nil {
+		updates["description"] = *req.Description
+	}
+
+	if err := s.store.UpdateScene(id, updates); err != nil {
+		return nil, err
+	}
+	return s.store.GetSceneByID(id)
+}
+
+func (s *Service) SoftDeleteScene(id string) error {
+	return s.store.SoftDeleteScene(id)
+}
+
+// ─── Takes ──────────────────────────────────────────────────────
+
+func (s *Service) CreateTake(sceneID string, req *CreateTakeRequest) (*Take, error) {
+	// Verify scene exists
+	sc, err := s.store.GetSceneByID(sceneID)
+	if err != nil {
+		return nil, err
+	}
+	if sc == nil {
+		return nil, fmt.Errorf("scene not found")
+	}
+
+	status := req.Status
+	if status == "" {
+		status = "pending"
+	}
+
+	t := &Take{
+		ID:      uuid.New().String(),
+		SceneID: sceneID,
+		Number:  req.Number,
+		Status:  status,
+	}
+	if err := s.store.CreateTake(t); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+func (s *Service) GetTakeByID(id string) (*Take, error) {
+	t, err := s.store.GetTakeByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if t == nil {
+		return nil, fmt.Errorf("take not found")
+	}
+	return t, nil
+}
+
+func (s *Service) ListTakes(sceneID string) ([]Take, error) {
+	// Verify scene exists
+	sc, err := s.store.GetSceneByID(sceneID)
+	if err != nil {
+		return nil, err
+	}
+	if sc == nil {
+		return nil, fmt.Errorf("scene not found")
+	}
+
+	takes, err := s.store.ListTakes(sceneID)
+	if err != nil {
+		return nil, err
+	}
+	if takes == nil {
+		takes = []Take{}
+	}
+	return takes, nil
+}
+
+func (s *Service) UpdateTake(id string, req *UpdateTakeRequest) (*Take, error) {
+	updates := make(map[string]interface{})
+	if req.VideoURL != nil {
+		updates["video_url"] = *req.VideoURL
+	}
+	if req.VideoLocalURL != nil {
+		updates["video_local_url"] = *req.VideoLocalURL
+	}
+	if req.Status != nil {
+		updates["status"] = *req.Status
+	}
+
+	if err := s.store.UpdateTake(id, updates); err != nil {
+		return nil, err
+	}
+	return s.store.GetTakeByID(id)
+}
+
+func (s *Service) SoftDeleteTake(id string) error {
+	return s.store.SoftDeleteTake(id)
+}
+
+// ─── Combined ───────────────────────────────────────────────────
+
+// GetProjectWithScenes returns a project with its scenes.
+func (s *Service) GetProjectWithScenes(id string) (*ProjectWithScenes, error) {
+	p, err := s.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	scenes, err := s.store.ListScenes(id)
+	if err != nil {
+		return nil, err
+	}
+	if scenes == nil {
+		scenes = []Scene{}
+	}
+
+	return &ProjectWithScenes{
+		Project: *p,
+		Scenes:  scenes,
+	}, nil
+}
+
+// GetSceneWithTakes returns a scene with its takes.
+func (s *Service) GetSceneWithTakes(id string) (*SceneWithTakes, error) {
+	sc, err := s.GetSceneByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	takes, err := s.store.ListTakes(id)
+	if err != nil {
+		return nil, err
+	}
+	if takes == nil {
+		takes = []Take{}
+	}
+
+	return &SceneWithTakes{
+		Scene: *sc,
+		Takes: takes,
+	}, nil
+}
