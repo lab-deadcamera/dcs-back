@@ -43,12 +43,10 @@ func (s *Service) SetSuperAdminConfig(username, password, name, surname, userNam
 	s.superAdminEmail = email
 }
 
-// SeedSuperAdmin garantiza que el usuario super admin exista y esté activo
-// al arrancar la aplicación. Las credenciales se cargan desde .env o
-// variables de entorno. Maneja tres escenarios:
+// SeedSuperAdmin garantiza que el super admin exista y tenga las credenciales
+// del .env en cada arranque. El .env es siempre la fuente de verdad:
 //  1. El usuario no existe → lo crea.
-//  2. El usuario existe pero está inactivo/borrado → lo reactiva y actualiza credenciales.
-//  3. El usuario existe y está activo → no-op (no sobreescribe credenciales existentes).
+//  2. El usuario ya existe (activo o no) → actualiza password y datos.
 func (s *Service) SeedSuperAdmin() error {
 	if s.superAdminUsername == "" || s.superAdminPassword == "" {
 		return errors.New("SUPER_ADMIN_USERNAME and SUPER_ADMIN_PASSWORD must be set")
@@ -62,13 +60,9 @@ func (s *Service) SeedSuperAdmin() error {
 		return errors.New("SUPER_ADMIN role not found — run migrations first")
 	}
 
-	// Buscar el usuario sin filtros de soft-delete
 	existing, err := s.store.GetUserByUsernameAll(s.superAdminUsername)
 	if err != nil {
 		return fmt.Errorf("checking super admin: %w", err)
-	}
-	if existing != nil && existing.Active && existing.DeletedAt == nil {
-		return nil // ya existe y está activo
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(s.superAdminPassword), bcrypt.DefaultCost)
@@ -94,11 +88,11 @@ func (s *Service) SeedSuperAdmin() error {
 	}
 
 	if existing != nil {
-		// Existe pero está inactivo/borrado → reactivar y actualizar credenciales
+		// Ya existe — actualizar credenciales desde .env y asegurar que esté activo
 		return s.store.ReactivateUser(existing.ID, string(hash), name, surname, userName, email, superRole.ID)
 	}
 
-	// No existe → crearlo
+	// No existe — crearlo
 	_, err = s.store.CreateUser(s.superAdminUsername, string(hash), name, surname, userName, email, superRole.ID)
 	return err
 }
