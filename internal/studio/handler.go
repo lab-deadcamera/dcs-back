@@ -266,3 +266,24 @@ func (h *Handler) GetGenerationLog(c *gin.Context) {
 
 	utils.Success(c, log)
 }
+
+// PreviewPayload returns the AI API payload without sending it or saving logs.
+func (h *Handler) PreviewPayload(c *gin.Context) {
+	var req StudioGenerateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.svc.PreviewPayload(&req)
+	if err != nil {
+		if strings.Contains(err.Error(), "model not found") {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	utils.Success(c, result)
+}

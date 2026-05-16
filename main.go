@@ -175,6 +175,8 @@ func main() {
 			// Generation log CRUD (no delete)
 			studioGroup.GET("/logs/generation", studioHdl.ListGenerationLogs)
 			studioGroup.GET("/logs/generation/:id", studioHdl.GetGenerationLog)
+			// Preview: returns the AI API payload without sending it
+			studioGroup.POST("/preview", studioHdl.PreviewPayload)
 		}
 
 		filesAPI := v1.Group("/files")

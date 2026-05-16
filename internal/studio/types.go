@@ -277,3 +277,11 @@ type ListGenerationLogsResponse struct {
 	Limit      int             `json:"limit"`
 	TotalPages int             `json:"total_pages"`
 }
+
+// PreviewPayloadResponse returns the AI API payload without sending it.
+type PreviewPayloadResponse struct {
+	Model       string                 `json:"model"`
+	Endpoint    string                 `json:"endpoint"`
+	Payload     map[string]interface{} `json:"payload"`
+	ContentType string                 `json:"content_type"`
+}

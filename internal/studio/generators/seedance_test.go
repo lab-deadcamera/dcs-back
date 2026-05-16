@@ -90,7 +90,7 @@ func TestSeedanceBuildPayload_TextOnly(t *testing.T) {
 			{Type: "text", Text: "a dog walking on the beach"},
 		},
 	}
-	payload := g.buildPayload(req)
+	payload := g.BuildPayload(req)
 
 	if payload["model"] != req.Model {
 		t.Errorf("model = %v, want %s", payload["model"], req.Model)
@@ -124,7 +124,7 @@ func TestSeedanceBuildPayload_WithImage(t *testing.T) {
 			{Type: "image", Text: "reference", DataURL: "data:image/png;base64,img123", ID: "uuid"},
 		},
 	}
-	payload := g.buildPayload(req)
+	payload := g.BuildPayload(req)
 
 	content, ok := payload["content"].([]map[string]interface{})
 	if !ok {
@@ -157,7 +157,7 @@ func TestSeedanceBuildPayload_FirstImageWithTextFirst(t *testing.T) {
 			{Type: "image", Text: "reference", DataURL: "data:image/png;base64,img456", ID: "uuid"},
 		},
 	}
-	payload := g.buildPayload(req)
+	payload := g.BuildPayload(req)
 
 	content := payload["content"].([]map[string]interface{})
 
@@ -179,7 +179,7 @@ func TestSeedanceBuildPayload_EmptyImageDataURL(t *testing.T) {
 			{Type: "image", DataURL: "", ID: "uuid"},
 		},
 	}
-	payload := g.buildPayload(req)
+	payload := g.BuildPayload(req)
 
 	content := payload["content"].([]map[string]interface{})
 	for _, item := range content {
@@ -203,7 +203,7 @@ func TestSeedanceBuildPayload_WithVideoAndAudio(t *testing.T) {
 			{Type: "audio", DataURL: "data:audio/mpeg;base64,aud1", ID: "aud-uuid"},
 		},
 	}
-	payload := g.buildPayload(req)
+	payload := g.BuildPayload(req)
 
 	content := payload["content"].([]map[string]interface{})
 
@@ -246,7 +246,7 @@ func TestSeedanceBuildPayload_GenerateAudio(t *testing.T) {
 				},
 			}
 			g := &SeedanceGenerator{}
-			payload := g.buildPayload(req)
+			payload := g.BuildPayload(req)
 
 			_, has := payload["generate_audio"]
 			if tc.want && !has {

@@ -53,7 +53,7 @@ func (g *SeedreamGenerator) Validate(req *GeneratorRequest) error {
 	return nil
 }
 
-func (g *SeedreamGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, error) {
+func (g *SeedreamGenerator) BuildPayload(req *GeneratorRequest) map[string]interface{} {
 	payload := map[string]interface{}{
 		"model":           req.Model,
 		"prompt":          compileContentText(req.Content),
@@ -77,6 +77,12 @@ func (g *SeedreamGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, e
 	} else if len(imageURLs) > 1 {
 		payload["image"] = imageURLs
 	}
+
+	return payload
+}
+
+func (g *SeedreamGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, error) {
+	payload := g.BuildPayload(req)
 
 	result, err := g.client.arkRequest(req.BaseURL+req.Endpoint+"/images/generations", "POST", payload, req.APIKey)
 	if err != nil {

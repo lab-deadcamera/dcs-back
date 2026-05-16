@@ -61,7 +61,7 @@ func (g *SeedanceGenerator) Validate(req *GeneratorRequest) error {
 }
 
 func (g *SeedanceGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, error) {
-	payload := g.buildPayload(req)
+	payload := g.BuildPayload(req)
 
 	result, err := g.arkRequest(req.BaseURL+req.Endpoint, "POST", payload, req.APIKey)
 	if err != nil {
@@ -164,7 +164,7 @@ func (g *SeedanceGenerator) CancelTask(taskID, apiKey, baseURL, endpoint string)
 	return err
 }
 
-func (g *SeedanceGenerator) buildPayload(req *GeneratorRequest) map[string]interface{} {
+func (g *SeedanceGenerator) BuildPayload(req *GeneratorRequest) map[string]interface{} {
 	content := make([]map[string]interface{}, 0)
 	imageIndex := 0
 	videoIndex := 0

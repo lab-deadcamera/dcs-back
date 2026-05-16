@@ -1,10 +1,8 @@
 package studio
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -749,6 +747,67 @@ func (s *Service) GetGenerationLog(id string) (*GenerationLog, error) {
 	return log, nil
 }
 
+// ─── Preview (dry-run) ───────────────────────────────────────────
+
+// PreviewPayload builds the AI API payload without sending it or saving logs.
+func (s *Service) PreviewPayload(req *StudioGenerateRequest) (*PreviewPayloadResponse, error) {
+	m, err := s.providerStore.GetModelByName(req.Model)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get model: %w", err)
+	}
+	if m == nil {
+		return nil, fmt.Errorf("model not found: %s", req.Model)
+	}
+
+	resolvedContent, err := s.resolveContent(req.Content, m.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve content: %w", err)
+	}
+
+	genReq := &generators.GeneratorRequest{
+		Model:       m.Name,
+		Content:     resolvedContent,
+		Ratio:       req.Ratio,
+		Duration:    int(req.Duration),
+		CameraFixed: req.CameraFixed != nil && *req.CameraFixed,
+		Seed:        req.Seed,
+		Quality:     req.Quality,
+		Quantity:    req.Quantity,
+		Watermark:   req.Watermark != nil && *req.Watermark,
+		Resolution:  req.Resolution,
+		ImageMode:   req.ImageMode,
+	}
+	if req.GenerateAudio != nil {
+		genReq.GenerateAudio = *req.GenerateAudio
+	}
+
+	gen := s.pickGenerator(m.Name)
+	if gen == nil {
+		return nil, fmt.Errorf("no generator available for model: %s", m.Name)
+	}
+
+	switch g := gen.(type) {
+	case *generators.SeedanceGenerator:
+		payload := g.BuildPayload(genReq)
+		return &PreviewPayloadResponse{
+			Model:       m.Name,
+			Endpoint:    m.Endpoint,
+			Payload:     payload,
+			ContentType: "video",
+		}, nil
+	case *generators.SeedreamGenerator:
+		payload := g.BuildPayload(genReq)
+		return &PreviewPayloadResponse{
+			Model:       m.Name,
+			Endpoint:    m.Endpoint,
+			Payload:     payload,
+			ContentType: "image",
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported generator type for preview")
+	}
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────
 
 // updateLogWithFinalStatus updates the generation log with the final AI response
@@ -804,7 +863,7 @@ func (s *Service) resolveContent(items []ContentItem, modelID string) ([]generat
 				}
 			}
 
-			// Not synced — fall back to data URL
+			// Verify file exists
 			f, err := s.fileService.GetFile(item.ID)
 			if err != nil {
 				return nil, fmt.Errorf("content[%d] file %s: %w", i, item.ID, err)
@@ -813,37 +872,8 @@ func (s *Service) resolveContent(items []ContentItem, modelID string) ([]generat
 				return nil, fmt.Errorf("content[%d] file %s not found", i, item.ID)
 			}
 
-			path, err := s.fileService.GetServePath(item.ID)
-			if err != nil {
-				return nil, fmt.Errorf("content[%d] failed to resolve path for %s: %w", i, item.ID, err)
-			}
-
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return nil, fmt.Errorf("content[%d] failed to read file %s: %w", i, item.ID, err)
-			}
-
-			mimeType := f.MimeType
-			if mimeType == "" {
-				switch strings.ToLower(f.Format) {
-				case "png":
-					mimeType = "image/png"
-				case "jpg", "jpeg":
-					mimeType = "image/jpeg"
-				case "gif":
-					mimeType = "image/gif"
-				case "webp":
-					mimeType = "image/webp"
-				case "mp4":
-					mimeType = "video/mp4"
-				case "mp3":
-					mimeType = "audio/mpeg"
-				default:
-					mimeType = "application/octet-stream"
-				}
-			}
-
-			ci.DataURL = fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(data))
+			// Use public serve URL instead of base64 data URL
+			ci.DataURL = s.baseURL + "/api/v1/files/" + item.ID + "/serve"
 		}
 		resolved[i] = ci
 	}
