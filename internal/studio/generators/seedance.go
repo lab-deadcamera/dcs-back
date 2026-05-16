@@ -230,12 +230,13 @@ func (g *SeedanceGenerator) BuildPayload(req *GeneratorRequest) map[string]inter
 	}
 
 	payload := map[string]interface{}{
-		"model":       req.Model,
-		"content":     content,
-		"ratio":       req.Ratio,
-		"duration":    duration,
-		"camerafixed": req.CameraFixed,
-		"watermark":   req.Watermark,
+		"model":          req.Model,
+		"content":        content,
+		"ratio":          req.Ratio,
+		"duration":       duration,
+		"camerafixed":    req.CameraFixed,
+		"watermark":      req.Watermark,
+		"generate_audio": req.GenerateAudio,
 	}
 
 	if req.Ratio != "" {
@@ -244,10 +245,8 @@ func (g *SeedanceGenerator) BuildPayload(req *GeneratorRequest) map[string]inter
 	if req.Resolution != "" {
 		payload["resolution"] = req.Resolution
 	}
-	if req.GenerateAudio {
-		if !strings.Contains(strings.ToLower(req.Model), "fast") {
-			payload["generate_audio"] = true
-		}
+	if !req.GenerateAudio {
+		payload["generate_audio"] = false
 	}
 
 	return payload
