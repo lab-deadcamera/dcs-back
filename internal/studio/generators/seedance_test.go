@@ -238,12 +238,15 @@ func TestSeedanceBuildPayload_WithVideoAndAudio(t *testing.T) {
 
 func TestSeedanceBuildPayload_GenerateAudio(t *testing.T) {
 	tests := []struct {
-		name  string
-		model string
-		want  bool
+		name     string
+		model    string
+		audioReq bool
+		want     bool
 	}{
-		{"pro model with audio", "dreamina-seedance-2-0-260128", true},
-		{"fast model with audio", "dreamina-seedance-2-0-fast-260128", false},
+		{"pro model with audio true", "dreamina-seedance-2-0-260128", true, true},
+		{"pro model with audio false", "dreamina-seedance-2-0-260128", false, false},
+		{"fast model with audio true", "dreamina-seedance-2-0-fast-260128", true, true},
+		{"fast model with audio false", "dreamina-seedance-2-0-fast-260128", false, false},
 	}
 
 	for _, tc := range tests {
@@ -251,7 +254,7 @@ func TestSeedanceBuildPayload_GenerateAudio(t *testing.T) {
 			req := &GeneratorRequest{
 				Model:         tc.model,
 				Duration:      5,
-				GenerateAudio: true,
+				GenerateAudio: tc.audioReq,
 				Content: []ContentItem{
 					{Type: "text", Text: "a prompt"},
 				},
@@ -259,12 +262,16 @@ func TestSeedanceBuildPayload_GenerateAudio(t *testing.T) {
 			g := &SeedanceGenerator{}
 			payload := g.BuildPayload(req)
 
-			_, has := payload["generate_audio"]
-			if tc.want && !has {
+			val, has := payload["generate_audio"]
+			if !has {
 				t.Error("expected generate_audio in payload")
 			}
-			if !tc.want && has {
-				t.Error("did not expect generate_audio in payload for fast model")
+			b, ok := val.(bool)
+			if !ok {
+				t.Errorf("generate_audio should be bool, got %T", val)
+			}
+			if b != tc.want {
+				t.Errorf("generate_audio = %v, want %v", b, tc.want)
 			}
 		})
 	}
