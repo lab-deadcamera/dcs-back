@@ -22,7 +22,7 @@ const genLogCols = `id, task_id, model_name,
 	status,
 	COALESCE(error_message, '') AS error_message,
 	user_id, COALESCE(project_id, '') AS project_id, COALESCE(scene_id, '') AS scene_id, COALESCE(scene_code, '') AS scene_code,
-	take_number,
+	COALESCE(take_number, 0) AS take_number,
 	created_at, updated_at, deleted_at`
 
 func (s *GenerationLogStore) scanRow(row *GenerationLog, scanner interface{ Scan(dest ...interface{}) error }) error {
