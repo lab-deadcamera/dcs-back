@@ -196,6 +196,10 @@ func (s *Service) CreateUser(callerLevel int, req *CreateUserRequest) (*UserResp
 	}
 
 	// Only SUPER_ADMIN (level 0) can create ADMIN (level 1)
+		// SUPER_ADMIN (level 0) is reserved for the seeded user from .env
+		if targetRole.Level == 0 {
+			return nil, errors.New("cannot create SUPER_ADMIN users manually")
+		}
 	if targetRole.Level == 1 && callerLevel > 0 {
 		return nil, ErrCannotCreateAdmin
 	}
