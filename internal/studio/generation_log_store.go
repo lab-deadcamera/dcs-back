@@ -14,16 +14,32 @@ func NewGenerationLogStore(db *sql.DB) *GenerationLogStore {
 }
 
 // colList is the columns used in SELECT queries, with COALESCE for nullable TEXT fields.
-const genLogCols = `id, task_id, model_name,
-	COALESCE(request_payload, '') AS request_payload,
-	COALESCE(ai_response, '') AS ai_response,
-	COALESCE(ai_call_payload, '') AS ai_call_payload,
-	COALESCE(outputs, '') AS outputs,
-	status,
-	COALESCE(error_message, '') AS error_message,
-	user_id, COALESCE(project_id, '') AS project_id, COALESCE(scene_id, '') AS scene_id, COALESCE(scene_code, '') AS scene_code,
-	COALESCE(take_number, 0) AS take_number,
-	created_at, updated_at, deleted_at`
+const genLogBaseCols = `gl.id, gl.task_id, gl.model_name,
+	COALESCE(gl.request_payload, '') AS request_payload,
+	COALESCE(gl.ai_response, '') AS ai_response,
+	COALESCE(gl.ai_call_payload, '') AS ai_call_payload,
+	COALESCE(gl.outputs, '') AS outputs,
+	gl.status,
+	COALESCE(gl.error_message, '') AS error_message,
+	gl.user_id,
+	COALESCE(gl.project_id, '') AS project_id,
+	COALESCE(gl.scene_id, '') AS scene_id,
+	COALESCE(gl.scene_code, '') AS scene_code,
+	COALESCE(gl.take_number, 0) AS take_number,
+	gl.created_at, gl.updated_at, gl.deleted_at`
+
+const genLogJoinCols = `COALESCE(u.username, '') AS user_name,
+	COALESCE(u.name || ' ' || u.surname, '') AS user_display_name,
+	COALESCE(p.name, '') AS project_name,
+	COALESCE(s.name, '') AS scene_name,
+	COALESCE(s.number, 0) AS scene_number`
+
+const genLogFromJoins = `FROM generation_logs gl
+	LEFT JOIN users u ON u.id = gl.user_id
+	LEFT JOIN projects p ON p.id = gl.project_id
+	LEFT JOIN scenes s ON s.id = gl.scene_id`
+
+const genLogCols = genLogBaseCols + ", " + genLogJoinCols
 
 func (s *GenerationLogStore) scanRow(row *GenerationLog, scanner interface{ Scan(dest ...interface{}) error }) error {
 	return scanner.Scan(
@@ -33,6 +49,7 @@ func (s *GenerationLogStore) scanRow(row *GenerationLog, scanner interface{ Scan
 		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
 		&row.TakeNumber,
 		&row.CreatedAt, &row.UpdatedAt, &row.DeletedAt,
+		&row.UserName, &row.UserDisplayName, &row.ProjectName, &row.SceneName, &row.SceneNumber,
 	)
 }
 
@@ -122,8 +139,8 @@ func (s *GenerationLogStore) List(page, limit int) ([]GenerationLog, int, error)
 		return nil, 0, err
 	}
 
-	query := `SELECT ` + genLogCols + ` FROM generation_logs WHERE deleted_at IS NULL
-		ORDER BY created_at DESC
+	query := `SELECT ` + genLogCols + ` ` + genLogFromJoins + ` WHERE gl.deleted_at IS NULL
+		ORDER BY gl.created_at DESC
 		LIMIT $1 OFFSET $2`
 
 	rows, err := s.db.Query(query, limit, offset)
@@ -158,37 +175,37 @@ func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, s
 	}
 	offset := (page - 1) * limit
 
-	where := "WHERE deleted_at IS NULL"
+	where := "WHERE gl.deleted_at IS NULL"
 	args := []interface{}{}
 	argIdx := 1
 
 	if projectID != "" {
-		where += fmt.Sprintf(" AND project_id = $%d", argIdx)
+		where += fmt.Sprintf(" AND gl.project_id = $%d", argIdx)
 		args = append(args, projectID)
 		argIdx++
 	}
 	if sceneID != "" {
-		where += fmt.Sprintf(" AND scene_id = $%d", argIdx)
+		where += fmt.Sprintf(" AND gl.scene_id = $%d", argIdx)
 		args = append(args, sceneID)
 		argIdx++
 	}
 	if status != "" {
-		where += fmt.Sprintf(" AND status = $%d", argIdx)
+		where += fmt.Sprintf(" AND gl.status = $%d", argIdx)
 		args = append(args, status)
 		argIdx++
 	}
 	if modelName != "" {
-		where += fmt.Sprintf(" AND model_name ILIKE $%d", argIdx)
+		where += fmt.Sprintf(" AND gl.model_name ILIKE $%d", argIdx)
 		args = append(args, "%"+modelName+"%")
 		argIdx++
 	}
 	if userID > 0 {
-		where += fmt.Sprintf(" AND user_id = $%d", argIdx)
+		where += fmt.Sprintf(" AND gl.user_id = $%d", argIdx)
 		args = append(args, userID)
 		argIdx++
 	}
 	if dateFrom != "" {
-		where += fmt.Sprintf(" AND created_at >= $%d", argIdx)
+		where += fmt.Sprintf(" AND gl.created_at >= $%d", argIdx)
 		args = append(args, dateFrom)
 		argIdx++
 	}
@@ -199,12 +216,12 @@ func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, s
 	}
 
 	var total int
-	countQuery := "SELECT COUNT(*) FROM generation_logs " + where
+	countQuery := "SELECT COUNT(*) FROM generation_logs gl " + where
 	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
-	query := "SELECT " + genLogCols + " FROM generation_logs " + where + " ORDER BY created_at DESC LIMIT $" + fmt.Sprintf("%d", argIdx) + " OFFSET $" + fmt.Sprintf("%d", argIdx+1)
+	query := "SELECT " + genLogCols + " " + genLogFromJoins + " " + where + " ORDER BY gl.created_at DESC LIMIT $" + fmt.Sprintf("%d", argIdx) + " OFFSET $" + fmt.Sprintf("%d", argIdx+1)
 	args = append(args, limit, offset)
 
 	rows, err := s.db.Query(query, args...)
