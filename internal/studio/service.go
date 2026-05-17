@@ -24,6 +24,7 @@ type Service struct {
 	assetSyncStore   *AssetSyncStore
 	baseURL          string
 	logStore         *GenerationLogStore
+		assetStore       *GeneratedAssetStore
 	mu               sync.RWMutex
 }
 
@@ -66,6 +67,10 @@ func (s *Service) SetCharacterService(cs *character.Service) {
 
 func (s *Service) SetLogStore(store *GenerationLogStore) {
 	s.logStore = store
+}
+
+func (s *Service) SetGeneratedAssetStore(store *GeneratedAssetStore) {
+	s.assetStore = store
 }
 
 // ─── Generator registration ──────────────────────────────────────
@@ -789,6 +794,9 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 
 			// Update generation log with final AI response
 			s.updateLogWithFinalStatus(taskID, result)
+if result.Status == "succeeded" {
+					s.saveGeneratedAssets(taskID, result)
+				}
 		}
 		return statusResult, nil
 	}
