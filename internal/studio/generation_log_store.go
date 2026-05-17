@@ -79,7 +79,7 @@ func (s *GenerationLogStore) Create(log *GenerationLog) error {
 // GetByID returns a single log entry by its ID.
 func (s *GenerationLogStore) GetByID(id string) (*GenerationLog, error) {
 	log := &GenerationLog{}
-	query := `SELECT ` + genLogCols + ` FROM generation_logs WHERE id = $1 AND deleted_at IS NULL`
+	query := `SELECT ` + genLogCols + ` ` + genLogFromJoins + ` WHERE gl.id = $1 AND gl.deleted_at IS NULL`
 
 	if err := s.scanRow(log, s.db.QueryRow(query, id)); err != nil {
 		if err == sql.ErrNoRows {
@@ -93,7 +93,7 @@ func (s *GenerationLogStore) GetByID(id string) (*GenerationLog, error) {
 // GetByTaskID returns a log entry by its task ID.
 func (s *GenerationLogStore) GetByTaskID(taskID string) (*GenerationLog, error) {
 	log := &GenerationLog{}
-	query := `SELECT ` + genLogCols + ` FROM generation_logs WHERE task_id = $1 AND deleted_at IS NULL`
+	query := `SELECT ` + genLogCols + ` ` + genLogFromJoins + ` WHERE gl.task_id = $1 AND gl.deleted_at IS NULL`
 
 	if err := s.scanRow(log, s.db.QueryRow(query, taskID)); err != nil {
 		if err == sql.ErrNoRows {
