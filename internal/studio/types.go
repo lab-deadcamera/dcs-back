@@ -64,10 +64,12 @@ type StudioGenerateRequest struct {
 	Resolution    string        `json:"resolution"`
 	GenerateAudio *bool         `json:"generate_audio"`
 	ImageMode     string        `json:"image_mode"`
-	// Session tracking — permite recuperar el estado vía logs filtrados.
-	ProjectID string `json:"project_id,omitempty"`
-	SceneID   string `json:"scene_id,omitempty"`
-	SceneCode string `json:"scene_code,omitempty"`
+	// Session tracking — obligatorio para registrar en logs y recuperar estado.
+	ProjectID  string `json:"project_id" binding:"required"`
+	SceneID    string `json:"scene_id" binding:"required"`
+	SceneCode  string `json:"scene_code" binding:"required"`
+	TakeNumber int    `json:"take_number" binding:"required"`
+	UserID     int    `json:"user_id"`
 }
 
 // OutputResource represents a single generated output (video, image, audio).
@@ -262,6 +264,7 @@ type GenerationLog struct {
 	ProjectID     string     `json:"project_id,omitempty"`
 	SceneID       string     `json:"scene_id,omitempty"`
 	SceneCode     string     `json:"scene_code,omitempty"`
+	TakeNumber    int        `json:"take_number,omitempty"`
 	Request       string     `json:"request"`                     // original client payload (JSON)
 	AIResponse    string     `json:"ai_response"`                 // raw AI API response (JSON)
 	AICallPayload string     `json:"ai_call_payload,omitempty"`  // payload sent to AI API (JSON)

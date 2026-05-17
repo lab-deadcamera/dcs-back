@@ -22,6 +22,7 @@ const genLogCols = `id, task_id, model_name,
 	status,
 	COALESCE(error_message, '') AS error_message,
 	user_id, COALESCE(project_id, '') AS project_id, COALESCE(scene_id, '') AS scene_id, COALESCE(scene_code, '') AS scene_code,
+	take_number,
 	created_at, updated_at, deleted_at`
 
 func (s *GenerationLogStore) scanRow(row *GenerationLog, scanner interface{ Scan(dest ...interface{}) error }) error {
@@ -30,14 +31,15 @@ func (s *GenerationLogStore) scanRow(row *GenerationLog, scanner interface{ Scan
 		&row.Request, &row.AIResponse, &row.AICallPayload,
 		&row.Outputs, &row.Status, &row.ErrorMessage,
 		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
+		&row.TakeNumber,
 		&row.CreatedAt, &row.UpdatedAt, &row.DeletedAt,
 	)
 }
 
 // Create inserts a new generation log entry.
 func (s *GenerationLogStore) Create(log *GenerationLog) error {
-	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, ai_response, ai_call_payload, outputs, status, error_message, user_id, project_id, scene_id, scene_code)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, ai_response, ai_call_payload, outputs, status, error_message, user_id, project_id, scene_id, scene_code, take_number)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING id, created_at, updated_at`
 
 	return s.db.QueryRow(query,
@@ -53,6 +55,7 @@ func (s *GenerationLogStore) Create(log *GenerationLog) error {
 		nullIfEmpty(log.ProjectID),
 		nullIfEmpty(log.SceneID),
 		nullIfEmpty(log.SceneCode),
+		log.TakeNumber,
 	).Scan(&log.ID, &log.CreatedAt, &log.UpdatedAt)
 }
 

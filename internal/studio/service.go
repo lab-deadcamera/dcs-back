@@ -86,6 +86,11 @@ func (s *Service) pickGenerator(modelName string) generators.Generator {
 // ─── Unified payload generation ──────────────────────────────────
 
 func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateResponse, error) {
+	// Validar que los campos de sesión estén presentes (obligatorios para tracking).
+	if req.ProjectID == "" || req.SceneID == "" || req.SceneCode == "" || req.TakeNumber <= 0 {
+		return nil, fmt.Errorf("project_id, scene_id, scene_code and take_number are required for generation")
+	}
+
 	var (
 		genReq    *generators.GeneratorRequest
 		modelName string
@@ -115,9 +120,11 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		logEntry := &GenerationLog{
 			TaskID:        taskID,
 			ModelName:     modelName,
+			UserID:        intPtrOrNil(req.UserID),
 			ProjectID:     req.ProjectID,
 			SceneID:       req.SceneID,
 			SceneCode:     req.SceneCode,
+			TakeNumber:    req.TakeNumber,
 			Request:       string(reqBytes),
 			AIResponse:    aiResp,
 			AICallPayload: aiCall,
@@ -930,6 +937,14 @@ func (s *Service) GetGenerationLog(id string) (*GenerationLog, error) {
 	}
 
 	return log, nil
+}
+
+// intPtrOrNil returns a pointer to v if v > 0, otherwise nil.
+func intPtrOrNil(v int) *int {
+	if v <= 0 {
+		return nil
+	}
+	return &v
 }
 
 // ─── Preview (dry-run) ───────────────────────────────────────────
