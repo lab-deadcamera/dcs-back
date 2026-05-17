@@ -753,13 +753,67 @@ func charFileToCharFileWithSync(f character.CharacterFile, briefs []ModelBrief) 
 
 // ─── Status and cancellation (shared) ────────────────────────────
 
+// statusFromLog recupera el estado de una tarea desde el log cuando
+// la tarea ya no está en memoria (ej. reinicio del servidor).
+func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
+	// Buscar el modelo por nombre
+	m, err := s.providerStore.GetModelByName(log.ModelName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get model for task %s: %w", log.TaskID, err)
+	}
+	if m == nil {
+		// No hay modelo configurado, devolver el estado del log
+		return &StatusResult{Status: log.Status, Error: "model not found for task " + log.TaskID}, nil
+	}
+
+	gen := s.pickGenerator(m.Name)
+	if gen == nil {
+		// Sin generator disponible, devolver el estado del log
+		return &StatusResult{Status: log.Status}, nil
+	}
+
+	result, err := gen.GetStatus(log.TaskID, m.APIKey, m.URL, m.Endpoint)
+	if err != nil {
+		// Error consultando al generator, devolver el estado del log
+		return &StatusResult{Status: log.Status, Error: err.Error()}, nil
+	}
+
+	statusResult := &StatusResult{
+		Status: result.Status,
+		Error:  result.Error,
+		Raw:    result.Raw,
+	}
+	if len(result.Outputs) > 0 {
+		statusResult.VideoURL = result.Outputs[0].URL
+		statusResult.LocalURL = result.Outputs[0].LocalURL
+	}
+
+	if result.Status == "succeeded" || result.Status == "failed" {
+		s.updateLogWithFinalStatus(log.TaskID, result)
+		if result.Status == "succeeded" {
+			s.saveGeneratedAssets(log.TaskID, result)
+		}
+	}
+
+	return statusResult, nil
+}
+
 func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	s.mu.RLock()
 	record, ok := s.tasks[taskID]
 	s.mu.RUnlock()
 
 	if !ok {
-		return nil, fmt.Errorf("unknown task: %s", taskID)
+		// Task not in memory (e.g. after restart) — try to recover from log
+		log, logErr := s.logStore.GetByTaskID(taskID)
+		if logErr != nil || log == nil {
+			return nil, fmt.Errorf("unknown task: %s", taskID)
+		}
+		resp, err := s.statusFromLog(log)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	}
 
 	m, err := s.providerStore.GetModelByID(record.ModelID)
