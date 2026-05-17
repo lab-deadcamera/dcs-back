@@ -280,6 +280,10 @@ type ListGenerationLogsRequest struct {
 	ProjectID string `form:"project_id"`
 	SceneID   string `form:"scene_id"`
 	Status    string `form:"status"`
+	ModelName string `form:"model_name"`
+	UserID    int    `form:"user_id"`
+	DateFrom  string `form:"date_from"`
+	DateTo    string `form:"date_to"`
 }
 
 // ListGenerationLogsResponse holds the paginated response for listing logs.

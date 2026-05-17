@@ -144,9 +144,9 @@ func (s *GenerationLogStore) List(page, limit int) ([]GenerationLog, int, error)
 	return logs, total, nil
 }
 
-// ListByFilter returns paginated generation logs filtered by project/scene, newest first.
+// ListByFilter returns paginated generation logs filtered by the given criteria, newest first.
 // Empty filter values are ignored (no filter applied for that field).
-func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, status string) ([]GenerationLog, int, error) {
+func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, status, modelName string, userID int, dateFrom, dateTo string) ([]GenerationLog, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -172,6 +172,26 @@ func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, s
 	if status != "" {
 		where += fmt.Sprintf(" AND status = $%d", argIdx)
 		args = append(args, status)
+		argIdx++
+	}
+	if modelName != "" {
+		where += fmt.Sprintf(" AND model_name ILIKE $%d", argIdx)
+		args = append(args, "%"+modelName+"%")
+		argIdx++
+	}
+	if userID > 0 {
+		where += fmt.Sprintf(" AND user_id = $%d", argIdx)
+		args = append(args, userID)
+		argIdx++
+	}
+	if dateFrom != "" {
+		where += fmt.Sprintf(" AND created_at >= $%d", argIdx)
+		args = append(args, dateFrom)
+		argIdx++
+	}
+	if dateTo != "" {
+		where += fmt.Sprintf(" AND created_at <= $%d", argIdx)
+		args = append(args, dateTo+"T23:59:59Z")
 		argIdx++
 	}
 

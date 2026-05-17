@@ -882,7 +882,7 @@ func (s *Service) CancelTask(taskID string) error {
 // ─── Log listing ─────────────────────────────────────────────────
 
 // ListGenerationLogs returns paginated generation logs, optionally filtered.
-func (s *Service) ListGenerationLogs(page, limit int, projectID, sceneID, status string) (*ListGenerationLogsResponse, error) {
+func (s *Service) ListGenerationLogs(page, limit int, projectID, sceneID, status, modelName string, userID int, dateFrom, dateTo string) (*ListGenerationLogsResponse, error) {
 	if s.logStore == nil {
 		return nil, fmt.Errorf("log store not available")
 	}
@@ -892,8 +892,8 @@ func (s *Service) ListGenerationLogs(page, limit int, projectID, sceneID, status
 		total int
 		err   error
 	)
-	if projectID != "" || sceneID != "" || status != "" {
-		logs, total, err = s.logStore.ListByFilter(page, limit, projectID, sceneID, status)
+	if projectID != "" || sceneID != "" || status != "" || modelName != "" || userID > 0 || dateFrom != "" || dateTo != "" {
+		logs, total, err = s.logStore.ListByFilter(page, limit, projectID, sceneID, status, modelName, userID, dateFrom, dateTo)
 	} else {
 		logs, total, err = s.logStore.List(page, limit)
 	}
