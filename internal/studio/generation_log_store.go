@@ -36,8 +36,8 @@ const genLogJoinCols = `COALESCE(u.username, '') AS user_name,
 
 const genLogFromJoins = `FROM generation_logs gl
 	LEFT JOIN users u ON u.id = gl.user_id
-	LEFT JOIN projects p ON p.id = gl.project_id
-	LEFT JOIN scenes s ON s.id = gl.scene_id`
+	LEFT JOIN projects p ON p.id::text = gl.project_id
+	LEFT JOIN scenes s ON s.id::text = gl.scene_id`
 
 const genLogCols = genLogBaseCols + ", " + genLogJoinCols
 
