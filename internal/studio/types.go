@@ -275,11 +275,11 @@ type GenerationLog struct {
 	UpdatedAt     time.Time  `json:"updated_at"`
 	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 	// Enriched fields (LEFT JOIN, no almacenados en generation_logs)
-	UserName        string `json:"user_name,omitempty"`
-	UserDisplayName string `json:"user_display_name,omitempty"`
-	ProjectName     string `json:"project_name,omitempty"`
-	SceneName       string `json:"scene_name,omitempty"`
-	SceneNumber     int    `json:"scene_number,omitempty"`
+	UserName        string `json:"user_name"`
+	UserDisplayName string `json:"user_display_name"`
+	ProjectName     string `json:"project_name"`
+	SceneName       string `json:"scene_name"`
+	SceneNumber     int    `json:"scene_number"`
 }
 
 // ListGenerationLogsRequest holds pagination and filter params for listing logs.
