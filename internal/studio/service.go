@@ -115,6 +115,9 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		logEntry := &GenerationLog{
 			TaskID:        taskID,
 			ModelName:     modelName,
+			ProjectID:     req.ProjectID,
+			SceneID:       req.SceneID,
+			SceneCode:     req.SceneCode,
 			Request:       string(reqBytes),
 			AIResponse:    aiResp,
 			AICallPayload: aiCall,
@@ -878,13 +881,22 @@ func (s *Service) CancelTask(taskID string) error {
 
 // ─── Log listing ─────────────────────────────────────────────────
 
-// ListGenerationLogs returns paginated generation logs.
-func (s *Service) ListGenerationLogs(page, limit int) (*ListGenerationLogsResponse, error) {
+// ListGenerationLogs returns paginated generation logs, optionally filtered.
+func (s *Service) ListGenerationLogs(page, limit int, projectID, sceneID, status string) (*ListGenerationLogsResponse, error) {
 	if s.logStore == nil {
 		return nil, fmt.Errorf("log store not available")
 	}
 
-	logs, total, err := s.logStore.List(page, limit)
+	var (
+		logs  []GenerationLog
+		total int
+		err   error
+	)
+	if projectID != "" || sceneID != "" || status != "" {
+		logs, total, err = s.logStore.ListByFilter(page, limit, projectID, sceneID, status)
+	} else {
+		logs, total, err = s.logStore.List(page, limit)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to list generation logs: %w", err)
 	}

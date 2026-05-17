@@ -64,6 +64,10 @@ type StudioGenerateRequest struct {
 	Resolution    string        `json:"resolution"`
 	GenerateAudio *bool         `json:"generate_audio"`
 	ImageMode     string        `json:"image_mode"`
+	// Session tracking — permite recuperar el estado vía logs filtrados.
+	ProjectID string `json:"project_id,omitempty"`
+	SceneID   string `json:"scene_id,omitempty"`
+	SceneCode string `json:"scene_code,omitempty"`
 }
 
 // OutputResource represents a single generated output (video, image, audio).
@@ -254,6 +258,10 @@ type GenerationLog struct {
 	ID            string     `json:"id"`
 	TaskID        string     `json:"task_id"`
 	ModelName     string     `json:"model_name"`
+	UserID        *int       `json:"user_id,omitempty"`
+	ProjectID     string     `json:"project_id,omitempty"`
+	SceneID       string     `json:"scene_id,omitempty"`
+	SceneCode     string     `json:"scene_code,omitempty"`
 	Request       string     `json:"request"`                     // original client payload (JSON)
 	AIResponse    string     `json:"ai_response"`                 // raw AI API response (JSON)
 	AICallPayload string     `json:"ai_call_payload,omitempty"`  // payload sent to AI API (JSON)
@@ -265,10 +273,13 @@ type GenerationLog struct {
 	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 }
 
-// ListGenerationLogsRequest holds pagination params for listing logs.
+// ListGenerationLogsRequest holds pagination and filter params for listing logs.
 type ListGenerationLogsRequest struct {
-	Page  int `form:"page"`
-	Limit int `form:"limit"`
+	Page      int    `form:"page"`
+	Limit     int    `form:"limit"`
+	ProjectID string `form:"project_id"`
+	SceneID   string `form:"scene_id"`
+	Status    string `form:"status"`
 }
 
 // ListGenerationLogsResponse holds the paginated response for listing logs.

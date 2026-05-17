@@ -21,6 +21,7 @@ const genLogCols = `id, task_id, model_name,
 	COALESCE(outputs, '') AS outputs,
 	status,
 	COALESCE(error_message, '') AS error_message,
+	user_id, COALESCE(project_id, '') AS project_id, COALESCE(scene_id, '') AS scene_id, COALESCE(scene_code, '') AS scene_code,
 	created_at, updated_at, deleted_at`
 
 func (s *GenerationLogStore) scanRow(row *GenerationLog, scanner interface{ Scan(dest ...interface{}) error }) error {
@@ -28,14 +29,15 @@ func (s *GenerationLogStore) scanRow(row *GenerationLog, scanner interface{ Scan
 		&row.ID, &row.TaskID, &row.ModelName,
 		&row.Request, &row.AIResponse, &row.AICallPayload,
 		&row.Outputs, &row.Status, &row.ErrorMessage,
+		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
 		&row.CreatedAt, &row.UpdatedAt, &row.DeletedAt,
 	)
 }
 
 // Create inserts a new generation log entry.
 func (s *GenerationLogStore) Create(log *GenerationLog) error {
-	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, ai_response, ai_call_payload, outputs, status, error_message)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, ai_response, ai_call_payload, outputs, status, error_message, user_id, project_id, scene_id, scene_code)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, created_at, updated_at`
 
 	return s.db.QueryRow(query,
@@ -47,6 +49,10 @@ func (s *GenerationLogStore) Create(log *GenerationLog) error {
 		nullIfEmpty(log.Outputs),
 		log.Status,
 		nullIfEmpty(log.ErrorMessage),
+		log.UserID,
+		nullIfEmpty(log.ProjectID),
+		nullIfEmpty(log.SceneID),
+		nullIfEmpty(log.SceneCode),
 	).Scan(&log.ID, &log.CreatedAt, &log.UpdatedAt)
 }
 
@@ -118,6 +124,67 @@ func (s *GenerationLogStore) List(page, limit int) ([]GenerationLog, int, error)
 		LIMIT $1 OFFSET $2`
 
 	rows, err := s.db.Query(query, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var logs []GenerationLog
+	for rows.Next() {
+		var l GenerationLog
+		if err := s.scanRow(&l, rows); err != nil {
+			return nil, 0, err
+		}
+		logs = append(logs, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	return logs, total, nil
+}
+
+// ListByFilter returns paginated generation logs filtered by project/scene, newest first.
+// Empty filter values are ignored (no filter applied for that field).
+func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, status string) ([]GenerationLog, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	where := "WHERE deleted_at IS NULL"
+	args := []interface{}{}
+	argIdx := 1
+
+	if projectID != "" {
+		where += fmt.Sprintf(" AND project_id = $%d", argIdx)
+		args = append(args, projectID)
+		argIdx++
+	}
+	if sceneID != "" {
+		where += fmt.Sprintf(" AND scene_id = $%d", argIdx)
+		args = append(args, sceneID)
+		argIdx++
+	}
+	if status != "" {
+		where += fmt.Sprintf(" AND status = $%d", argIdx)
+		args = append(args, status)
+		argIdx++
+	}
+
+	var total int
+	countQuery := "SELECT COUNT(*) FROM generation_logs " + where
+	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	query := "SELECT " + genLogCols + " FROM generation_logs " + where + " ORDER BY created_at DESC LIMIT $" + fmt.Sprintf("%d", argIdx) + " OFFSET $" + fmt.Sprintf("%d", argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, 0, err
 	}
