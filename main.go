@@ -112,6 +112,7 @@ func main() {
 	studioSvc.RegisterHandler(studio.NewSeedanceHandler(cfg.OutputsDir))
 	studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(videogens.NewSeedanceGenerator(cfg.OutputsDir))
+						studioSvc.RegisterGenerator(videogens.NewSeedanceGalleryGenerator(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(studioimage.NewSeedreamGenerator(cfg.OutputsDir))
 	studioHdl := studio.NewHandler(studioSvc)
 
