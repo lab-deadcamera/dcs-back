@@ -180,3 +180,20 @@ func (s *Store) ListFilesForCharacters(ids []string) (map[string][]CharacterFile
 	}
 	return result, nil
 }
+func (s *Store) FindCharactersByFileID(fileID string) ([]string, error) {
+	rows, err := s.db.Query("SELECT DISTINCT character_id FROM character_files WHERE file_id = $1", fileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}

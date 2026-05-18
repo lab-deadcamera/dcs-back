@@ -108,6 +108,7 @@ func main() {
 	studioSvc.SetAssetSyncStore(assetSyncStore)
 	studioSvc.SetCharacterService(charSvc)
 	studioSvc.SetLogStore(studio.NewGenerationLogStore(database))
+		studioSvc.SetCommStore(studio.NewServerCommunicationStore(database))
 	studioSvc.RegisterHandler(studio.NewSeedanceHandler(cfg.OutputsDir))
 	studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
 		studioSvc.RegisterGenerator(videogens.NewSeedanceGenerator(cfg.OutputsDir))
@@ -190,6 +191,8 @@ func main() {
 			studioGroup.POST("/sync-character-assets", studioHdl.SyncCharacterAssets)
 			studioGroup.GET("/logs/generation", studioHdl.ListGenerationLogs)
 			studioGroup.GET("/logs/generation/:id", studioHdl.GetGenerationLog)
+						studioGroup.GET("/logs/server-communications", studioHdl.ListServerCommunications)
+						studioGroup.GET("/logs/server-communications/:id", studioHdl.GetServerCommunication)
 
 			videoGroup := studioGroup.Group("/video")
 			videoGroup.POST("/generate", studioVideoHdl.Generate)

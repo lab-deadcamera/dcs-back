@@ -14,7 +14,7 @@ import (
 	"dcs-back-v0/internal/studio"
 )
 
-var nameModeldreaminaGallery = "dreamina-seedance-2-0-gallery-260128"
+var nameModeldreaminaGallery = "dreamina-seedance-2-0-gallery"
 
 // ─── SeedanceGalleryGenerator// ─── SeedanceGalleryGenerator ────────────────────────────────────
 

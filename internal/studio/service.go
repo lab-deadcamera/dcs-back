@@ -36,6 +36,7 @@ type Service struct {
 	assetSyncStore   *AssetSyncStore
 	baseURL          string
 	logStore         *GenerationLogStore
+	commStore	*ServerCommunicationStore
 	assetStore       *GeneratedAssetStore
 	mu               sync.RWMutex
 }
@@ -1168,3 +1169,95 @@ func convertOutputs(src []OutputResource) []OutputResource {
 	return dst
 }
 
+func (s *Service) SetCommStore(store *ServerCommunicationStore) {
+	s.commStore = store
+}
+
+func (s *Service) ListServerCommunications(taskID, modelName string, page, limit int) (*ServerCommListResponse, error) {
+	if s.commStore == nil {
+		return nil, fmt.Errorf("server communication store not available")
+	}
+	return s.commStore.List(ServerCommFilter{
+		TaskID:    taskID,
+		ModelName: modelName,
+		Page:      page,
+		Limit:     limit,
+	})
+}
+
+func (s *Service) GetServerCommunication(id string) (*ServerCommunication, error) {
+	if s.commStore == nil {
+		return nil, fmt.Errorf("server communication store not available")
+	}
+	return s.commStore.GetByID(id)
+}
+
+// GallerySyncContent resolves non-text content items for gallery models.
+// For each unsynced asset it syncs the file to the model's gallery.
+// If the file belongs to a character, it syncs the entire character as a group.
+func (s *Service) GallerySyncContent(items []ContentItem, modelName string) ([]ContentItem, error) {
+	if s.assetSyncStore == nil {
+		return nil, fmt.Errorf("asset sync store not available")
+	}
+
+	m, err := s.providerStore.GetModelByName(modelName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get model: %w", err)
+	}
+	if m == nil {
+		return nil, fmt.Errorf("model not found")
+	}
+	if m.AccessKeyID == "" || m.SecretAccessKey == "" {
+		return nil, fmt.Errorf("model has no AK/SK configured for gallery sync")
+	}
+
+	result := make([]ContentItem, len(items))
+	copy(result, items)
+
+	for i, item := range items {
+		if item.Type == "text" || item.ID == "" {
+			continue
+		}
+
+		// Already synced?
+		synced, err := s.assetSyncStore.GetByModelAndFile(m.ID, item.ID)
+		if err == nil && synced != nil && synced.Status == "active" && synced.AssetID != "" {
+			result[i].DataURL = "asset://" + synced.AssetID
+			continue
+		}
+
+		// Not synced — check if file belongs to a character
+		charIDs, cErr := s.charService.FindCharactersByFileID(item.ID)
+		charSynced := false
+		if cErr == nil && len(charIDs) > 0 {
+			for _, charID := range charIDs {
+				if _, syncErr := s.SyncCharacterAssets(&SyncCharacterRequest{
+					ModelID: m.ID,
+					CharacterID: charID,
+				}); syncErr != nil {
+					continue
+				}
+				// Re-check after sync
+				synced2, _ := s.assetSyncStore.GetByModelAndFile(m.ID, item.ID)
+				if synced2 != nil && synced2.Status == "active" && synced2.AssetID != "" {
+					result[i].DataURL = "asset://" + synced2.AssetID
+					charSynced = true
+					break
+				}
+			}
+		}
+
+		if !charSynced {
+			// Sync single file
+			resp, err := s.SyncAsset(&SyncAssetRequest{
+				ModelID: m.ID,
+				FileID:  item.ID,
+			})
+			if err == nil && resp.Status == "active" && resp.AssetID != "" {
+				result[i].DataURL = "asset://" + resp.AssetID
+			}
+		}
+	}
+
+	return result, nil
+}

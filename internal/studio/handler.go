@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"fmt"
 	"strings"
 
 	"dcs-back-v0/internal/utils"
@@ -179,4 +180,45 @@ func (h *Handler) GetGenerationLog(c *gin.Context) {
 	utils.Success(c, log)
 }
 
+// ListServerCommunications returns paginated server-to-server communication logs.
+func (h *Handler) ListServerCommunications(c *gin.Context) {
+	taskID := c.Query("task_id")
+	modelName := c.Query("model_name")
+	page := 1
+	limit := 20
+	if p := c.Query("page"); p != "" {
+		fmt.Sscanf(p, "%d", &page)
+	}
+	if l := c.Query("limit"); l != "" {
+		fmt.Sscanf(l, "%d", &limit)
+	}
 
+	result, err := h.svc.ListServerCommunications(taskID, modelName, page, limit)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, result)
+}
+
+// GetServerCommunication returns a single server communication log by ID.
+func (h *Handler) GetServerCommunication(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		utils.BadRequest(c, "id is required")
+		return
+	}
+
+	log, err := h.svc.GetServerCommunication(id)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	if log == nil {
+		utils.NotFound(c, "server communication not found")
+		return
+	}
+
+	utils.Success(c, log)
+}

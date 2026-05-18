@@ -155,3 +155,7 @@ func (s *Service) ListFiles(characterID string) ([]CharacterFile, error) {
 	s.enrichFileURLs(files)
 	return files, nil
 }
+
+func (s *Service) FindCharactersByFileID(fileID string) ([]string, error) {
+	return s.store.FindCharactersByFileID(fileID)
+}
