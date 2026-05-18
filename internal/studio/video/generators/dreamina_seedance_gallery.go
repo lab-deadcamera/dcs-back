@@ -14,32 +14,32 @@ import (
 	"dcs-back-v0/internal/studio"
 )
 
-var nameModeldreamina = "dreamina-seedance-2-0-260128"
+var nameModeldreaminaGallery = "dreamina-seedance-2-0-gallery-260128"
 
-// ─── SeedanceGenerator// ─── SeedanceGenerator ─────────────────────────────────────────
+// ─── SeedanceGalleryGenerator// ─── SeedanceGalleryGenerator ────────────────────────────────────
 
-type SeedanceGenerator struct {
+type SeedanceGalleryGenerator struct {
 	httpClient *http.Client
 	outputsDir string
 }
 
-func NewSeedanceGenerator(outputsDir string) *SeedanceGenerator {
-	return &SeedanceGenerator{
+func NewSeedanceGalleryGenerator(outputsDir string) *SeedanceGalleryGenerator {
+	return &SeedanceGalleryGenerator{
 		httpClient: &http.Client{Timeout: 120 * time.Second},
 		outputsDir: outputsDir,
 	}
 }
 
-func (g *SeedanceGenerator) Name() string { return nameModeldreamina }
+func (g *SeedanceGalleryGenerator) Name() string { return nameModeldreaminaGallery }
 
-func (g *SeedanceGenerator) ContentType() string { return "video" }
+func (g *SeedanceGalleryGenerator) ContentType() string { return "video" }
 
-func (g *SeedanceGenerator) Match(modelName string) bool {
+func (g *SeedanceGalleryGenerator) Match(modelName string) bool {
 	lower := strings.ToLower(modelName)
-	return strings.Contains(lower, nameModeldreamina)
+	return strings.Contains(lower, nameModeldreaminaGallery)
 }
 
-func (g *SeedanceGenerator) Validate(req *studio.GeneratorRequest) error {
+func (g *SeedanceGalleryGenerator) Validate(req *studio.GeneratorRequest) error {
 	errs := studio.ValidateCommon(req)
 	if errs.HasErrors() {
 		return errs
@@ -64,7 +64,7 @@ func (g *SeedanceGenerator) Validate(req *studio.GeneratorRequest) error {
 	return nil
 }
 
-func (g *SeedanceGenerator) Generate(req *studio.GeneratorRequest) (*studio.GeneratorResult, error) {
+func (g *SeedanceGalleryGenerator) Generate(req *studio.GeneratorRequest) (*studio.GeneratorResult, error) {
 	payload := g.BuildPayload(req)
 
 	result, err := g.arkRequest(req.BaseURL+req.Endpoint, "POST", payload, req.APIKey)
@@ -89,7 +89,7 @@ func (g *SeedanceGenerator) Generate(req *studio.GeneratorRequest) (*studio.Gene
 	}, nil
 }
 
-func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*studio.GeneratorResult, error) {
+func (g *SeedanceGalleryGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*studio.GeneratorResult, error) {
 	result, err := g.arkRequest(baseURL+endpoint+"/"+taskID, "GET", nil, apiKey)
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 	if status == "succeeded" {
 		videoURL := g.findVideoURL(result, 0)
 		if videoURL != "" {
-			localName := fmt.Sprintf("seedance_%d_%s.mp4", time.Now().UnixMilli(), SafeSuffix(taskID))
+			localName := fmt.Sprintf("seedance_gallery_%d_%s.mp4", time.Now().UnixMilli(), SafeSuffix(taskID))
 			localPath := filepath.Join(g.outputsDir, localName)
 
 			outputs := []studio.OutputResource{{
@@ -120,7 +120,7 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 
 			return &studio.GeneratorResult{
 				TaskID:  taskID,
-				Model:   nameModeldreamina,
+				Model:   nameModeldreaminaGallery,
 				Status:  status,
 				Outputs: outputs,
 				Raw:     result,
@@ -129,7 +129,7 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 
 		return &studio.GeneratorResult{
 			TaskID:  taskID,
-			Model:   nameModeldreamina,
+			Model:   nameModeldreaminaGallery,
 			Status:  "succeeded_no_url",
 			Outputs: []studio.OutputResource{},
 			Raw:     result,
@@ -146,7 +146,7 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 		}
 		return &studio.GeneratorResult{
 			TaskID:  taskID,
-			Model:   nameModeldreamina,
+			Model:   nameModeldreaminaGallery,
 			Status:  status,
 			Outputs: []studio.OutputResource{},
 			Raw:     result,
@@ -156,19 +156,19 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 
 	return &studio.GeneratorResult{
 		TaskID:  taskID,
-		Model:   nameModeldreamina,
+		Model:   nameModeldreaminaGallery,
 		Status:  status,
 		Outputs: []studio.OutputResource{},
 		Raw:     result,
 	}, nil
 }
 
-func (g *SeedanceGenerator) CancelTask(taskID, apiKey, baseURL, endpoint string) error {
+func (g *SeedanceGalleryGenerator) CancelTask(taskID, apiKey, baseURL, endpoint string) error {
 	_, err := g.arkRequest(baseURL+endpoint+"/"+taskID, "DELETE", nil, apiKey)
 	return err
 }
 
-func (g *SeedanceGenerator) BuildPayload(req *studio.GeneratorRequest) map[string]interface{} {
+func (g *SeedanceGalleryGenerator) BuildPayload(req *studio.GeneratorRequest) map[string]interface{} {
 	content := make([]map[string]interface{}, 0)
 	imageIndex := 0
 	videoIndex := 0
@@ -244,7 +244,7 @@ func (g *SeedanceGenerator) BuildPayload(req *studio.GeneratorRequest) map[strin
 	return payload
 }
 
-func (g *SeedanceGenerator) arkRequest(url, method string, body interface{}, apiKey string) (map[string]interface{}, error) {
+func (g *SeedanceGalleryGenerator) arkRequest(url, method string, body interface{}, apiKey string) (map[string]interface{}, error) {
 	var bodyBytes []byte
 	if body != nil {
 		var err error
@@ -274,18 +274,18 @@ func (g *SeedanceGenerator) arkRequest(url, method string, body interface{}, api
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return nil, fmt.Errorf("%s: %s", nameModeldreamina, string(respBytes))
+		return nil, fmt.Errorf("%s: %s", nameModeldreaminaGallery, string(respBytes))
 	}
 
 	if resp.StatusCode >= 400 {
 		msg := studio.ExtractError(result, string(respBytes))
-		return nil, fmt.Errorf("%s %d: %s", nameModeldreamina, resp.StatusCode, msg)
+		return nil, fmt.Errorf("%s %d: %s", nameModeldreaminaGallery, resp.StatusCode, msg)
 	}
 
 	return result, nil
 }
 
-func (g *SeedanceGenerator) findVideoURL(obj interface{}, depth int) string {
+func (g *SeedanceGalleryGenerator) findVideoURL(obj interface{}, depth int) string {
 	if obj == nil || depth > 6 {
 		return ""
 	}

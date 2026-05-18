@@ -134,22 +134,20 @@ func TestSeedanceBuildPayload_WithImage(t *testing.T) {
 	}
 
 	if len(content) != 2 {
-		t.Fatalf("expected 2 content items (image_url, text), got %d", len(content))
+		t.Fatalf("expected 2 content items (text, image_url), got %d", len(content))
 	}
 
-	if content[0]["type"] != "image_url" {
-		t.Errorf("content[0].type = %v, want image_url", content[0]["type"])
+	if content[0]["type"] != "text" {
+		t.Errorf("content[0].type = %v, want text", content[0]["type"])
 	}
-	imageURL, ok := content[0]["image_url"].(map[string]string)
+	if content[1]["type"] != "image_url" {
+		t.Errorf("content[1].type = %v, want image_url", content[1]["type"])
+	}
+	imageURL, ok := content[1]["image_url"].(map[string]string)
 	if !ok || imageURL["url"] != "https://example.com/img123.png" {
-		t.Errorf("content[0].image_url.url = %v, want https://example.com/img123.png", imageURL)
-	}
-
-	if content[1]["type"] != "text" {
-		t.Errorf("content[1].type = %v, want text", content[1]["type"])
+		t.Errorf("content[1].image_url.url = %v, want https://example.com/img123.png", imageURL)
 	}
 }
-
 func TestSeedanceBuildPayload_WithMultipleImages(t *testing.T) {
 	g := &SeedanceGenerator{}
 	req := &studio.GeneratorRequest{
