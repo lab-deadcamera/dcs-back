@@ -18,6 +18,7 @@ import (
 	studioimage "dcs-back-v0/internal/studio/image"
 	studiotext "dcs-back-v0/internal/studio/text"
 	studiovideo "dcs-back-v0/internal/studio/video"
+	videogens "dcs-back-v0/internal/studio/video/generators"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -109,7 +110,7 @@ func main() {
 	studioSvc.SetLogStore(studio.NewGenerationLogStore(database))
 	studioSvc.RegisterHandler(studio.NewSeedanceHandler(cfg.OutputsDir))
 	studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
-		studioSvc.RegisterGenerator(studiovideo.NewSeedanceGenerator(cfg.OutputsDir))
+		studioSvc.RegisterGenerator(videogens.NewSeedanceGenerator(cfg.OutputsDir))
 		studioSvc.RegisterGenerator(studioimage.NewSeedreamGenerator(cfg.OutputsDir))
 		studioHdl := studio.NewHandler(studioSvc)
 
