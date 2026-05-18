@@ -1347,8 +1347,10 @@ func (s *Service) GallerySyncContent(items []ContentItem, modelName string) ([]C
 			if err == nil && resp.Status == "active" && resp.AssetID != "" {
 				log.Printf("[gallery-sync] item[%d] single file sync OK asset_id=%s", i, resp.AssetID)
 				result[i].DataURL = "asset://" + resp.AssetID
+			} else if err != nil {
+				log.Printf("[gallery-sync] item[%d] single file sync FAILED err=%v", i, err)
 			} else {
-				log.Printf("[gallery-sync] item[%d] single file sync FAILED err=%v status=%q", i, err, resp.Status)
+				log.Printf("[gallery-sync] item[%d] single file sync status=%q asset_id=%s", i, resp.Status, resp.AssetID)
 			}
 		}
 	}
