@@ -1,4 +1,4 @@
-package generators
+package video
 
 import (
 	"bytes"
@@ -8,12 +8,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
+
+	"dcs-back-v0/internal/studio"
 )
 
-var videoURLPattern = regexp.MustCompile(`^https?://`)
 var nameModeldreamina = "dreamina-seedance-2-0-260128"
 
 type SeedanceGenerator struct {
@@ -30,13 +30,15 @@ func NewSeedanceGenerator(outputsDir string) *SeedanceGenerator {
 
 func (g *SeedanceGenerator) Name() string { return nameModeldreamina }
 
+func (g *SeedanceGenerator) ContentType() string { return "video" }
+
 func (g *SeedanceGenerator) Match(modelName string) bool {
 	lower := strings.ToLower(modelName)
 	return strings.Contains(lower, nameModeldreamina)
 }
 
-func (g *SeedanceGenerator) Validate(req *GeneratorRequest) error {
-	errs := validateCommon(req)
+func (g *SeedanceGenerator) Validate(req *studio.GeneratorRequest) error {
+	errs := studio.ValidateCommon(req)
 	if errs.HasErrors() {
 		return errs
 	}
@@ -44,13 +46,13 @@ func (g *SeedanceGenerator) Validate(req *GeneratorRequest) error {
 	if req.Duration < 1 || req.Duration > 60 {
 		errs.Add("duration", "must be between 1 and 60 seconds")
 	}
-	if req.Ratio != "" && !validRatios[req.Ratio] {
+	if req.Ratio != "" && !ValidRatios[req.Ratio] {
 		errs.Add("ratio", "unsupported value: "+req.Ratio)
 	}
-	if req.Resolution != "" && !validResolutionsVideo[req.Resolution] {
+	if req.Resolution != "" && !ValidResolutionsVideo[req.Resolution] {
 		errs.Add("resolution", "must be one of: 480p, 720p, 1080p")
 	}
-	if req.GenerateAudio && isFastModel(req.Model) {
+	if req.GenerateAudio && IsFastModel(req.Model) {
 		errs.Add("generate_audio", "only supported on pro models (non-fast)")
 	}
 
@@ -60,7 +62,7 @@ func (g *SeedanceGenerator) Validate(req *GeneratorRequest) error {
 	return nil
 }
 
-func (g *SeedanceGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, error) {
+func (g *SeedanceGenerator) Generate(req *studio.GeneratorRequest) (*studio.GeneratorResult, error) {
 	payload := g.BuildPayload(req)
 
 	result, err := g.arkRequest(req.BaseURL+req.Endpoint, "POST", payload, req.APIKey)
@@ -76,16 +78,16 @@ func (g *SeedanceGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, e
 		return nil, fmt.Errorf("no task ID in response")
 	}
 
-	return &GeneratorResult{
+	return &studio.GeneratorResult{
 		TaskID:  taskID,
 		Model:   req.Model,
 		Status:  "running",
-		Outputs: []OutputResource{},
+		Outputs: []studio.OutputResource{},
 		Raw:     result,
 	}, nil
 }
 
-func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*GeneratorResult, error) {
+func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*studio.GeneratorResult, error) {
 	result, err := g.arkRequest(baseURL+endpoint+"/"+taskID, "GET", nil, apiKey)
 	if err != nil {
 		return nil, err
@@ -96,10 +98,10 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 	if status == "succeeded" {
 		videoURL := g.findVideoURL(result, 0)
 		if videoURL != "" {
-			localName := fmt.Sprintf("seedance_%d_%s.mp4", time.Now().UnixMilli(), safeSuffix(taskID))
+			localName := fmt.Sprintf("seedance_%d_%s.mp4", time.Now().UnixMilli(), SafeSuffix(taskID))
 			localPath := filepath.Join(g.outputsDir, localName)
 
-			outputs := []OutputResource{{
+			outputs := []studio.OutputResource{{
 				URL:  videoURL,
 				Type: "video",
 			}}
@@ -114,7 +116,7 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 				}
 			}
 
-			return &GeneratorResult{
+			return &studio.GeneratorResult{
 				TaskID:  taskID,
 				Model:   nameModeldreamina,
 				Status:  status,
@@ -123,11 +125,11 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 			}, nil
 		}
 
-		return &GeneratorResult{
+		return &studio.GeneratorResult{
 			TaskID:  taskID,
 			Model:   nameModeldreamina,
 			Status:  "succeeded_no_url",
-			Outputs: []OutputResource{},
+			Outputs: []studio.OutputResource{},
 			Raw:     result,
 			Error:   "Job succeeded but no video URL was found in the response.",
 		}, nil
@@ -140,21 +142,21 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 				errorMsg, _ = e["message"].(string)
 			}
 		}
-		return &GeneratorResult{
+		return &studio.GeneratorResult{
 			TaskID:  taskID,
 			Model:   nameModeldreamina,
 			Status:  status,
-			Outputs: []OutputResource{},
+			Outputs: []studio.OutputResource{},
 			Raw:     result,
 			Error:   errorMsg,
 		}, nil
 	}
 
-	return &GeneratorResult{
+	return &studio.GeneratorResult{
 		TaskID:  taskID,
 		Model:   nameModeldreamina,
 		Status:  status,
-		Outputs: []OutputResource{},
+		Outputs: []studio.OutputResource{},
 		Raw:     result,
 	}, nil
 }
@@ -164,7 +166,7 @@ func (g *SeedanceGenerator) CancelTask(taskID, apiKey, baseURL, endpoint string)
 	return err
 }
 
-func (g *SeedanceGenerator) BuildPayload(req *GeneratorRequest) map[string]interface{} {
+func (g *SeedanceGenerator) BuildPayload(req *studio.GeneratorRequest) map[string]interface{} {
 	content := make([]map[string]interface{}, 0)
 	imageIndex := 0
 	videoIndex := 0
@@ -205,7 +207,7 @@ func (g *SeedanceGenerator) BuildPayload(req *GeneratorRequest) map[string]inter
 		}
 	}
 
-	textPart := compileContentText(req.Content)
+	textPart := studio.CompileContentText(req.Content)
 	if imageIndex > 0 || videoIndex > 0 {
 		refs := []string{}
 		if imageIndex > 0 {
@@ -286,7 +288,7 @@ func (g *SeedanceGenerator) arkRequest(url, method string, body interface{}, api
 	}
 
 	if resp.StatusCode >= 400 {
-		msg := extractError(result, string(respBytes))
+		msg := studio.ExtractError(result, string(respBytes))
 		return nil, fmt.Errorf("%s %d: %s", nameModeldreamina, resp.StatusCode, msg)
 	}
 
@@ -299,7 +301,7 @@ func (g *SeedanceGenerator) findVideoURL(obj interface{}, depth int) string {
 	}
 	switch v := obj.(type) {
 	case string:
-		if videoURLPattern.MatchString(v) {
+		if VideoURLPattern.MatchString(v) {
 			if strings.HasSuffix(strings.SplitN(v, "?", 2)[0], ".mp4") ||
 				strings.Contains(v, "tos-") ||
 				strings.Contains(v, "bytepluses.com") ||
@@ -318,7 +320,7 @@ func (g *SeedanceGenerator) findVideoURL(obj interface{}, depth int) string {
 		return ""
 	case map[string]interface{}:
 		for _, k := range []string{"video_url", "videoUrl", "url", "video"} {
-			if s, ok := v[k].(string); ok && videoURLPattern.MatchString(s) {
+			if s, ok := v[k].(string); ok && VideoURLPattern.MatchString(s) {
 				return s
 			}
 		}
@@ -331,94 +333,3 @@ func (g *SeedanceGenerator) findVideoURL(obj interface{}, depth int) string {
 	}
 	return ""
 }
-
-// ─── Helpers ────────────────────────────────────────────────────
-
-func compileContentText(items []ContentItem) string {
-	var parts []string
-	for _, item := range items {
-		if item.Type == "text" && strings.TrimSpace(item.Text) != "" {
-			parts = append(parts, strings.TrimSpace(item.Text))
-		}
-	}
-	textBlock := strings.Join(parts, ". ")
-	if textBlock != "" && !strings.HasSuffix(textBlock, ".") {
-		textBlock += "."
-	}
-	return textBlock
-}
-
-func isFastModel(model string) bool {
-	return strings.Contains(strings.ToLower(model), "fast")
-}
-
-func safeSuffix(taskID string) string {
-	if len(taskID) >= 8 {
-		return taskID[len(taskID)-8:]
-	}
-	return taskID
-}
-
-func extractError(result map[string]interface{}, raw string) string {
-	if e, ok := result["error"].(map[string]interface{}); ok {
-		if msg, ok := e["message"].(string); ok {
-			return msg
-		}
-	}
-	if msg, ok := result["message"].(string); ok {
-		return msg
-	}
-	if len(raw) > 400 {
-		raw = raw[:400]
-	}
-	return raw
-}
-
-/*
-Seedance Generator — configuración del modelo (datos públicos de referencia)
-
-Modelos que matchea:
-  - dreamina-seedance-2-0-fast-260128   → texto/guión a video (fast, sin audio)
-  - dreamina-seedance-2-0-260128        → texto/guión a video (pro, con audio)
-
-Base URLs (BytePlus ModelArk / Volcengine Ark):
-  BytePlus AP (default): https://ark.ap-southeast.bytepluses.com/api/v3
-  Volcengine CN:         https://ark.cn-beijing.volces.com/api/v3
-
-Endpoints (relativos a la base URL):
-  POST   /contents/generations/tasks       → crear tarea de generación
-  GET    /contents/generations/tasks/:id    → consultar estado
-  DELETE /contents/generations/tasks/:id    → cancelar tarea
-
-Auth para inferencia:
-  Header: Authorization: Bearer <ARK_API_KEY>   (tipo: BytePlus API Key)
-  Prefijo de key: "ark-" (ej: ark-xxxxxxxxxxxx)
-
-Auth para asset library (subida de assets a galería):
-  Tipo: AK/SK (Access Key / Secret Key) — NO es Bearer token
-  SignedFetch con algoritmo HMAC-SHA256 (BytePlus signature v4)
-  Host: open.byteplusapi.com
-  Region: ap-southeast-1
-  Service: ark
-  API Version: 2024-01-01
-  Acciones: CreateAssetGroup, CreateAsset, GetAsset, ListAssets, DeleteAsset
-
-Parámetros del payload:
-  model         string    — nombre del modelo (ej: dreamina-seedance-2-0-fast-260128)
-  content[]     array     — items de contenido (image_url, video_url, audio_url, text)
-  ratio         string    — relación de aspecto (16:9, 9:16, 1:1) por defecto 16:9
-  duration      int       — duración en segundos (default: 5)
-  camerafixed   bool      — cámara fija/estática
-  watermark     bool      — incluir marca de agua
-  resolution    string    — 480p, 720p, 1080p (default: 480p en fast)
-  generate_audio bool     — solo en modelos pro (no fast)
-  seed          int       — semilla para reproducibilidad (devuelta en la respuesta)
-
-Output:
-  type: video (mp4)
-  URL de descarga: https://ark-acg-*.tos-*.bytepluses.com/... (expira en 24h)
-  Los videos se descargan automáticamente a outputs/seedance_*.mp4
-
-Rate limits:
-  Varían por tier de suscripción. Consultar console.byteplus.com
-*/

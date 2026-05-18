@@ -10,8 +10,20 @@ import (
 	"dcs-back-v0/internal/character"
 	"dcs-back-v0/internal/file"
 	"dcs-back-v0/internal/provider"
-	"dcs-back-v0/internal/studio/generators"
 )
+
+// PipelineRunner is the internal interface satisfied by all domain generators
+// (video.VideoGenerator, image.ImageGenerator, etc.) for the unified pipeline.
+type PipelineRunner interface {
+	Match(modelName string) bool
+	Validate(req *GeneratorRequest) error
+	Generate(req *GeneratorRequest) (*GeneratorResult, error)
+	GetStatus(taskID, apiKey, baseURL, endpoint string) (*GeneratorResult, error)
+	CancelTask(taskID, apiKey, baseURL, endpoint string) error
+	BuildPayload(req *GeneratorRequest) map[string]interface{}
+	ContentType() string
+	Name() string
+}
 
 type Service struct {
 	providerStore    *provider.Store
@@ -19,24 +31,24 @@ type Service struct {
 	charService      *character.Service
 	outputsDir       string
 	handlers         []ModelHandler
-	generatorsList   []generators.Generator
+	pipelineGens     []PipelineRunner
 	tasks            map[string]*TaskRecord
 	assetSyncStore   *AssetSyncStore
 	baseURL          string
 	logStore         *GenerationLogStore
-		assetStore       *GeneratedAssetStore
+	assetStore       *GeneratedAssetStore
 	mu               sync.RWMutex
 }
 
 func NewService(providerStore *provider.Store, fileService *file.Service, outputsDir, baseURL string) *Service {
 	return &Service{
-		providerStore:  providerStore,
-		fileService:    fileService,
-		outputsDir:     outputsDir,
-		baseURL:        baseURL,
-		handlers:       []ModelHandler{},
-		generatorsList: []generators.Generator{},
-		tasks:          make(map[string]*TaskRecord),
+		providerStore: providerStore,
+		fileService:   fileService,
+		outputsDir:    outputsDir,
+		baseURL:       baseURL,
+		handlers:      []ModelHandler{},
+		pipelineGens:  []PipelineRunner{},
+		tasks:         make(map[string]*TaskRecord),
 	}
 }
 
@@ -75,12 +87,14 @@ func (s *Service) SetGeneratedAssetStore(store *GeneratedAssetStore) {
 
 // ─── Generator registration ──────────────────────────────────────
 
-func (s *Service) RegisterGenerator(gen generators.Generator) {
-	s.generatorsList = append(s.generatorsList, gen)
+// RegisterGenerator registers a generator that satisfies the PipelineRunner interface.
+// Both video.VideoGenerator and image.ImageGenerator match structurally.
+func (s *Service) RegisterGenerator(gen PipelineRunner) {
+	s.pipelineGens = append(s.pipelineGens, gen)
 }
 
-func (s *Service) pickGenerator(modelName string) generators.Generator {
-	for _, g := range s.generatorsList {
+func (s *Service) pickGenerator(modelName string) PipelineRunner {
+	for _, g := range s.pipelineGens {
 		if g.Match(modelName) {
 			return g
 		}
@@ -97,7 +111,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 	}
 
 	var (
-		genReq    *generators.GeneratorRequest
+		genReq    *GeneratorRequest
 		modelName string
 		taskID    string
 		status    = "failed"
@@ -162,7 +176,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 	}
 
 	// Convert to generator request
-	genReq = &generators.GeneratorRequest{
+	genReq = &GeneratorRequest{
 		Model:       m.Name,
 		Content:     resolvedContent,
 		Ratio:       req.Ratio,
@@ -320,7 +334,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 	fileURL := s.baseURL + "/api/v1/files/" + req.FileID + "/serve"
 
 	// Upload to the asset library
-	api := generators.NewAssetAPI(m.AccessKeyID, m.SecretAccessKey, m.DefaultAssetGroupID)
+	api := NewAssetAPI(m.AccessKeyID, m.SecretAccessKey, m.DefaultAssetGroupID)
 	result, err := api.CreateAsset(fileURL, f.Filename, detectAssetType(f.MimeType), "")
 	if err != nil {
 		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error())
@@ -548,7 +562,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 	}
 
 	// Create API client (with or without existing group)
-	api := generators.NewAssetAPI(m.AccessKeyID, m.SecretAccessKey, groupID)
+	api := NewAssetAPI(m.AccessKeyID, m.SecretAccessKey, groupID)
 
 	// Create asset group only if none exists for this character+model
 	if groupID == "" {
@@ -560,7 +574,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 		if groupID == "" {
 			return nil, fmt.Errorf("no asset group ID returned from CreateAssetGroup")
 		}
-		api = generators.NewAssetAPI(m.AccessKeyID, m.SecretAccessKey, groupID)
+		api = NewAssetAPI(m.AccessKeyID, m.SecretAccessKey, groupID)
 	}
 
 	// Process each file — skip if already synced, upload if new or failed
@@ -620,7 +634,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 
 // uploadAndTrackAsset uploads a file to the BytePlus asset library via CreateAsset,
 // polls until Active or Failed, and stores the mapping in model_assets.
-func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *generators.AssetAPI) (*SyncAssetResponse, error) {
+func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *AssetAPI) (*SyncAssetResponse, error) {
 	if s.assetSyncStore == nil {
 		return nil, fmt.Errorf("asset sync store not available")
 	}
@@ -1026,7 +1040,7 @@ func (s *Service) PreviewPayload(req *StudioGenerateRequest) (*PreviewPayloadRes
 		return nil, fmt.Errorf("failed to resolve content: %w", err)
 	}
 
-	genReq := &generators.GeneratorRequest{
+	genReq := &GeneratorRequest{
 		Model:       m.Name,
 		Content:     resolvedContent,
 		Ratio:       req.Ratio,
@@ -1048,33 +1062,20 @@ func (s *Service) PreviewPayload(req *StudioGenerateRequest) (*PreviewPayloadRes
 		return nil, fmt.Errorf("no generator available for model: %s", m.Name)
 	}
 
-	switch g := gen.(type) {
-	case *generators.SeedanceGenerator:
-		payload := g.BuildPayload(genReq)
-		return &PreviewPayloadResponse{
-			Model:       m.Name,
-			Endpoint:    m.Endpoint,
-			Payload:     payload,
-			ContentType: "video",
-		}, nil
-	case *generators.SeedreamGenerator:
-		payload := g.BuildPayload(genReq)
-		return &PreviewPayloadResponse{
-			Model:       m.Name,
-			Endpoint:    m.Endpoint,
-			Payload:     payload,
-			ContentType: "image",
-		}, nil
-	default:
-		return nil, fmt.Errorf("unsupported generator type for preview")
-	}
+	payload := gen.BuildPayload(genReq)
+	return &PreviewPayloadResponse{
+		Model:       m.Name,
+		Endpoint:    m.Endpoint,
+		Payload:     payload,
+		ContentType: gen.ContentType(),
+	}, nil
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
 // updateLogWithFinalStatus updates the generation log with the final AI response
 // when an async task completes (succeeded or failed).
-func (s *Service) updateLogWithFinalStatus(taskID string, result *generators.GeneratorResult) {
+func (s *Service) updateLogWithFinalStatus(taskID string, result *GeneratorResult) {
 	if s.logStore == nil {
 		return
 	}
@@ -1104,10 +1105,10 @@ func (s *Service) updateLogWithFinalStatus(taskID string, result *generators.Gen
 	}
 }
 
-func (s *Service) resolveContent(items []ContentItem, modelID string) ([]generators.ContentItem, error) {
-	resolved := make([]generators.ContentItem, len(items))
+func (s *Service) resolveContent(items []ContentItem, modelID string) ([]ContentItem, error) {
+	resolved := make([]ContentItem, len(items))
 	for i, item := range items {
-		ci := generators.ContentItem{
+		ci := ContentItem{
 			Type: item.Type,
 			Text: item.Text,
 			Name: item.Name,
@@ -1152,7 +1153,7 @@ func detectAssetType(mimeType string) string {
 	return "Image"
 }
 
-func convertOutputs(src []generators.OutputResource) []OutputResource {
+func convertOutputs(src []OutputResource) []OutputResource {
 	if src == nil {
 		return []OutputResource{}
 	}
@@ -1166,3 +1167,4 @@ func convertOutputs(src []generators.OutputResource) []OutputResource {
 	}
 	return dst
 }
+

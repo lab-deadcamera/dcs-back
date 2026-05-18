@@ -1,14 +1,16 @@
-package generators
+package image
 
 import (
 	"testing"
+
+	"dcs-back-v0/internal/studio"
 )
 
 func TestSeedreamValidate_Valid(t *testing.T) {
 	g := &SeedreamGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model: "dreamina-seedream-4-pro-251224",
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a cyberpunk city at night"},
 		},
 	}
@@ -19,9 +21,9 @@ func TestSeedreamValidate_Valid(t *testing.T) {
 
 func TestSeedreamValidate_ValidWithImageRef(t *testing.T) {
 	g := &SeedreamGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model: "dreamina-seedream-4-pro-251224",
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a cyberpunk city at night"},
 			{Type: "image", Text: "reference style", DataURL: "data:image/png;base64,abc", ID: "uuid"},
 		},
@@ -33,10 +35,10 @@ func TestSeedreamValidate_ValidWithImageRef(t *testing.T) {
 
 func TestSeedreamValidate_DurationNotSupported(t *testing.T) {
 	g := &SeedreamGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:    "dreamina-seedream-4-pro-251224",
 		Duration: 5,
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a prompt"},
 		},
 	}
@@ -47,10 +49,10 @@ func TestSeedreamValidate_DurationNotSupported(t *testing.T) {
 
 func TestSeedreamValidate_CameraFixedNotSupported(t *testing.T) {
 	g := &SeedreamGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:       "dreamina-seedream-4-pro-251224",
 		CameraFixed: true,
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a prompt"},
 		},
 	}
@@ -61,10 +63,10 @@ func TestSeedreamValidate_CameraFixedNotSupported(t *testing.T) {
 
 func TestSeedreamValidate_AudioNotSupported(t *testing.T) {
 	g := &SeedreamGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:         "dreamina-seedream-4-pro-251224",
 		GenerateAudio: true,
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a prompt"},
 		},
 	}
@@ -75,10 +77,10 @@ func TestSeedreamValidate_AudioNotSupported(t *testing.T) {
 
 func TestSeedreamValidate_InvalidResolution(t *testing.T) {
 	g := &SeedreamGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:      "dreamina-seedream-4-pro-251224",
 		Resolution: "480p",
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a prompt"},
 		},
 	}

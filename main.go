@@ -14,7 +14,10 @@ import (
 	"dcs-back-v0/internal/project"
 	"dcs-back-v0/internal/provider"
 	"dcs-back-v0/internal/studio"
-	"dcs-back-v0/internal/studio/generators"
+	studioaudio "dcs-back-v0/internal/studio/audio"
+	studioimage "dcs-back-v0/internal/studio/image"
+	studiotext "dcs-back-v0/internal/studio/text"
+	studiovideo "dcs-back-v0/internal/studio/video"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -48,7 +51,7 @@ func main() {
 		log.Fatalf("failed to init image store: %v", err)
 	}
 	imageSvc := image.NewService(imageStore, cfg.BaseURL, cfg.ThumbnailWidth, cfg.ThumbnailHeight, cfg.AllowedExts, cfg.MaxFileSize)
-	imageHdl := image.NewHandler(imageSvc)
+		imageHdl := image.NewHandler(imageSvc)
 
 	providerStore := provider.NewStore(database)
 	providerSvc := provider.NewService(providerStore)
@@ -106,11 +109,17 @@ func main() {
 	studioSvc.SetLogStore(studio.NewGenerationLogStore(database))
 	studioSvc.RegisterHandler(studio.NewSeedanceHandler(cfg.OutputsDir))
 	studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
-	studioSvc.RegisterGenerator(generators.NewSeedanceGenerator(cfg.OutputsDir))
-	studioSvc.RegisterGenerator(generators.NewSeedreamGenerator(cfg.OutputsDir))
-	studioHdl := studio.NewHandler(studioSvc)
+		studioSvc.RegisterGenerator(studiovideo.NewSeedanceGenerator(cfg.OutputsDir))
+		studioSvc.RegisterGenerator(studioimage.NewSeedreamGenerator(cfg.OutputsDir))
+		studioHdl := studio.NewHandler(studioSvc)
 
-	projectStore := project.NewStore(database)
+		vidSvc := studiovideo.NewService(studioSvc)
+		studioVideoHdl := studiovideo.NewHandler(vidSvc)
+		imgSvc := studioimage.NewService(studioSvc)
+		projectStore := project.NewStore(database)
+		studioImageHdl := studioimage.NewHandler(imgSvc)
+		studioAudioHdl := studioaudio.NewHandler(studioSvc)
+		studioTextHdl := studiotext.NewHandler(studioSvc)
 	projectSvc := project.NewService(projectStore)
 	projectHdl := project.NewHandler(projectSvc)
 
@@ -168,11 +177,11 @@ func main() {
 
 		studioGroup := v1.Group("/studio")
 		{
-			studioGroup.POST("/generate", studioHdl.GenerateUnified)
+
 			studioGroup.POST("/generate-legacy", studioHdl.Generate)
-			studioGroup.GET("/status/:taskId", studioHdl.GetStatus)
+
 			studioGroup.GET("/status-legacy/:taskId", studioHdl.GetStatusLegacy)
-			studioGroup.DELETE("/task/:taskId", studioHdl.CancelTask)
+
 			studioGroup.POST("/sync-asset", studioHdl.SyncAsset)
 			studioGroup.GET("/synced-assets", studioHdl.ListSyncedAssets)
 			studioGroup.GET("/files-with-sync", studioHdl.ListFilesWithSync)
@@ -180,7 +189,31 @@ func main() {
 			studioGroup.POST("/sync-character-assets", studioHdl.SyncCharacterAssets)
 			studioGroup.GET("/logs/generation", studioHdl.ListGenerationLogs)
 			studioGroup.GET("/logs/generation/:id", studioHdl.GetGenerationLog)
-			studioGroup.POST("/preview", studioHdl.PreviewPayload)
+
+			videoGroup := studioGroup.Group("/video")
+			videoGroup.POST("/generate", studioVideoHdl.Generate)
+			videoGroup.GET("/status/:taskId", studioVideoHdl.GetStatus)
+			videoGroup.DELETE("/task/:taskId", studioVideoHdl.CancelTask)
+			videoGroup.POST("/preview", studioVideoHdl.PreviewPayload)
+
+			imageGroup := studioGroup.Group("/image")
+			imageGroup.POST("/generate", studioImageHdl.Generate)
+			imageGroup.GET("/status/:taskId", studioImageHdl.GetStatus)
+			imageGroup.DELETE("/task/:taskId", studioImageHdl.CancelTask)
+			imageGroup.POST("/preview", studioImageHdl.PreviewPayload)
+
+			audioGroup := studioGroup.Group("/audio")
+			audioGroup.POST("/generate", studioAudioHdl.Generate)
+			audioGroup.GET("/status/:taskId", studioAudioHdl.GetStatus)
+			audioGroup.DELETE("/task/:taskId", studioAudioHdl.CancelTask)
+			audioGroup.POST("/preview", studioAudioHdl.PreviewPayload)
+
+			textGroup := studioGroup.Group("/text")
+			textGroup.POST("/generate", studioTextHdl.Generate)
+			textGroup.GET("/status/:taskId", studioTextHdl.GetStatus)
+			textGroup.DELETE("/task/:taskId", studioTextHdl.CancelTask)
+			textGroup.POST("/preview", studioTextHdl.PreviewPayload)
+
 		}
 
 		filesAPI := v1.Group("/files")

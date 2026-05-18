@@ -3,12 +3,12 @@ package studio
 import (
 	"fmt"
 
-	"dcs-back-v0/internal/studio/generators"
+	
 )
 
 // saveGeneratedAssets guarda las URLs de salida como GeneratedAssets (status: pending)
 // cuando una tarea de generación se completa exitosamente.
-func (s *Service) saveGeneratedAssets(taskID string, result *generators.GeneratorResult) {
+func (s *Service) saveGeneratedAssets(taskID string, result *GeneratorResult) {
 	if s.assetStore == nil || s.logStore == nil {
 		return
 	}

@@ -1,9 +1,9 @@
 package studio
 
 import (
+	"fmt"
+	"strings"
 	"time"
-
-	"dcs-back-v0/internal/studio/generators"
 )
 
 // ─── Legacy types (Selection-based) ─────────────────────────────
@@ -43,11 +43,14 @@ type DataRef struct {
 // ─── Unified payload types ──────────────────────────────────────
 
 // ContentItem represents a single entry in the content array.
+// When received from the client, only Type/Text/Name/ID are populated.
+// DataURL is set by resolveContent() before passing to the generator pipeline.
 type ContentItem struct {
-	Type string `json:"type" binding:"required"` // "text", "image", "video", "audio"
-	Text string `json:"text,omitempty"`           // prompt text or asset description
-	Name string `json:"name,omitempty"`           // original filename (file types)
-	ID   string `json:"id,omitempty"`             // file UUID from the file store
+	Type    string `json:"type" binding:"required"` // "text", "image", "video", "audio"
+	Text    string `json:"text,omitempty"`           // prompt text or asset description
+	Name    string `json:"name,omitempty"`           // original filename (file types)
+	ID      string `json:"id,omitempty"`             // file UUID from the file store
+	DataURL string `json:"-"`                       // resolved data URL (populated by service)
 }
 
 // StudioGenerateRequest is the new unified payload for /studio/generate.
@@ -127,46 +130,6 @@ type ModelHandler interface {
 	Generate(sel *Selection, apiKey, baseURL, endpoint string) (*GenerateResponse, error)
 	GetStatus(taskID string, apiKey, baseURL, endpoint string) (*StatusResult, error)
 	CancelTask(taskID string, apiKey, baseURL, endpoint string) error
-}
-
-// ─── Generator adapter ──────────────────────────────────────────
-
-// GeneratorAdapter wraps a generators.Generator to be used as a ModelHandler.
-type GeneratorAdapter struct {
-	gen generators.Generator
-}
-
-func NewGeneratorAdapter(gen generators.Generator) *GeneratorAdapter {
-	return &GeneratorAdapter{gen: gen}
-}
-
-func (a *GeneratorAdapter) Matches(modelName string) bool {
-	return a.gen.Match(modelName)
-}
-
-func (a *GeneratorAdapter) Generate(sel *Selection, apiKey, baseURL, endpoint string) (*GenerateResponse, error) {
-	return nil, nil
-}
-
-func (a *GeneratorAdapter) GetStatus(taskID, apiKey, baseURL, endpoint string) (*StatusResult, error) {
-	result, err := a.gen.GetStatus(taskID, apiKey, baseURL, endpoint)
-	if err != nil {
-		return nil, err
-	}
-	sr := &StatusResult{
-		Status: result.Status,
-		Error:  result.Error,
-		Raw:    result.Raw,
-	}
-	if len(result.Outputs) > 0 {
-		sr.VideoURL = result.Outputs[0].URL
-		sr.LocalURL = result.Outputs[0].LocalURL
-	}
-	return sr, nil
-}
-
-func (a *GeneratorAdapter) CancelTask(taskID, apiKey, baseURL, endpoint string) error {
-	return a.gen.CancelTask(taskID, apiKey, baseURL, endpoint)
 }
 
 // ─── Enriched file listing with sync info ───────────────────────
@@ -310,4 +273,112 @@ type PreviewPayloadResponse struct {
 	Endpoint    string                 `json:"endpoint"`
 	Payload     map[string]interface{} `json:"payload"`
 	ContentType string                 `json:"content_type"`
+}
+
+// ─── Generator pipeline types (shared across all domain generators) ─
+
+// GeneratorRequest is the unified request payload for the generator pipeline.
+type GeneratorRequest struct {
+	Model         string
+	Content       []ContentItem
+	Ratio         string
+	Duration      int
+	CameraFixed   bool
+	Seed          string
+	Quality       string
+	Quantity      int
+	Watermark     bool
+	Resolution    string
+	GenerateAudio bool
+	ImageMode     string
+	APIKey        string
+	BaseURL       string
+	Endpoint      string
+}
+
+// GeneratorResult is the response returned by a generator.
+type GeneratorResult struct {
+	TaskID  string           `json:"taskId"`
+	Model   string           `json:"model"`
+	Status  string           `json:"status"`
+	Outputs []OutputResource `json:"outputs,omitempty"`
+	Raw     interface{}      `json:"raw,omitempty"`
+	Error   string           `json:"error,omitempty"`
+}
+
+// ─── Common validation ──────────────────────────────────────────
+
+// ValidationError accumulates multiple validation errors.
+type ValidationError struct {
+	Fields []string
+}
+
+func (e *ValidationError) Error() string {
+	return "validation failed: " + strings.Join(e.Fields, "; ")
+}
+
+func (e *ValidationError) Add(field, msg string) {
+	e.Fields = append(e.Fields, field+": "+msg)
+}
+
+func (e *ValidationError) HasErrors() bool {
+	return len(e.Fields) > 0
+}
+
+// ValidateCommon checks fields shared across all generators.
+func ValidateCommon(req *GeneratorRequest) *ValidationError {
+	errs := &ValidationError{}
+
+	if strings.TrimSpace(req.Model) == "" {
+		errs.Add("model", "is required")
+	}
+	if len(req.Content) == 0 {
+		errs.Add("content", "must have at least one item")
+	} else {
+		hasText := false
+		for i, item := range req.Content {
+			if item.Type == "" {
+				errs.Add(fmt.Sprintf("content[%d]", i), "type is required (text, image, video, audio)")
+			}
+			if item.Type == "text" && strings.TrimSpace(item.Text) != "" {
+				hasText = true
+			}
+		}
+		if !hasText {
+			errs.Add("content", "must include at least one text item with a prompt")
+		}
+	}
+
+	return errs
+}
+
+// CompileContentText concatenates text-type items into a single prompt string.
+func CompileContentText(items []ContentItem) string {
+	var parts []string
+	for _, item := range items {
+		if item.Type == "text" && strings.TrimSpace(item.Text) != "" {
+			parts = append(parts, strings.TrimSpace(item.Text))
+		}
+	}
+	textBlock := strings.Join(parts, ". ")
+	if textBlock != "" && !strings.HasSuffix(textBlock, ".") {
+		textBlock += "."
+	}
+	return textBlock
+}
+
+// ExtractError extracts a human-readable error message from an API response.
+func ExtractError(result map[string]interface{}, raw string) string {
+	if e, ok := result["error"].(map[string]interface{}); ok {
+		if msg, ok := e["message"].(string); ok {
+			return msg
+		}
+	}
+	if msg, ok := result["message"].(string); ok {
+		return msg
+	}
+	if len(raw) > 400 {
+		raw = raw[:400]
+	}
+	return raw
 }

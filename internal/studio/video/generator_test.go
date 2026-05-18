@@ -1,16 +1,18 @@
-package generators
+package video
 
 import (
 	"testing"
+
+	"dcs-back-v0/internal/studio"
 )
 
 func TestSeedanceValidate_Valid(t *testing.T) {
 	g := &SeedanceGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:    "dreamina-seedance-2-0-260128",
 		Duration: 5,
 		Ratio:    "16:9",
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a dog walking on the beach"},
 		},
 	}
@@ -21,10 +23,10 @@ func TestSeedanceValidate_Valid(t *testing.T) {
 
 func TestSeedanceValidate_InvalidDuration(t *testing.T) {
 	g := &SeedanceGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:    "dreamina-seedance-2-0-260128",
 		Duration: 0,
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a prompt"},
 		},
 	}
@@ -35,11 +37,11 @@ func TestSeedanceValidate_InvalidDuration(t *testing.T) {
 
 func TestSeedanceValidate_InvalidRatio(t *testing.T) {
 	g := &SeedanceGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:    "dreamina-seedance-2-0-260128",
 		Duration: 5,
 		Ratio:    "invalid",
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a prompt"},
 		},
 	}
@@ -50,11 +52,11 @@ func TestSeedanceValidate_InvalidRatio(t *testing.T) {
 
 func TestSeedanceValidate_InvalidResolution(t *testing.T) {
 	g := &SeedanceGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:      "dreamina-seedance-2-0-260128",
 		Duration:   5,
 		Resolution: "4K",
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a prompt"},
 		},
 	}
@@ -65,11 +67,11 @@ func TestSeedanceValidate_InvalidResolution(t *testing.T) {
 
 func TestSeedanceValidate_AudioOnFastModel(t *testing.T) {
 	g := &SeedanceGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:         "dreamina-seedance-2-0-fast-260128",
 		Duration:      5,
 		GenerateAudio: true,
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a prompt"},
 		},
 	}
@@ -80,13 +82,13 @@ func TestSeedanceValidate_AudioOnFastModel(t *testing.T) {
 
 func TestSeedanceBuildPayload_TextOnly(t *testing.T) {
 	g := &SeedanceGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:       "dreamina-seedance-2-0-fast-260128",
 		Duration:    5,
 		Ratio:       "16:9",
 		CameraFixed: true,
 		Watermark:   false,
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a dog walking on the beach"},
 		},
 	}
@@ -116,10 +118,10 @@ func TestSeedanceBuildPayload_TextOnly(t *testing.T) {
 
 func TestSeedanceBuildPayload_WithImage(t *testing.T) {
 	g := &SeedanceGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:    "dreamina-seedance-2-0-260128",
 		Duration: 5,
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a dog on the beach"},
 			{Type: "image", Text: "", DataURL: "https://example.com/img123.png", ID: "uuid"},
 		},
@@ -131,7 +133,6 @@ func TestSeedanceBuildPayload_WithImage(t *testing.T) {
 		t.Fatal("content is not []map[string]interface{}")
 	}
 
-	// Should have: image_url + text = 2 items (no duplication)
 	if len(content) != 2 {
 		t.Fatalf("expected 2 content items (image_url, text), got %d", len(content))
 	}
@@ -151,10 +152,10 @@ func TestSeedanceBuildPayload_WithImage(t *testing.T) {
 
 func TestSeedanceBuildPayload_WithMultipleImages(t *testing.T) {
 	g := &SeedanceGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:    "dreamina-seedance-2-0-260128",
 		Duration: 5,
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a prompt"},
 			{Type: "image", DataURL: "https://example.com/img1.png", ID: "u1"},
 			{Type: "image", DataURL: "https://example.com/img2.png", ID: "u2"},
@@ -164,7 +165,6 @@ func TestSeedanceBuildPayload_WithMultipleImages(t *testing.T) {
 
 	content := payload["content"].([]map[string]interface{})
 
-	// Should have: 2 image_url + 1 text = 3 items
 	if len(content) != 3 {
 		t.Fatalf("expected 3 content items, got %d", len(content))
 	}
@@ -182,10 +182,10 @@ func TestSeedanceBuildPayload_WithMultipleImages(t *testing.T) {
 
 func TestSeedanceBuildPayload_EmptyImageDataURL(t *testing.T) {
 	g := &SeedanceGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:    "dreamina-seedance-2-0-260128",
 		Duration: 5,
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a prompt"},
 			{Type: "image", DataURL: "", ID: "uuid"},
 		},
@@ -205,10 +205,10 @@ func TestSeedanceBuildPayload_EmptyImageDataURL(t *testing.T) {
 
 func TestSeedanceBuildPayload_WithVideoAndAudio(t *testing.T) {
 	g := &SeedanceGenerator{}
-	req := &GeneratorRequest{
+	req := &studio.GeneratorRequest{
 		Model:    "dreamina-seedance-2-0-260128",
 		Duration: 5,
-		Content: []ContentItem{
+		Content: []studio.ContentItem{
 			{Type: "text", Text: "a cinematic scene"},
 			{Type: "video", DataURL: "https://example.com/vid1.mp4", ID: "vid-uuid"},
 			{Type: "audio", DataURL: "https://example.com/aud1.mp3", ID: "aud-uuid"},
@@ -251,11 +251,11 @@ func TestSeedanceBuildPayload_GenerateAudio(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			req := &GeneratorRequest{
+			req := &studio.GeneratorRequest{
 				Model:         tc.model,
 				Duration:      5,
 				GenerateAudio: tc.audioReq,
-				Content: []ContentItem{
+				Content: []studio.ContentItem{
 					{Type: "text", Text: "a prompt"},
 				},
 			}

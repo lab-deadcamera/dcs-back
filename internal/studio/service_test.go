@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"dcs-back-v0/internal/studio/generators"
+	
 )
 
 func TestDetectAssetType(t *testing.T) {
@@ -40,7 +40,7 @@ func TestConvertOutputs_Nil(t *testing.T) {
 }
 
 func TestConvertOutputs_Empty(t *testing.T) {
-	result := convertOutputs([]generators.OutputResource{})
+	result := convertOutputs([]OutputResource{})
 	if result == nil {
 		t.Fatal("expected non-nil slice")
 	}
@@ -50,7 +50,7 @@ func TestConvertOutputs_Empty(t *testing.T) {
 }
 
 func TestConvertOutputs_WithResources(t *testing.T) {
-	src := []generators.OutputResource{
+	src := []OutputResource{
 		{URL: "https://example.com/vid.mp4", LocalURL: "/outputs/vid.mp4", Type: "video"},
 		{URL: "https://example.com/img.png", Type: "image"},
 	}

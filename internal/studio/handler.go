@@ -1,7 +1,6 @@
 package studio
 
 import (
-	"errors"
 	"strings"
 
 	"dcs-back-v0/internal/utils"
@@ -39,72 +38,7 @@ func (h *Handler) Generate(c *gin.Context) {
 	utils.Created(c, result)
 }
 
-// ─── New unified endpoint ───────────────────────────────────────
 
-// GenerateUnified handles POST /studio/generate with the unified payload.
-//
-//	{
-//	  "model": "dreamina-seedance-2-0-fast-260128",
-//	  "content": [
-//	    {"type": "text", "text": "prompt here"},
-//	    {"type": "image", "id": "uuid", "name": "img.png", "text": "description"}
-//	  ],
-//	  "ratio": "16:9",
-//	  "duration": 5,
-//	  "camerafixed": false,
-//	  "seed": "22",
-//	  "quality": "standard",
-//	  "quantity": 1,
-//	  "watermark": false,
-//	  "resolution": "480p",
-//	  "generate_audio": true,
-//	  "image_mode": "PIL"
-//	}
-func (h *Handler) GenerateUnified(c *gin.Context) {
-	var req StudioGenerateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequest(c, err.Error())
-		return
-	}
-
-	result, err := h.svc.GenerateUnified(&req)
-	if err != nil {
-		if strings.Contains(err.Error(), "model not found") {
-			utils.NotFound(c, err.Error())
-			return
-		}
-		utils.BadRequest(c, err.Error())
-		return
-	}
-
-	if len(result.Outputs) > 0 {
-		utils.Created(c, result)
-		return
-	}
-
-	utils.Created(c, result)
-}
-
-// ─── Status and cancellation ─────────────────────────────────────
-
-func (h *Handler) GetStatus(c *gin.Context) {
-	taskID := c.Param("taskId")
-	if taskID == "" {
-		utils.BadRequest(c, "taskId is required")
-		return
-	}
-
-	// Try unified first, fall back to legacy
-	result, err := h.svc.GetStatusUnified(taskID)
-	if err != nil {
-		utils.InternalError(c, err.Error())
-		return
-	}
-
-	utils.Success(c, result)
-}
-
-// GetStatusLegacy handles the legacy status response format.
 func (h *Handler) GetStatusLegacy(c *gin.Context) {
 	taskID := c.Param("taskId")
 	if taskID == "" {
@@ -201,28 +135,6 @@ func (h *Handler) SyncCharacterAssets(c *gin.Context) {
 	utils.Success(c, result)
 }
 
-func (h *Handler) CancelTask(c *gin.Context) {
-	taskID := c.Param("taskId")
-	if taskID == "" {
-		utils.BadRequest(c, "taskId is required")
-		return
-	}
-
-	if err := h.svc.CancelTask(taskID); err != nil {
-		if errors.Is(err, errors.New("unknown task")) {
-			utils.NotFound(c, err.Error())
-			return
-		}
-		utils.InternalError(c, err.Error())
-		return
-	}
-
-	utils.Message(c, "task cancelled")
-}
-
-// ─── Generation log CRUD ──────────────────────────────────────────
-
-// ListGenerationLogs returns paginated generation logs.
 func (h *Handler) ListGenerationLogs(c *gin.Context) {
 	var req ListGenerationLogsRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -267,23 +179,4 @@ func (h *Handler) GetGenerationLog(c *gin.Context) {
 	utils.Success(c, log)
 }
 
-// PreviewPayload returns the AI API payload without sending it or saving logs.
-func (h *Handler) PreviewPayload(c *gin.Context) {
-	var req StudioGenerateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequest(c, err.Error())
-		return
-	}
 
-	result, err := h.svc.PreviewPayload(&req)
-	if err != nil {
-		if strings.Contains(err.Error(), "model not found") {
-			utils.NotFound(c, err.Error())
-			return
-		}
-		utils.BadRequest(c, err.Error())
-		return
-	}
-
-	utils.Success(c, result)
-}

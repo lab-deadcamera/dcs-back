@@ -191,19 +191,19 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  # ─── Studio · Generate ────────────────────────────────────────
+    # ─── Studio · Video ────────────────────────────────────────
 
-  /studio/generate:
+  /studio/video/generate:
     post:
-      tags: [Studio Generate]
-      summary: Generate content using a registered model (unified payload)
-      operationId: studioGenerate
+      tags: [Studio Video]
+      summary: Generate video content
+      operationId: studioVideoGenerate
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/StudioGenerateRequest"
+              $ref: "#/components/schemas/VideoGenerateRequest"
       responses:
         "201":
           description: Generation task created
@@ -213,7 +213,7 @@ paths:
                 type: object
                 properties:
                   data:
-                    $ref: "#/components/schemas/StudioGenerateResponse"
+                    $ref: "#/components/schemas/VideoGenerateResponse"
                   success: { type: boolean, example: true }
                   message: { type: string, example: "created" }
         "400":
@@ -221,45 +221,11 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /studio/generate-legacy:
-    post:
-      tags: [Studio Generate]
-      summary: Generate content using legacy Selection payload
-      operationId: studioGenerateLegacy
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/StudioSelection"
-      responses:
-        "201":
-          description: Generation task created (legacy format)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      taskId:  { type: string, example: "byteplus-task-id" }
-                      modelId: { type: string, format: uuid }
-                      prompt:  { type: string }
-                      model:   { type: string }
-                      status:  { type: string }
-                  success: { type: boolean, example: true }
-                  message: { type: string, example: "created" }
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /studio/status/{taskId}:
+  /studio/video/status/{taskId}:
     get:
-      tags: [Studio Generate]
-      summary: Poll generation task status (returns outputs array)
-      operationId: studioStatus
+      tags: [Studio Video]
+      summary: Poll video generation task status
+      operationId: studioVideoStatus
       parameters:
         - name: taskId
           in: path
@@ -274,51 +240,17 @@ paths:
                 type: object
                 properties:
                   data:
-                    $ref: "#/components/schemas/StudioStatusResponse"
+                    $ref: "#/components/schemas/VideoStatusResponse"
                   success: { type: boolean, example: true }
                   message: { type: string, example: "success" }
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /studio/status-legacy/{taskId}:
-    get:
-      tags: [Studio Generate]
-      summary: Poll generation task status (legacy flat format)
-      operationId: studioStatusLegacy
-      parameters:
-        - name: taskId
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: Task status (legacy)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      status:
-                        type: string
-                        enum: [running, succeeded, failed, succeeded_no_url, unknown]
-                      videoUrl: { type: string, nullable: true }
-                      localUrl: { type: string, nullable: true }
-                      imageUrl: { type: string, nullable: true }
-                      raw:      { type: object }
-                      error:    { type: string }
-                  success: { type: boolean, example: true }
-                  message: { type: string, example: "success" }
-        "500":
-          $ref: "#/components/responses/InternalError"
-
-  /studio/task/{taskId}:
+  /studio/video/task/{taskId}:
     delete:
-      tags: [Studio Generate]
-      summary: Cancel a generation task
-      operationId: studioCancelTask
+      tags: [Studio Video]
+      summary: Cancel a video generation task
+      operationId: studioVideoCancelTask
       parameters:
         - name: taskId
           in: path
@@ -334,28 +266,20 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /studio/sync-asset:
+  /studio/video/preview:
     post:
-      tags: [Studio Assets]
-      summary: Sync a file to a model's asset library
-      description: |
-        Uploads a file to the BytePlus asset library (using the model's AK/SK),
-        polls until Active, and stores the mapping for future generation.
-        Subsequent generations with this file+model will use `asset://` URIs instead of data URLs.
-      operationId: studioSyncAsset
+      tags: [Studio Video]
+      summary: Preview video API payload without sending it
+      operationId: studioVideoPreview
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [model_id, file_id]
-              properties:
-                model_id: { type: string, format: uuid, description: "Model UUID (must have AK/SK and default_asset_group_id configured)" }
-                file_id:  { type: string, format: uuid, description: "File UUID from /api/v1/files/upload" }
+              $ref: "#/components/schemas/VideoGenerateRequest"
       responses:
         "200":
-          description: Sync result
+          description: AI payload preview
           content:
             application/json:
               schema:
@@ -364,150 +288,343 @@ paths:
                   data:
                     type: object
                     properties:
-                      id:           { type: string, format: uuid }
-                      model_id:     { type: string, format: uuid }
-                      file_id:      { type: string, format: uuid }
-                      asset_id:     { type: string, example: "asset-20260318-xxxxx" }
-                      asset_group_id: { type: string, example: "group-20260318-xxxxx" }
-                      status:       { type: string, enum: [active, syncing, failed] }
-                      error_message: { type: string }
+                      model:       { type: string }
+                      endpoint:    { type: string }
+                      payload:     { type: object }
+                      content_type: { type: string }
                   success: { type: boolean, example: true }
                   message: { type: string, example: "success" }
         "400":
           $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
-  /studio/sync-character-assets:
+  # ─── Studio · Image ────────────────────────────────────────
+
+  /studio/image/generate:
     post:
-      tags: [Studio Assets]
-      summary: Sync all files of a character to a model's asset library
-      operationId: studioSyncCharacterAssets
+      tags: [Studio Image]
+      summary: Generate image content
+      operationId: studioImageGenerate
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [character_id, model_id]
-              properties:
-                character_id: { type: string, format: uuid }
-                model_id:     { type: string, format: uuid }
+              $ref: "#/components/schemas/ImageGenerateRequest"
       responses:
-        "200":
-          description: Sync result summary
+        "201":
+          description: Generation task created
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    type: object
-                    properties:
-                      model_id:  { type: string, format: uuid }
-                      total:     { type: integer }
-                      successful: { type: integer }
-                      failed:    { type: integer }
-                      results:
-                        type: array
-                        items:
-                          $ref: "#/components/schemas/SyncAssetResult"
-                  success: { type: boolean }
-                  message: { type: string }
+                    $ref: "#/components/schemas/ImageGenerateResponse"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "created" }
         "400":
           $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
-  /studio/files-with-sync:
+  /studio/image/status/{taskId}:
     get:
-      tags: [Studio Assets]
-      summary: List files with synced model info
-      operationId: studioListFilesWithSync
+      tags: [Studio Image]
+      summary: Poll image generation task status
+      operationId: studioImageStatus
       parameters:
-        - name: category
-          in: query
-          schema: { type: string, enum: [images, videos, audio, temp] }
-        - name: storage
-          in: query
-          schema: { type: string, enum: [persistent, temp] }
-        - name: trashed
-          in: query
-          schema: { type: boolean, default: false }
-      responses:
-        "200":
-          description: File list with synced_models per file
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/FileWithSync"
-                  success: { type: boolean }
-                  message: { type: string }
-
-  /studio/characters/{id}/files-with-sync:
-    get:
-      tags: [Studio Assets]
-      summary: List character files with synced model info
-      operationId: studioListCharacterFilesWithSync
-      parameters:
-        - name: id
+        - name: taskId
           in: path
           required: true
-          schema: { type: string, format: uuid }
+          schema: { type: string }
       responses:
         "200":
-          description: Character files with synced_models
+          description: Task status
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/CharacterFileWithSync"
-                  success: { type: boolean }
-                  message: { type: string }
+                    $ref: "#/components/schemas/ImageStatusResponse"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "500":
+          $ref: "#/components/responses/InternalError"
 
-  /studio/synced-assets:
-    get:
-      tags: [Studio Assets]
-      summary: List all synced assets for a model
-      operationId: studioListSyncedAssets
+  /studio/image/task/{taskId}:
+    delete:
+      tags: [Studio Image]
+      summary: Cancel an image generation task
+      operationId: studioImageCancelTask
       parameters:
-        - name: model_id
-          in: query
+        - name: taskId
+          in: path
           required: true
-          schema: { type: string, format: uuid }
+          schema: { type: string }
       responses:
         "200":
-          description: Synced asset list
+          description: Task cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /studio/image/preview:
+    post:
+      tags: [Studio Image]
+      summary: Preview image API payload without sending it
+      operationId: studioImagePreview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageGenerateRequest"
+      responses:
+        "200":
+          description: AI payload preview
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        id:            { type: string, format: uuid }
-                        model_id:      { type: string, format: uuid }
-                        file_id:       { type: string, format: uuid }
-                        asset_id:      { type: string }
-                        asset_group_id: { type: string }
-                        status:        { type: string }
-                        error_message: { type: string }
-                        created_at:    { type: string, format: date-time }
-                        updated_at:    { type: string, format: date-time }
+                    type: object
+                    properties:
+                      model:       { type: string }
+                      endpoint:    { type: string }
+                      payload:     { type: object }
+                      content_type: { type: string }
                   success: { type: boolean, example: true }
                   message: { type: string, example: "success" }
         "400":
           $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
-  # ─── Studio · Logs ──────────────────────────────────────────
+  # ─── Studio · Audio ────────────────────────────────────────
+
+  /studio/audio/generate:
+    post:
+      tags: [Studio Audio]
+      summary: Generate audio content
+      operationId: studioAudioGenerate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AudioGenerateRequest"
+      responses:
+        "201":
+          description: Generation task created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/AudioGenerateResponse"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "created" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /studio/audio/status/{taskId}:
+    get:
+      tags: [Studio Audio]
+      summary: Poll audio generation task status
+      operationId: studioAudioStatus
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Task status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/AudioStatusResponse"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /studio/audio/task/{taskId}:
+    delete:
+      tags: [Studio Audio]
+      summary: Cancel an audio generation task
+      operationId: studioAudioCancelTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Task cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /studio/audio/preview:
+    post:
+      tags: [Studio Audio]
+      summary: Preview audio API payload without sending it
+      operationId: studioAudioPreview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AudioGenerateRequest"
+      responses:
+        "200":
+          description: AI payload preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      model:       { type: string }
+                      endpoint:    { type: string }
+                      payload:     { type: object }
+                      content_type: { type: string }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── Studio · Text ─────────────────────────────────────────
+
+  /studio/text/generate:
+    post:
+      tags: [Studio Text]
+      summary: Generate text content
+      operationId: studioTextGenerate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TextGenerateRequest"
+      responses:
+        "201":
+          description: Generation task created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/TextGenerateResponse"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "created" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /studio/text/status/{taskId}:
+    get:
+      tags: [Studio Text]
+      summary: Poll text generation task status
+      operationId: studioTextStatus
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Task status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/TextStatusResponse"
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /studio/text/task/{taskId}:
+    delete:
+      tags: [Studio Text]
+      summary: Cancel a text generation task
+      operationId: studioTextCancelTask
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Task cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /studio/text/preview:
+    post:
+      tags: [Studio Text]
+      summary: Preview text API payload without sending it
+      operationId: studioTextPreview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TextGenerateRequest"
+      responses:
+        "200":
+          description: AI payload preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      model:       { type: string }
+                      endpoint:    { type: string }
+                      payload:     { type: object }
+                      content_type: { type: string }
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "success" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─── Studio · Legacy ───────────────────────────────────────
+# ─── Studio · Logs ──────────────────────────────────────────
 
   /studio/logs/generation:
     get:
@@ -1747,157 +1864,220 @@ components:
         url:           { type: string }
         thumbnail_url: { type: string }
 
-    # ─── Studio ─────────────────────────────────────────────
+    # ─── Studio · Video ──────────────────────────────────
 
-    # New unified payload types
-
-    StudioContentItem:
+    VideoContentItem:
       type: object
       required: [type]
-      description: "Item in the content array — text prompt or file reference"
+      description: "Item in the video content array"
       properties:
         type:
           type: string
           enum: [text, image, video, audio]
-          description: "text para prompt, image/video/audio para archivos de referencia"
-        text:
-          type: string
-          description: "Prompt textual o descripción del asset de referencia"
-        name:
-          type: string
-          description: "Nombre original del archivo (solo image/video/audio)"
-        id:
-          type: string
-          format: uuid
-          description: "UUID del archivo en file store (solo image/video/audio)"
+        text:  { type: string, description: "Prompt textual o descripción" }
+        name:  { type: string, description: "Nombre original del archivo" }
+        id:    { type: string, format: uuid, description: "UUID del archivo" }
 
-    StudioGenerateRequest:
+    VideoGenerateRequest:
       type: object
       required: [model, content]
       properties:
-        model:
-          type: string
-          example: "dreamina-seedance-2-0-260128"
-          description: "Nombre del modelo registrado en el provider store"
+        model:    { type: string, example: "dreamina-seedance-2-0-260128" }
         content:
           type: array
           items:
-            $ref: "#/components/schemas/StudioContentItem"
-          description: "Array de prompts de texto y/o referencias a archivos"
-        ratio:
-          type: string
-          example: "16:9"
-          description: "Relación de aspecto"
-        duration:
-          type: number
-          default: 5
-          description: "Duración en segundos (modelos de video)"
-        camerafixed:
-          type: boolean
-          default: false
-          description: "Cámara fija sin movimiento"
-        seed:
-          type: string
-          example: "22"
-          description: "Semilla para reproducibilidad"
-        quality:
-          type: string
-          enum: [standard, high]
-          default: standard
-        quantity:
-          type: integer
-          default: 1
-          description: "Cantidad de outputs a generar"
-        watermark:
-          type: boolean
-          default: false
-        resolution:
-          type: string
-          example: "480p"
-          description: "Resolución: 480p, 720p, 1080p, etc."
-        generate_audio:
-          type: boolean
-          description: "Generar audio para el video"
-        image_mode:
-          type: string
-          example: "PIL"
-          description: "Modo de procesamiento de imagen"
+            $ref: "#/components/schemas/VideoContentItem"
+        ratio:         { type: string, example: "16:9" }
+        duration:      { type: number, default: 5 }
+        camerafixed:   { type: boolean, default: false }
+        seed:          { type: string }
+        quality:       { type: string, enum: [standard, high], default: standard }
+        quantity:      { type: integer, default: 1 }
+        watermark:     { type: boolean, default: false }
+        resolution:    { type: string, example: "480p" }
+        generate_audio: { type: boolean }
 
-    OutputResource:
+    VideoOutputResource:
       type: object
-      description: "Recurso generado (video, imagen o audio)"
       properties:
-        url:
-          type: string
-          format: uri
-          description: "URL pública del recurso generado"
-        localUrl:
-          type: string
-          nullable: true
-          description: "URL local del recurso descargado (cuando aplica)"
-        type:
-          type: string
-          enum: [video, image, audio]
-          description: "Tipo de recurso"
+        url:      { type: string, format: uri }
+        localUrl: { type: string, nullable: true }
 
-    StudioGenerateResponse:
+    VideoGenerateResponse:
       type: object
-      description: "Respuesta de POST /studio/generate"
       properties:
-        taskId:
-          type: string
-          example: "cgt-20260515-abc123"
-        model:
-          type: string
-          example: "dreamina-seedance-2-0-260128"
-        status:
-          type: string
-          enum: [running, succeeded, failed, queued]
+        taskId:  { type: string, example: "cgt-20260515-abc123" }
+        model:   { type: string }
+        status:  { type: string, enum: [running, succeeded, failed, queued] }
         outputs:
           type: array
           items:
-            $ref: "#/components/schemas/OutputResource"
-          description: "Outputs generados (vacío si la tarea está en progreso). Siempre es un array."
+            $ref: "#/components/schemas/VideoOutputResource"
 
-    StudioStatusResponse:
+    VideoStatusResponse:
       type: object
-      description: "Respuesta de GET /studio/status/{taskId}"
       properties:
-        status:
-          type: string
-          enum: [running, succeeded, failed, succeeded_no_url, queued]
+        status:  { type: string, enum: [running, succeeded, failed, succeeded_no_url, queued] }
         outputs:
           type: array
           items:
-            $ref: "#/components/schemas/OutputResource"
-          description: "Outputs generados. Siempre es un array."
-        error:
-          type: string
-          description: "Mensaje de error si la tarea falló"
+            $ref: "#/components/schemas/VideoOutputResource"
+        error: { type: string }
 
-    # Legacy types
+    # ─── Studio · Image ──────────────────────────────────
 
-    StudioSelection:
+    ImageContentItem:
       type: object
-      required: [model_id]
+      required: [type]
       properties:
-        model_id:     { type: string, format: uuid, description: "ID of the registered model" }
-        userPrompt:   { type: string }
-        duration:     { type: number, default: 5 }
-        soundOn:      { type: boolean }
-        aspectRatio:  { type: object, properties: { value: { type: string } } }
-        resolution:   { type: object, properties: { value: { type: string } } }
-        cameraMotion: { type: object, properties: { id: { type: string }, prompt: { type: string } } }
-        camera:       { type: object, properties: { id: { type: string }, prompt: { type: string } } }
-        lens:         { type: object, properties: { id: { type: string }, prompt: { type: string } } }
-        colorGrading: { type: object, properties: { id: { type: string }, prompt: { type: string } } }
-        genre:        { type: object, properties: { id: { type: string }, prompt: { type: string } } }
-        firstFrame:   { type: object, properties: { dataUrl: { type: string } } }
-        lastFrame:    { type: object, properties: { dataUrl: { type: string } } }
-        refImages:    { type: array, items: { type: object, properties: { dataUrl: { type: string } } } }
-        refVideos:    { type: array, items: { type: object, properties: { dataUrl: { type: string } } } }
-        refAudios:    { type: array, items: { type: object, properties: { dataUrl: { type: string } } } }
+        type: { type: string, enum: [text, image, video] }
+        text: { type: string }
+        name: { type: string }
+        id:   { type: string, format: uuid }
 
+    ImageGenerateRequest:
+      type: object
+      required: [model, content]
+      properties:
+        model:    { type: string, example: "dreamina-seedream-4-pro-251224" }
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImageContentItem"
+        ratio:    { type: string }
+        seed:     { type: string }
+        quality:  { type: string, enum: [standard, high], default: standard }
+        quantity: { type: integer, default: 1 }
+        watermark: { type: boolean, default: false }
+
+    ImageOutputResource:
+      type: object
+      properties:
+        url: { type: string, format: uri }
+
+    ImageGenerateResponse:
+      type: object
+      properties:
+        taskId:  { type: string }
+        model:   { type: string }
+        status:  { type: string, enum: [succeeded, failed] }
+        outputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImageOutputResource"
+
+    ImageStatusResponse:
+      type: object
+      properties:
+        status:  { type: string }
+        outputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImageOutputResource"
+        error: { type: string }
+
+    # ─── Studio · Audio ──────────────────────────────────
+
+    AudioContentItem:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [text, audio] }
+        text: { type: string }
+        name: { type: string }
+        id:   { type: string, format: uuid }
+
+    AudioGenerateRequest:
+      type: object
+      required: [model, content]
+      properties:
+        model:    { type: string }
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AudioContentItem"
+        duration: { type: number }
+        seed:     { type: string }
+        quality:  { type: string }
+
+    AudioOutputResource:
+      type: object
+      properties:
+        url:      { type: string, format: uri }
+        localUrl: { type: string, nullable: true }
+
+    AudioGenerateResponse:
+      type: object
+      properties:
+        taskId:  { type: string }
+        model:   { type: string }
+        status:  { type: string }
+        outputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AudioOutputResource"
+
+    AudioStatusResponse:
+      type: object
+      properties:
+        status:  { type: string }
+        outputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AudioOutputResource"
+        error: { type: string }
+
+    # ─── Studio · Text ──────────────────────────────────
+
+    TextContentItem:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [text] }
+        text: { type: string }
+        name: { type: string }
+        id:   { type: string, format: uuid }
+
+    TextGenerateRequest:
+      type: object
+      required: [model, content]
+      properties:
+        model:    { type: string }
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/TextContentItem"
+        seed:     { type: string }
+        quality:  { type: string }
+        quantity: { type: integer, default: 1 }
+
+    TextOutputResource:
+      type: object
+      properties:
+        text: { type: string }
+
+    TextGenerateResponse:
+      type: object
+      properties:
+        taskId:  { type: string }
+        model:   { type: string }
+        status:  { type: string }
+        outputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/TextOutputResource"
+
+    TextStatusResponse:
+      type: object
+      properties:
+        status:  { type: string }
+        outputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/TextOutputResource"
+        error: { type: string }
+
+    # ─── Studio enriched file listing ─────────────────────────
     # ─── Studio enriched file listing ─────────────────────────
     FileWithSync:
       type: object
@@ -2215,7 +2395,14 @@ tags:
     description: User registration and JWT login
   - name: Images
     description: Legacy filesystem-based image management (requires JWT)
-  - name: Studio Generate
+  - name: Studio Video
+    description: Video generation endpoints (Seedance models)
+  - name: Studio Image
+    description: Image generation endpoints (Seedream models)
+  - name: Studio Audio
+    description: Audio generation endpoints
+  - name: Studio Text
+    description: Text generation endpoints
     description: Model-driven content generation (video, image)
   - name: Files
     description: DB-backed file management (images, videos, audio, temp)

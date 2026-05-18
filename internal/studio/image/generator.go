@@ -1,4 +1,4 @@
-package generators
+package image
 
 import (
 	"bytes"
@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"dcs-back-v0/internal/studio"
 )
 
 var nameModelSeedream = "dreamina-seedream-4-pro-251224"
@@ -26,18 +28,20 @@ func NewSeedreamGenerator(outputsDir string) *SeedreamGenerator {
 
 func (g *SeedreamGenerator) Name() string { return nameModelSeedream }
 
+func (g *SeedreamGenerator) ContentType() string { return "image" }
+
 func (g *SeedreamGenerator) Match(modelName string) bool {
 	lower := strings.ToLower(modelName)
 	return strings.Contains(lower, nameModelSeedream)
 }
 
-func (g *SeedreamGenerator) Validate(req *GeneratorRequest) error {
-	errs := validateCommon(req)
+func (g *SeedreamGenerator) Validate(req *studio.GeneratorRequest) error {
+	errs := studio.ValidateCommon(req)
 	if errs.HasErrors() {
 		return errs
 	}
 
-	if req.Resolution != "" && !validResolutionsImage[req.Resolution] {
+	if req.Resolution != "" && !ValidResolutionsImage[req.Resolution] {
 		errs.Add("resolution", "must be one of: 2K, 1080p, 720p")
 	}
 	if req.Duration > 0 {
@@ -56,7 +60,7 @@ func (g *SeedreamGenerator) Validate(req *GeneratorRequest) error {
 	return nil
 }
 
-func (g *SeedreamGenerator) BuildPayload(req *GeneratorRequest) map[string]interface{} {
+func (g *SeedreamGenerator) BuildPayload(req *studio.GeneratorRequest) map[string]interface{} {
 	content := make([]map[string]interface{}, 0)
 	imageIndex := 0
 	videoIndex := 0
@@ -97,7 +101,7 @@ func (g *SeedreamGenerator) BuildPayload(req *GeneratorRequest) map[string]inter
 		}
 	}
 
-	textPart := compileContentText(req.Content)
+	textPart := studio.CompileContentText(req.Content)
 	if imageIndex > 0 || videoIndex > 0 {
 		refs := []string{}
 		if imageIndex > 0 {
@@ -144,7 +148,7 @@ func (g *SeedreamGenerator) BuildPayload(req *GeneratorRequest) map[string]inter
 	return payload
 }
 
-func (g *SeedreamGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, error) {
+func (g *SeedreamGenerator) Generate(req *studio.GeneratorRequest) (*studio.GeneratorResult, error) {
 	payload := g.BuildPayload(req)
 
 	result, err := g.arkRequest(req.BaseURL+req.Endpoint+"/images/generations", "POST", payload, req.APIKey)
@@ -160,12 +164,12 @@ func (g *SeedreamGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, e
 		taskID = fmt.Sprintf("seedream_%d", time.Now().UnixMilli())
 	}
 
-	var outputs []OutputResource
+	var outputs []studio.OutputResource
 	if data, ok := result["data"].([]interface{}); ok {
 		for _, d := range data {
 			if entry, ok := d.(map[string]interface{}); ok {
 				if url, ok := entry["url"].(string); ok && url != "" {
-					outputs = append(outputs, OutputResource{
+					outputs = append(outputs, studio.OutputResource{
 						URL:  url,
 						Type: "image",
 					})
@@ -177,13 +181,13 @@ func (g *SeedreamGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, e
 	if len(outputs) == 0 {
 		for _, key := range []string{"url", "image_url", "data"} {
 			if s, ok := result[key].(string); ok && s != "" {
-				outputs = append(outputs, OutputResource{URL: s, Type: "image"})
+				outputs = append(outputs, studio.OutputResource{URL: s, Type: "image"})
 				break
 			}
 		}
 	}
 
-	return &GeneratorResult{
+	return &studio.GeneratorResult{
 		TaskID:  taskID,
 		Model:   req.Model,
 		Status:  "succeeded",
@@ -192,7 +196,7 @@ func (g *SeedreamGenerator) Generate(req *GeneratorRequest) (*GeneratorResult, e
 	}, nil
 }
 
-func (g *SeedreamGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*GeneratorResult, error) {
+func (g *SeedreamGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*studio.GeneratorResult, error) {
 	result, err := g.arkRequest(baseURL+endpoint+"/"+taskID, "GET", nil, apiKey)
 	if err != nil {
 		return nil, err
@@ -203,11 +207,11 @@ func (g *SeedreamGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 	if status == "succeeded" {
 		imageURL := g.findImageURL(result)
 		if imageURL != "" {
-			outputs := []OutputResource{{
+			outputs := []studio.OutputResource{{
 				URL:  imageURL,
 				Type: "image",
 			}}
-			return &GeneratorResult{
+			return &studio.GeneratorResult{
 				TaskID:  taskID,
 				Model:   nameModelSeedream,
 				Status:  status,
@@ -216,11 +220,11 @@ func (g *SeedreamGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 			}, nil
 		}
 
-		return &GeneratorResult{
+		return &studio.GeneratorResult{
 			TaskID:  taskID,
 			Model:   nameModelSeedream,
 			Status:  "succeeded_no_url",
-			Outputs: []OutputResource{},
+			Outputs: []studio.OutputResource{},
 			Raw:     result,
 			Error:   "Job succeeded but no image URL was found in the response.",
 		}, nil
@@ -233,21 +237,21 @@ func (g *SeedreamGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 				errorMsg, _ = e["message"].(string)
 			}
 		}
-		return &GeneratorResult{
+		return &studio.GeneratorResult{
 			TaskID:  taskID,
 			Model:   nameModelSeedream,
 			Status:  status,
-			Outputs: []OutputResource{},
+			Outputs: []studio.OutputResource{},
 			Raw:     result,
 			Error:   errorMsg,
 		}, nil
 	}
 
-	return &GeneratorResult{
+	return &studio.GeneratorResult{
 		TaskID:  taskID,
 		Model:   nameModelSeedream,
 		Status:  status,
-		Outputs: []OutputResource{},
+		Outputs: []studio.OutputResource{},
 		Raw:     result,
 	}, nil
 }
@@ -291,7 +295,7 @@ func (g *SeedreamGenerator) arkRequest(url, method string, body interface{}, api
 	}
 
 	if resp.StatusCode >= 400 {
-		msg := extractError(result, string(respBytes))
+		msg := studio.ExtractError(result, string(respBytes))
 		return nil, fmt.Errorf("%s %d: %s", nameModelSeedream, resp.StatusCode, msg)
 	}
 
