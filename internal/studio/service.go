@@ -26,19 +26,22 @@ type PipelineRunner interface {
 }
 
 type Service struct {
-	providerStore    *provider.Store
-	fileService      *file.Service
-	charService      *character.Service
-	outputsDir       string
-	handlers         []ModelHandler
-	pipelineGens     []PipelineRunner
-	tasks            map[string]*TaskRecord
-	assetSyncStore   *AssetSyncStore
-	baseURL          string
-	logStore         *GenerationLogStore
-	commStore	*ServerCommunicationStore
-	assetStore       *GeneratedAssetStore
-	mu               sync.RWMutex
+	providerStore      *provider.Store
+	fileService        *file.Service
+	charService        *character.Service
+	outputsDir         string
+	handlers           []ModelHandler
+	pipelineGens       []PipelineRunner
+	tasks              map[string]*TaskRecord
+	assetSyncStore     *AssetSyncStore
+	baseURL            string
+	logStore           *GenerationLogStore
+	commStore          *ServerCommunicationStore
+	assetStore         *GeneratedAssetStore
+	assetAccessKeyID     string
+	assetSecretAccessKey string
+	assetDefaultGroupID  string
+	mu                 sync.RWMutex
 }
 
 func NewService(providerStore *provider.Store, fileService *file.Service, outputsDir, baseURL string) *Service {
@@ -84,6 +87,30 @@ func (s *Service) SetLogStore(store *GenerationLogStore) {
 
 func (s *Service) SetGeneratedAssetStore(store *GeneratedAssetStore) {
 	s.assetStore = store
+}
+
+func (s *Service) SetAssetCredentials(accessKeyID, secretAccessKey, defaultGroupID string) {
+	s.assetAccessKeyID = accessKeyID
+	s.assetSecretAccessKey = secretAccessKey
+	s.assetDefaultGroupID = defaultGroupID
+}
+
+// effectiveCredentials returns the AK/SK/groupID to use for asset operations.
+// Prefers per-model values from the DB, falls back to globally configured env vars.
+func (s *Service) effectiveCredentials(m *provider.Model) (accessKeyID, secretAccessKey, defaultGroupID string) {
+	accessKeyID = m.AccessKeyID
+	if accessKeyID == "" {
+		accessKeyID = s.assetAccessKeyID
+	}
+	secretAccessKey = m.SecretAccessKey
+	if secretAccessKey == "" {
+		secretAccessKey = s.assetSecretAccessKey
+	}
+	defaultGroupID = m.DefaultAssetGroupID
+	if defaultGroupID == "" {
+		defaultGroupID = s.assetDefaultGroupID
+	}
+	return
 }
 
 // ─── Generator registration ──────────────────────────────────────
@@ -304,11 +331,13 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 	if m == nil {
 		return nil, fmt.Errorf("model not found")
 	}
-	if m.AccessKeyID == "" || m.SecretAccessKey == "" {
-		return nil, fmt.Errorf("model has no AK/SK configured. Set access_key_id and secret_access_key on the model")
+
+	ak, sk, groupID := s.effectiveCredentials(m)
+	if ak == "" || sk == "" {
+		return nil, fmt.Errorf("model has no AK/SK configured. Set access_key_id and secret_access_key on the model or ASSET_ACCESS_KEY_ID / ASSET_SECRET_ACCESS_KEY env vars")
 	}
-	if m.DefaultAssetGroupID == "" {
-		return nil, fmt.Errorf("model has no default_asset_group_id. Create an asset group and set it on the model")
+	if groupID == "" {
+		return nil, fmt.Errorf("no asset group configured. Set default_asset_group_id on the model or ASSET_DEFAULT_GROUP_ID env var")
 	}
 
 	f, err := s.fileService.GetFile(req.FileID)
@@ -324,7 +353,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 	record := &ModelAsset{
 		ModelID:      req.ModelID,
 		FileID:       req.FileID,
-		AssetGroupID: m.DefaultAssetGroupID,
+		AssetGroupID: groupID,
 		Status:       "syncing",
 	}
 	if err := s.assetSyncStore.Create(record); err != nil {
@@ -335,7 +364,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 	fileURL := s.baseURL + "/api/v1/files/" + req.FileID + "/serve"
 
 	// Upload to the asset library
-	api := NewAssetAPI(m.AccessKeyID, m.SecretAccessKey, m.DefaultAssetGroupID)
+	api := NewAssetAPI(ak, sk, groupID)
 	result, err := api.CreateAsset(fileURL, f.Filename, detectAssetType(f.MimeType), "")
 	if err != nil {
 		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error())
@@ -387,7 +416,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 		ModelID:      req.ModelID,
 		FileID:       req.FileID,
 		AssetID:      assetID,
-		AssetGroupID: m.DefaultAssetGroupID,
+		AssetGroupID: groupID,
 		Status:       finalStatus,
 		ErrorMessage: errMsg,
 	}, nil
@@ -511,8 +540,10 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 	if m == nil {
 		return nil, fmt.Errorf("model not found")
 	}
-	if m.AccessKeyID == "" || m.SecretAccessKey == "" {
-		return nil, fmt.Errorf("model has no AK/SK configured. Set access_key_id and secret_access_key on the model")
+
+	ak, sk, _ := s.effectiveCredentials(m)
+	if ak == "" || sk == "" {
+		return nil, fmt.Errorf("model has no AK/SK configured. Set access_key_id and secret_access_key on the model or ASSET_ACCESS_KEY_ID / ASSET_SECRET_ACCESS_KEY env vars")
 	}
 
 	// Get character info for the asset group name and description
@@ -563,7 +594,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 	}
 
 	// Create API client (with or without existing group)
-	api := NewAssetAPI(m.AccessKeyID, m.SecretAccessKey, groupID)
+	api := NewAssetAPI(ak, sk, groupID)
 
 	// Create asset group only if none exists for this character+model
 	if groupID == "" {
@@ -575,7 +606,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 		if groupID == "" {
 			return nil, fmt.Errorf("no asset group ID returned from CreateAssetGroup")
 		}
-		api = NewAssetAPI(m.AccessKeyID, m.SecretAccessKey, groupID)
+		api = NewAssetAPI(ak, sk, groupID)
 	}
 
 	// Process each file — skip if already synced, upload if new or failed
@@ -1207,8 +1238,8 @@ func (s *Service) GallerySyncContent(items []ContentItem, modelName string) ([]C
 	if m == nil {
 		return nil, fmt.Errorf("model not found")
 	}
-	if m.AccessKeyID == "" || m.SecretAccessKey == "" {
-		return nil, fmt.Errorf("model has no AK/SK configured for gallery sync")
+	if ak, sk, _ := s.effectiveCredentials(m); ak == "" || sk == "" {
+		return nil, fmt.Errorf("no AK/SK configured for gallery sync. Set ASSET_ACCESS_KEY_ID / ASSET_SECRET_ACCESS_KEY env vars")
 	}
 
 	result := make([]ContentItem, len(items))

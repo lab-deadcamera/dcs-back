@@ -107,6 +107,7 @@ func main() {
 	studioSvc := studio.NewService(providerStore, fileSvc, cfg.OutputsDir, cfg.BaseURL)
 	studioSvc.SetAssetSyncStore(assetSyncStore)
 	studioSvc.SetCharacterService(charSvc)
+	studioSvc.SetAssetCredentials(cfg.AssetAccessKeyID, cfg.AssetSecretAccessKey, cfg.AssetDefaultGroupID)
 	studioSvc.SetLogStore(studio.NewGenerationLogStore(database))
 	studioSvc.SetCommStore(studio.NewServerCommunicationStore(database))
 	studioSvc.RegisterHandler(studio.NewSeedanceHandler(cfg.OutputsDir))

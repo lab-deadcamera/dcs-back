@@ -22,6 +22,11 @@ type Config struct {
 	SuperAdminSurname  string
 	SuperAdminUserName string
 	SuperAdminEmail    string
+
+	// BytePlus asset library credentials (gallery sync)
+	AssetAccessKeyID     string
+	AssetSecretAccessKey string
+	AssetDefaultGroupID  string
 }
 
 func Load() *Config {
@@ -64,6 +69,10 @@ func Load() *Config {
 		superAdminPassword = "superadmin_pass_123"
 	}
 
+	assetAccessKeyID := os.Getenv("ASSET_ACCESS_KEY_ID")
+	assetSecretAccessKey := os.Getenv("ASSET_SECRET_ACCESS_KEY")
+	assetDefaultGroupID := os.Getenv("ASSET_DEFAULT_GROUP_ID")
+
 	return &Config{
 		Port:            port,
 		UploadDir:       uploadDir,
@@ -88,5 +97,8 @@ func Load() *Config {
 		SuperAdminSurname:  os.Getenv("SUPER_ADMIN_SURNAME"),
 		SuperAdminUserName: os.Getenv("SUPER_ADMIN_USER_NAME"),
 		SuperAdminEmail:    os.Getenv("SUPER_ADMIN_EMAIL"),
+		AssetAccessKeyID:     assetAccessKeyID,
+		AssetSecretAccessKey: assetSecretAccessKey,
+		AssetDefaultGroupID:  assetDefaultGroupID,
 	}
 }
