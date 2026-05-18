@@ -6,6 +6,7 @@ import (
 )
 
 // ─── Shared validation (used by all video generators) ──────────
+var ModelDreaminaSeedance2 = "dreamina-seedance-2-0-260128"
 
 // ValidRatios lists supported aspect ratios for video generation.
 var ValidRatios = map[string]bool{

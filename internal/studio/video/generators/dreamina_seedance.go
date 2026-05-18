@@ -222,7 +222,7 @@ func (g *SeedanceGenerator) BuildPayload(req *studio.GeneratorRequest) map[strin
 	}
 
 	payload := map[string]interface{}{
-		"model":          req.Model,
+		"model":          ModelDreaminaSeedance2,
 		"content":        content,
 		"ratio":          req.Ratio,
 		"duration":       duration,
