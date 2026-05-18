@@ -33,7 +33,7 @@ const (
 		FROM model_assets WHERE id = $1`
 
 	getModelAssetByFileSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, created_at, updated_at
-		FROM model_assets WHERE model_id = $1 AND file_id = $2`
+		FROM model_assets WHERE model_id = $1 AND file_id = $2 ORDER BY created_at DESC LIMIT 1`
 
 	listModelAssetsSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, created_at, updated_at
 		FROM model_assets WHERE model_id = $1 ORDER BY created_at DESC`
