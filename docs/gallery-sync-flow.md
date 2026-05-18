@@ -69,7 +69,7 @@ func (s *videoService) GenerateVideo(req *GenerateRequest) (*GenerateResponse, e
     unified := toStudioRequest(req)
 
     // Si el modelo es gallery, sincroniza activos primero
-    if strings.Contains(strings.ToLower(req.Model), "gallery") {
+    if studio.IsGalleryModel(req.Model) {
         synced, err := s.core.GallerySyncContent(unified.Content, req.Model)
         if err == nil {
             unified.Content = synced  // reemplaza URLs con asset://
@@ -213,6 +213,22 @@ GET /studio/logs/server-communications?task_id=X  → Filtrado por tarea
 GET /studio/logs/server-communications?model_name=X → Filtrado por modelo
 GET /studio/logs/server-communications/:id        → Detalle individual
 ```
+
+---
+
+## Registro de modelos Gallery
+
+Los modelos que realizan auto-sync se definen en `internal/studio/gallery_models.go`:
+
+```go
+var GalleryModels = []string{
+    "dreamina-seedance-2-0-gallery",
+}
+
+func IsGalleryModel(modelName string) bool { ... }
+```
+
+Para agregar un nuevo modelo a la sincronización, basta con añadir su nombre al slice `GalleryModels`. La función `IsGalleryModel()` usa `strings.Contains` para matching parcial, por lo que un modelo llamado `dreamina-seedance-2-0-gallery-260128` matchea correctamente.
 
 ---
 

@@ -1,8 +1,6 @@
 package video
 
 import (
-	"strings"
-
 	"dcs-back-v0/internal/studio"
 )
 
@@ -19,7 +17,7 @@ func (s *videoService) GenerateVideo(req *GenerateRequest) (*GenerateResponse, e
 	unified := toStudioRequest(req)
 
 	// For gallery models, sync unsynced assets before generation
-	if strings.Contains(strings.ToLower(req.Model), "gallery") {
+		if studio.IsGalleryModel(req.Model) {
 		synced, err := s.core.GallerySyncContent(unified.Content, req.Model)
 		if err == nil {
 			unified.Content = synced
