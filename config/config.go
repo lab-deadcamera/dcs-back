@@ -1,6 +1,9 @@
 package config
 
-import "os"
+import (
+	"log"
+	"os"
+)
 
 type Config struct {
 	Port            string
@@ -73,6 +76,10 @@ func Load() *Config {
 	assetSecretAccessKey := os.Getenv("ASSET_SECRET_ACCESS_KEY")
 	assetDefaultGroupID := os.Getenv("ASSET_DEFAULT_GROUP_ID")
 
+	log.Printf("[config] ASSET_ACCESS_KEY_ID=%s", tern(assetAccessKeyID != "", "set", "EMPTY"))
+	log.Printf("[config] ASSET_SECRET_ACCESS_KEY=%s", tern(assetSecretAccessKey != "", "set", "EMPTY"))
+	log.Printf("[config] ASSET_DEFAULT_GROUP_ID=%s", tern(assetDefaultGroupID != "", "set", "EMPTY"))
+
 	return &Config{
 		Port:            port,
 		UploadDir:       uploadDir,
@@ -101,4 +108,11 @@ func Load() *Config {
 		AssetSecretAccessKey: assetSecretAccessKey,
 		AssetDefaultGroupID:  assetDefaultGroupID,
 	}
+}
+
+func tern(ok bool, a, b string) string {
+	if ok {
+		return a
+	}
+	return b
 }

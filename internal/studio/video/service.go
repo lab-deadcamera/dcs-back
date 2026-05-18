@@ -1,6 +1,8 @@
 package video
 
 import (
+	"log"
+
 	"dcs-back-v0/internal/studio"
 )
 
@@ -15,16 +17,21 @@ func NewService(core *studio.Service) Service {
 
 func (s *videoService) GenerateVideo(req *GenerateRequest) (*GenerateResponse, error) {
 	unified := toStudioRequest(req)
+	log.Printf("[video] GenerateVideo model=%q gallery=%v", req.Model, studio.IsGalleryModel(req.Model))
 
 	// For gallery models, sync unsynced assets before generation
 	if studio.IsGalleryModel(req.Model) {
+		log.Printf("[video] gallery model detected, starting GallerySyncContent")
 		synced, err := s.core.GallerySyncContent(unified.Content, req.Model)
 		if err == nil {
+			log.Printf("[video] GallerySyncContent OK, using synced content")
 			unified.Content = synced
+		} else {
+			log.Printf("[video] GallerySyncContent FAILED: %v (falling through with original content)", err)
 		}
-		// If gallery sync fails, fall through with original content
 	}
 
+	log.Printf("[video] calling GenerateUnified with %d content items", len(unified.Content))
 	result, err := s.core.GenerateUnified(unified)
 	if err != nil {
 		return nil, err
