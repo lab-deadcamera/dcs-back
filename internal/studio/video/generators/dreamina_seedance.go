@@ -204,6 +204,13 @@ func (g *SeedanceGenerator) BuildPayload(req *studio.GeneratorRequest) map[strin
 	videoIndex := 0
 	audioIndex := 0
 
+	textPart := studio.CompileContentText(req.Content)
+
+	content = append(content, map[string]interface{}{
+		"type": "text",
+		"text": textPart,
+	})
+
 	for _, item := range req.Content {
 		switch item.Type {
 		case "image":
@@ -238,25 +245,6 @@ func (g *SeedanceGenerator) BuildPayload(req *studio.GeneratorRequest) map[strin
 			audioIndex++
 		}
 	}
-
-	textPart := studio.CompileContentText(req.Content)
-	if imageIndex > 0 || videoIndex > 0 {
-		refs := []string{}
-		if imageIndex > 0 {
-			refs = append(refs, "Image 1")
-		}
-		if videoIndex > 0 {
-			refs = append(refs, "Video 1")
-		}
-		if len(refs) > 0 {
-			textPart = fmt.Sprintf("The video references %s. ", strings.Join(refs, " and ")) + textPart
-		}
-	}
-
-	content = append(content, map[string]interface{}{
-		"type": "text",
-		"text": textPart,
-	})
 
 	duration := req.Duration
 	if duration <= 0 {
