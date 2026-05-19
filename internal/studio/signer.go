@@ -8,10 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -237,6 +240,7 @@ type AssetAPI struct {
 	AccessKeyID     string
 	SecretAccessKey string
 	AssetGroupID    string
+	commStore       *ServerCommunicationStore
 }
 
 func NewAssetAPI(ak, sk, groupID string) *AssetAPI {
@@ -247,10 +251,50 @@ func NewAssetAPI(ak, sk, groupID string) *AssetAPI {
 	}
 }
 
+func (a *AssetAPI) SetCommStore(store *ServerCommunicationStore) {
+	a.commStore = store
+}
+
+func (a *AssetAPI) logComm(action, endpoint string, reqBody interface{}, resp map[string]interface{}, err error) {
+	if a.commStore == nil {
+		return
+	}
+	reqBytes, _ := json.Marshal(reqBody)
+	var respBytes []byte
+	if resp != nil {
+		respBytes, _ = json.Marshal(resp)
+	}
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
+	statusCode := 200
+	if err != nil {
+		statusCode = 0
+	}
+	a.commStore.Create(&ServerCommunication{
+		ID:           uuid.New().String(),
+		ModelName:    AssetsService,
+		Endpoint:     endpoint,
+		Method:       "POST",
+		RequestBody:  string(reqBytes),
+		ResponseBody: string(respBytes),
+		StatusCode:   statusCode,
+		ErrorMessage: errMsg,
+	})
+	log.Printf("[asset-api] %s status=%d err=%q", action, statusCode, errMsg)
+}
+
 // CreateAssetGroup creates a new asset group in the BytePlus asset library.
 func (a *AssetAPI) CreateAssetGroup(name, description, projectName string) (map[string]interface{}, error) {
 	if projectName == "" {
 		projectName = "default"
+	}
+	body := map[string]interface{}{
+		"Name":        name,
+		"Description": description,
+		"GroupType":   "AIGC",
+		"ProjectName": projectName,
 	}
 	result, err := SignedFetch(SignedFetchInput{
 		AK:      a.AccessKeyID,
@@ -259,13 +303,9 @@ func (a *AssetAPI) CreateAssetGroup(name, description, projectName string) (map[
 		Service: AssetsService,
 		Action:  "CreateAssetGroup",
 		Version: AssetsVersion,
-		Body: map[string]interface{}{
-			"Name":        name,
-			"Description": description,
-			"GroupType":   "AIGC",
-			"ProjectName": projectName,
-		},
+		Body:    body,
 	})
+	a.logComm("CreateAssetGroup", "/?Action=CreateAssetGroup", body, result, err)
 	if err != nil {
 		return nil, err
 	}
@@ -307,6 +347,7 @@ func (a *AssetAPI) CreateAsset(assetURL, name, assetType, projectName string) (m
 		Version: AssetsVersion,
 		Body:    payload,
 	})
+	a.logComm("CreateAsset", "/?Action=CreateAsset", payload, result, err)
 	if err != nil {
 		return nil, err
 	}
@@ -323,16 +364,19 @@ func (a *AssetAPI) GetAsset(assetID, projectName string) (map[string]interface{}
 	if projectName == "" {
 		projectName = "default"
 	}
-	return SignedFetch(SignedFetchInput{
+	body := map[string]string{
+		"Id":          assetID,
+		"ProjectName": projectName,
+	}
+	result, err := SignedFetch(SignedFetchInput{
 		AK:      a.AccessKeyID,
 		SK:      a.SecretAccessKey,
 		Region:  AssetsRegion,
 		Service: AssetsService,
 		Action:  "GetAsset",
 		Version: AssetsVersion,
-		Body: map[string]string{
-			"Id":          assetID,
-			"ProjectName": projectName,
-		},
+		Body:    body,
 	})
+	a.logComm("GetAsset", "/?Action=GetAsset", body, result, err)
+	return result, err
 }

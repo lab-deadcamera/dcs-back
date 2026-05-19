@@ -1,4 +1,4 @@
-package studio
+﻿package studio
 
 import (
 	"encoding/json"
@@ -57,7 +57,7 @@ func NewService(providerStore *provider.Store, fileService *file.Service, output
 	}
 }
 
-// ─── Legacy handler registration ──────────────────────────────────
+// â”€â”€â”€ Legacy handler registration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func (s *Service) RegisterHandler(h ModelHandler) {
 	s.handlers = append(s.handlers, h)
@@ -72,7 +72,7 @@ func (s *Service) pickHandler(modelName string) ModelHandler {
 	return nil
 }
 
-// ─── Asset sync store ────────────────────────────────────────────
+// â”€â”€â”€ Asset sync store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func (s *Service) SetAssetSyncStore(store *AssetSyncStore) {
 	s.assetSyncStore = store
@@ -115,7 +115,7 @@ func (s *Service) effectiveCredentials(m *provider.Model) (accessKeyID, secretAc
 	return
 }
 
-// ─── Generator registration ──────────────────────────────────────
+// â”€â”€â”€ Generator registration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // RegisterGenerator registers a generator that satisfies the PipelineRunner interface.
 // Both video.VideoGenerator and image.ImageGenerator match structurally.
@@ -132,10 +132,10 @@ func (s *Service) pickGenerator(modelName string) PipelineRunner {
 	return nil
 }
 
-// ─── Unified payload generation ──────────────────────────────────
+// â”€â”€â”€ Unified payload generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateResponse, error) {
-	// Validar que los campos de sesión estén presentes (obligatorios para tracking).
+	// Validar que los campos de sesiÃ³n estÃ©n presentes (obligatorios para tracking).
 	if req.ProjectID == "" || req.SceneID == "" || req.SceneCode == "" || req.TakeNumber <= 0 {
 		return nil, fmt.Errorf("project_id, scene_id, scene_code and take_number are required for generation")
 	}
@@ -151,7 +151,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		errLog    string
 	)
 
-	// Defer log save — runs on every return path (including early errors)
+	// Defer log save â€” runs on every return path (including early errors)
 	defer func() {
 		if s.logStore == nil {
 			return
@@ -239,7 +239,38 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	result, err := gen.Generate(genReq)
+		genStart := time.Now()
+		result, err := gen.Generate(genReq)
+		genDur := time.Since(genStart).Milliseconds()
+
+		// Log server communication
+		if s.commStore != nil {
+			reqBody, _ := json.Marshal(genReq)
+			respBody := ""
+			genStatus := 200
+			if err != nil {
+				genStatus = 0
+				respBody = err.Error()
+			} else if result != nil && result.Raw != nil {
+				rawBytes, _ := json.Marshal(result.Raw)
+				respBody = string(rawBytes)
+			}
+			errMsg := ""
+			if err != nil {
+				errMsg = err.Error()
+			}
+			s.commStore.Create(&ServerCommunication{
+				ModelName:    m.Name,
+				Endpoint:     m.URL + m.Endpoint,
+				Method:       "POST",
+				RequestBody:  string(reqBody),
+				ResponseBody: respBody,
+				StatusCode:   genStatus,
+				DurationMs:   genDur,
+				ErrorMessage: errMsg,
+			})
+		}
+		log.Printf("[generate-unified] gen.Generate dur=%dms err=%v", genDur, err != nil)
 
 	// Capture result data for the log
 	genReqBytes, _ := json.Marshal(genReq)
@@ -285,7 +316,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 	}, nil
 }
 
-// ─── Legacy generation ───────────────────────────────────────────
+// â”€â”€â”€ Legacy generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func (s *Service) Generate(sel *Selection) (*GenerateResponse, error) {
 	m, err := s.providerStore.GetModelByID(sel.ModelID)
@@ -318,7 +349,7 @@ func (s *Service) Generate(sel *Selection) (*GenerateResponse, error) {
 	return resp, nil
 }
 
-// ─── Asset sync ──────────────────────────────────────────────────
+// â”€â”€â”€ Asset sync â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // SyncAsset uploads a local file to the model's asset library and stores the mapping.
 func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
@@ -379,6 +410,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 	// Upload to the asset library
 	log.Printf("[sync-asset] calling CreateAsset url=%q filename=%q type=%q", fileURL, f.Filename, detectAssetType(f.MimeType))
 	api := NewAssetAPI(ak, sk, groupID)
+		api.SetCommStore(s.commStore)
 	result, err := api.CreateAsset(fileURL, f.Filename, detectAssetType(f.MimeType), "")
 	if err != nil {
 		log.Printf("[sync-asset] CreateAsset FAILED: %v", err)
@@ -461,7 +493,7 @@ func (s *Service) GetSyncedAsset(modelID, fileID string) (*ModelAsset, error) {
 	return s.assetSyncStore.GetByModelAndFile(modelID, fileID)
 }
 
-// ─── Enriched file listing ───────────────────────────────────────
+// â”€â”€â”€ Enriched file listing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // resolveModelBriefs resolves a set of model IDs to ModelBrief objects.
 func (s *Service) resolveModelBriefs(modelIDs map[string]bool) []ModelBrief {
@@ -631,6 +663,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 
 	// Create API client (with or without existing group)
 	api := NewAssetAPI(ak, sk, groupID)
+		api.SetCommStore(s.commStore)
 
 	// Create asset group only if none exists for this character+model
 	if groupID == "" {
@@ -646,9 +679,10 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 		}
 		log.Printf("[sync-char] created asset group id=%s", groupID)
 		api = NewAssetAPI(ak, sk, groupID)
+			api.SetCommStore(s.commStore)
 	}
 
-	// Process each file — skip if already synced, upload if new or failed
+	// Process each file â€” skip if already synced, upload if new or failed
 	var results []SyncAssetResponse
 	for _, cf := range charFiles {
 		existing := syncMap[cf.FileID]
@@ -674,7 +708,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 			continue
 		}
 
-		// Not synced or previously failed — upload
+		// Not synced or previously failed â€” upload
 		log.Printf("[sync-char] uploading file %q to group %s", cf.FileID, groupID)
 		r, err := s.uploadAndTrackAsset(req.ModelID, cf.FileID, groupID, api)
 		if err != nil {
@@ -794,7 +828,7 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *Asse
 	}, nil
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func (s *Service) modelAssetsToBriefs(assets []ModelAsset) []ModelBrief {
 	if len(assets) == 0 {
@@ -841,10 +875,10 @@ func charFileToCharFileWithSync(f character.CharacterFile, briefs []ModelBrief) 
 	}
 }
 
-// ─── Status and cancellation (shared) ────────────────────────────
+// â”€â”€â”€ Status and cancellation (shared) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // statusFromLog recupera el estado de una tarea desde el log cuando
-// la tarea ya no está en memoria (ej. reinicio del servidor).
+// la tarea ya no estÃ¡ en memoria (ej. reinicio del servidor).
 func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
 	// Buscar el modelo por nombre
 	m, err := s.providerStore.GetModelByName(log.ModelName)
@@ -863,6 +897,35 @@ func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
 	}
 
 	result, err := gen.GetStatus(log.TaskID, m.APIKey, m.URL, m.Endpoint)
+
+		// Log server communication
+		if s.commStore != nil {
+			reqBytes, _ := json.Marshal(map[string]string{"task_id": log.TaskID})
+			respBody := ""
+			genStatus := 200
+			if err != nil {
+				genStatus = 0
+				respBody = err.Error()
+			} else if result != nil && result.Raw != nil {
+				rawBytes, _ := json.Marshal(result.Raw)
+				respBody = string(rawBytes)
+			}
+			errMsg := ""
+			if err != nil {
+				errMsg = err.Error()
+			}
+			s.commStore.Create(&ServerCommunication{
+				TaskID:       log.TaskID,
+				ModelName:    m.Name,
+				Endpoint:     m.URL + m.Endpoint,
+				Method:       "GET",
+				RequestBody:  string(reqBytes),
+				ResponseBody: respBody,
+				StatusCode:   genStatus,
+				ErrorMessage: errMsg,
+			})
+		}
+		fmt.Printf("[status-from-log] gen.GetStatus err=%v", err != nil)
 	if err != nil {
 		// Error consultando al generator, devolver el estado del log
 		return &StatusResult{Status: log.Status, Error: err.Error()}, nil
@@ -894,7 +957,7 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	s.mu.RUnlock()
 
 	if !ok {
-		// Task not in memory (e.g. after restart) — try to recover from log
+		// Task not in memory (e.g. after restart) â€” try to recover from log
 		log, logErr := s.logStore.GetByTaskID(taskID)
 		if logErr != nil || log == nil {
 			return nil, fmt.Errorf("unknown task: %s", taskID)
@@ -918,6 +981,35 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	gen := s.pickGenerator(m.Name)
 	if gen != nil {
 		result, err := gen.GetStatus(taskID, m.APIKey, m.URL, m.Endpoint)
+
+			// Log server communication
+			if s.commStore != nil {
+				reqBytes, _ := json.Marshal(map[string]string{"task_id": taskID})
+				respBody := ""
+				genStatus := 200
+				if err != nil {
+					genStatus = 0
+					respBody = err.Error()
+				} else if result != nil && result.Raw != nil {
+					rawBytes, _ := json.Marshal(result.Raw)
+					respBody = string(rawBytes)
+				}
+				errMsg := ""
+				if err != nil {
+					errMsg = err.Error()
+				}
+				s.commStore.Create(&ServerCommunication{
+					TaskID:       taskID,
+					ModelName:    m.Name,
+					Endpoint:     m.URL + m.Endpoint,
+					Method:       "GET",
+					RequestBody:  string(reqBytes),
+					ResponseBody: respBody,
+					StatusCode:   genStatus,
+					ErrorMessage: errMsg,
+				})
+			}
+			log.Printf("[get-status] gen.GetStatus err=%v", err != nil)
 		if err != nil {
 			return nil, err
 		}
@@ -1038,7 +1130,7 @@ func (s *Service) CancelTask(taskID string) error {
 	return handler.CancelTask(taskID, m.APIKey, m.URL, m.Endpoint)
 }
 
-// ─── Log listing ─────────────────────────────────────────────────
+// â”€â”€â”€ Log listing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // ListGenerationLogs returns paginated generation logs, optionally filtered.
 func (s *Service) ListGenerationLogs(page, limit int, projectID, sceneID, status, modelName string, userID int, dateFrom, dateTo string) (*ListGenerationLogsResponse, error) {
@@ -1099,7 +1191,7 @@ func intPtrOrNil(v int) *int {
 	return &v
 }
 
-// ─── Preview (dry-run) ───────────────────────────────────────────
+// â”€â”€â”€ Preview (dry-run) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // PreviewPayload builds the AI API payload without sending it or saving logs.
 func (s *Service) PreviewPayload(req *StudioGenerateRequest) (*PreviewPayloadResponse, error) {
@@ -1147,7 +1239,7 @@ func (s *Service) PreviewPayload(req *StudioGenerateRequest) (*PreviewPayloadRes
 	}, nil
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // updateLogWithFinalStatus updates the generation log with the final AI response
 // when an async task completes (succeeded or failed).
@@ -1158,7 +1250,7 @@ func (s *Service) updateLogWithFinalStatus(taskID string, result *GeneratorResul
 
 	log, logErr := s.logStore.GetByTaskID(taskID)
 	if logErr != nil || log == nil {
-		// No log entry (e.g. legacy path) — skip
+		// No log entry (e.g. legacy path) â€” skip
 		return
 	}
 
@@ -1312,7 +1404,7 @@ func (s *Service) GallerySyncContent(items []ContentItem, modelName string) ([]C
 		}
 		log.Printf("[gallery-sync] item[%d] not synced yet, checking character linkage", i)
 
-		// Not synced — check if file belongs to a character
+		// Not synced â€” check if file belongs to a character
 		charIDs, cErr := s.charService.FindCharactersByFileID(item.ID)
 		charSynced := false
 		if cErr == nil && len(charIDs) > 0 {
