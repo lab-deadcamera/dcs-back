@@ -134,9 +134,7 @@ func main() {
 		c.JSON(200, gin.H{"message": "hola mundo"})
 	})
 
-	r.Static("/outputs", cfg.OutputsDir)
-	r.Static("/docs", "./docs")
-
+	// CORS debe ir antes de las rutas estáticas para que /outputs también tenga headers CORS
 	origins := os.Getenv("CORS_ALLOW_ORIGINS")
 	if origins == "" {
 		origins = "*"
@@ -148,6 +146,9 @@ func main() {
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		AllowCredentials: true,
 	}))
+
+	r.Static("/outputs", cfg.OutputsDir)
+	r.Static("/docs", "./docs")
 
 	v1 := r.Group("/api/v1")
 	{
@@ -182,11 +183,8 @@ func main() {
 
 		studioGroup := v1.Group("/studio")
 		{
-
 			studioGroup.POST("/generate-legacy", studioHdl.Generate)
-
 			studioGroup.GET("/status-legacy/:taskId", studioHdl.GetStatusLegacy)
-
 			studioGroup.POST("/sync-asset", studioHdl.SyncAsset)
 			studioGroup.GET("/synced-assets", studioHdl.ListSyncedAssets)
 			studioGroup.GET("/files-with-sync", studioHdl.ListFilesWithSync)
@@ -220,7 +218,6 @@ func main() {
 			textGroup.GET("/status/:taskId", studioTextHdl.GetStatus)
 			textGroup.DELETE("/task/:taskId", studioTextHdl.CancelTask)
 			textGroup.POST("/preview", studioTextHdl.PreviewPayload)
-
 		}
 
 		filesAPI := v1.Group("/files")
@@ -268,26 +265,27 @@ func main() {
 			modelsAPI.GET("/favorite", providerHdl.GetFavorite)
 			modelsAPI.POST("/:id/favorite", providerHdl.SetFavorite)
 			modelsAPI.DELETE("/:id", providerHdl.SoftDeleteModel)
-			projectsAPI := v1.Group("/projects")
-			{
-				projectsAPI.POST("", projectHdl.Create)
-				projectsAPI.GET("", projectHdl.List)
-				projectsAPI.GET("/:id", projectHdl.GetByID)
-				projectsAPI.PATCH("/:id", projectHdl.Update)
-				projectsAPI.DELETE("/:id", projectHdl.SoftDelete)
-				projectsAPI.POST("/:id/scenes", projectHdl.CreateScene)
-				projectsAPI.GET("/:id/scenes", projectHdl.ListScenes)
-				projectsAPI.GET("/:id/scenes/:sceneId", projectHdl.GetSceneByID)
-				projectsAPI.PATCH("/:id/scenes/:sceneId", projectHdl.UpdateScene)
-				projectsAPI.DELETE("/:id/scenes/:sceneId", projectHdl.SoftDeleteScene)
-				projectsAPI.POST("/:id/scenes/:sceneId/takes", projectHdl.CreateTake)
-				projectsAPI.GET("/:id/scenes/:sceneId/takes", projectHdl.ListTakes)
-				projectsAPI.GET("/:id/scenes/:sceneId/takes/:takeId", projectHdl.GetTakeByID)
-				projectsAPI.PATCH("/:id/scenes/:sceneId/takes/:takeId", projectHdl.UpdateTake)
-				projectsAPI.DELETE("/:id/scenes/:sceneId/takes/:takeId", projectHdl.SoftDeleteTake)
-				projectsAPI.POST("/:id/scenes/:sceneId/takes/save-generation", projectHdl.SaveGeneration)
-				projectsAPI.POST("/:id/scenes/:sceneId/takes/:takeId/toggle-active", projectHdl.ToggleTakeActive)
-			}
+		}
+
+		projectsAPI := v1.Group("/projects")
+		{
+			projectsAPI.POST("", projectHdl.Create)
+			projectsAPI.GET("", projectHdl.List)
+			projectsAPI.GET("/:id", projectHdl.GetByID)
+			projectsAPI.PATCH("/:id", projectHdl.Update)
+			projectsAPI.DELETE("/:id", projectHdl.SoftDelete)
+			projectsAPI.POST("/:id/scenes", projectHdl.CreateScene)
+			projectsAPI.GET("/:id/scenes", projectHdl.ListScenes)
+			projectsAPI.GET("/:id/scenes/:sceneId", projectHdl.GetSceneByID)
+			projectsAPI.PATCH("/:id/scenes/:sceneId", projectHdl.UpdateScene)
+			projectsAPI.DELETE("/:id/scenes/:sceneId", projectHdl.SoftDeleteScene)
+			projectsAPI.POST("/:id/scenes/:sceneId/takes", projectHdl.CreateTake)
+			projectsAPI.GET("/:id/scenes/:sceneId/takes", projectHdl.ListTakes)
+			projectsAPI.GET("/:id/scenes/:sceneId/takes/:takeId", projectHdl.GetTakeByID)
+			projectsAPI.PATCH("/:id/scenes/:sceneId/takes/:takeId", projectHdl.UpdateTake)
+			projectsAPI.DELETE("/:id/scenes/:sceneId/takes/:takeId", projectHdl.SoftDeleteTake)
+			projectsAPI.POST("/:id/scenes/:sceneId/takes/save-generation", projectHdl.SaveGeneration)
+			projectsAPI.POST("/:id/scenes/:sceneId/takes/:takeId/toggle-active", projectHdl.ToggleTakeActive)
 		}
 	}
 
