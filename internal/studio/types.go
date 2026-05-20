@@ -229,14 +229,12 @@ type GenerationLog struct {
 	SceneID       string     `json:"scene_id,omitempty"`
 	SceneCode     string     `json:"scene_code,omitempty"`
 	TakeNumber    int        `json:"take_number,omitempty"`
-	Request       string     `json:"request"`                   // original client payload (JSON)
-	AIResponse    string     `json:"ai_response"`               // raw AI API response (JSON)
-	AICallPayload string     `json:"ai_call_payload,omitempty"` // payload sent to AI API (JSON)
+	Request       string     `json:"request,omitempty"`       // original client payload (JSON)
 	Outputs       string     `json:"outputs,omitempty"`
 	Status        string     `json:"status"`
 	ErrorMessage  string     `json:"error_message,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	UpdatedAt     time.Time  `json:"updated_at,omitempty"`
 	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 	// Enriched fields (LEFT JOIN, no almacenados en generation_logs)
 	UserName        string `json:"user_name"`

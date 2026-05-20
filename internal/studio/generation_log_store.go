@@ -13,41 +13,63 @@ func NewGenerationLogStore(db *sql.DB) *GenerationLogStore {
 	return &GenerationLogStore{db: db}
 }
 
-// colList is the columns used in SELECT queries, with COALESCE for nullable TEXT fields.
-const genLogBaseCols = `gl.id, gl.task_id, gl.model_name,
-	COALESCE(gl.request_payload, '') AS request_payload,
-	COALESCE(gl.ai_response, '') AS ai_response,
-	COALESCE(gl.ai_call_payload, '') AS ai_call_payload,
-	COALESCE(gl.outputs, '') AS outputs,
-	gl.status,
-	COALESCE(gl.error_message, '') AS error_message,
-	gl.user_id,
-	COALESCE(gl.project_id, '') AS project_id,
-	COALESCE(gl.scene_id, '') AS scene_id,
-	COALESCE(gl.scene_code, '') AS scene_code,
-	COALESCE(gl.take_number, 0) AS take_number,
-	gl.created_at, gl.updated_at, gl.deleted_at`
+// Light columns for list queries (avoids loading heavy text/blob columns).
+const genLogListCols = `gl.id, gl.task_id, gl.model_name,
+		gl.status,
+		COALESCE(gl.error_message, '') AS error_message,
+		gl.user_id,
+		COALESCE(gl.project_id, '') AS project_id,
+		COALESCE(gl.scene_id, '') AS scene_id,
+		COALESCE(gl.scene_code, '') AS scene_code,
+		COALESCE(gl.take_number, 0) AS take_number,
+		gl.created_at, gl.updated_at`
+
+// Full columns for detail queries (includes request payload and outputs).
+const genLogFullCols = `gl.id, gl.task_id, gl.model_name,
+		COALESCE(gl.request_payload, '') AS request_payload,
+		COALESCE(gl.outputs, '') AS outputs,
+		gl.status,
+		COALESCE(gl.error_message, '') AS error_message,
+		gl.user_id,
+		COALESCE(gl.project_id, '') AS project_id,
+		COALESCE(gl.scene_id, '') AS scene_id,
+		COALESCE(gl.scene_code, '') AS scene_code,
+		COALESCE(gl.take_number, 0) AS take_number,
+		gl.created_at, gl.updated_at, gl.deleted_at`
 
 const genLogJoinCols = `COALESCE(u.username, '') AS user_name,
-	COALESCE(u.name || ' ' || u.surname, '') AS user_display_name,
-	COALESCE(p.name, '') AS project_name,
-	COALESCE(s.name, '') AS scene_name,
-	COALESCE(s.number, 0) AS scene_number`
+		COALESCE(u.name || ' ' || u.surname, '') AS user_display_name,
+		COALESCE(p.name, '') AS project_name,
+		COALESCE(s.name, '') AS scene_name,
+		COALESCE(s.number, 0) AS scene_number`
 
 const genLogFromJoins = `FROM generation_logs gl
-	LEFT JOIN users u ON u.id = gl.user_id
-	LEFT JOIN projects p ON p.id::text = gl.project_id
-	LEFT JOIN scenes s ON s.id::text = gl.scene_id`
+		LEFT JOIN users u ON u.id = gl.user_id
+		LEFT JOIN projects p ON p.id::text = gl.project_id
+		LEFT JOIN scenes s ON s.id::text = gl.scene_id`
 
-const genLogCols = genLogBaseCols + ", " + genLogJoinCols
-
-func (s *GenerationLogStore) scanRow(row *GenerationLog, scanner interface {
+// scanListRow scans a list query row (without request payload).
+func (s *GenerationLogStore) scanListRow(row *GenerationLog, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
 	return scanner.Scan(
 		&row.ID, &row.TaskID, &row.ModelName,
-		&row.Request, &row.AIResponse, &row.AICallPayload,
-		&row.Outputs, &row.Status, &row.ErrorMessage,
+		&row.Status, &row.ErrorMessage,
+		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
+		&row.TakeNumber,
+		&row.CreatedAt, &row.UpdatedAt,
+		&row.UserName, &row.UserDisplayName, &row.ProjectName, &row.SceneName, &row.SceneNumber,
+	)
+}
+
+// scanDetailRow scans a detail query row (includes request payload and outputs).
+func (s *GenerationLogStore) scanDetailRow(row *GenerationLog, scanner interface {
+	Scan(dest ...interface{}) error
+}) error {
+	return scanner.Scan(
+		&row.ID, &row.TaskID, &row.ModelName,
+		&row.Request, &row.Outputs,
+		&row.Status, &row.ErrorMessage,
 		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
 		&row.TakeNumber,
 		&row.CreatedAt, &row.UpdatedAt, &row.DeletedAt,
@@ -65,8 +87,7 @@ func (s *GenerationLogStore) Create(log *GenerationLog) error {
 		log.TaskID,
 		log.ModelName,
 		nullIfEmpty(log.Request),
-		nullIfEmpty(log.AIResponse),
-		nullIfEmpty(log.AICallPayload),
+		nil, nil,
 		nullIfEmpty(log.Outputs),
 		log.Status,
 		nullIfEmpty(log.ErrorMessage),
@@ -78,12 +99,12 @@ func (s *GenerationLogStore) Create(log *GenerationLog) error {
 	).Scan(&log.ID, &log.CreatedAt, &log.UpdatedAt)
 }
 
-// GetByID returns a single log entry by its ID.
+// GetByID returns a single log entry by its ID (includes full payload).
 func (s *GenerationLogStore) GetByID(id string) (*GenerationLog, error) {
 	log := &GenerationLog{}
-	query := `SELECT ` + genLogCols + ` ` + genLogFromJoins + ` WHERE gl.id = $1 AND gl.deleted_at IS NULL`
+	query := `SELECT ` + genLogFullCols + `, ` + genLogJoinCols + ` ` + genLogFromJoins + ` WHERE gl.id = $1 AND gl.deleted_at IS NULL`
 
-	if err := s.scanRow(log, s.db.QueryRow(query, id)); err != nil {
+	if err := s.scanDetailRow(log, s.db.QueryRow(query, id)); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -92,12 +113,12 @@ func (s *GenerationLogStore) GetByID(id string) (*GenerationLog, error) {
 	return log, nil
 }
 
-// GetByTaskID returns a log entry by its task ID.
+// GetByTaskID returns a log entry by its task ID (includes full payload).
 func (s *GenerationLogStore) GetByTaskID(taskID string) (*GenerationLog, error) {
 	log := &GenerationLog{}
-	query := `SELECT ` + genLogCols + ` ` + genLogFromJoins + ` WHERE gl.task_id = $1 AND gl.deleted_at IS NULL`
+	query := `SELECT ` + genLogFullCols + `, ` + genLogJoinCols + ` ` + genLogFromJoins + ` WHERE gl.task_id = $1 AND gl.deleted_at IS NULL`
 
-	if err := s.scanRow(log, s.db.QueryRow(query, taskID)); err != nil {
+	if err := s.scanDetailRow(log, s.db.QueryRow(query, taskID)); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -125,7 +146,7 @@ func (s *GenerationLogStore) UpdateByTaskID(taskID, outputs, status, errorMessag
 	return nil
 }
 
-// List returns paginated generation logs, newest first.
+// List returns paginated generation logs, newest first (light columns).
 func (s *GenerationLogStore) List(page, limit int) ([]GenerationLog, int, error) {
 	if page < 1 {
 		page = 1
@@ -141,7 +162,7 @@ func (s *GenerationLogStore) List(page, limit int) ([]GenerationLog, int, error)
 		return nil, 0, err
 	}
 
-	query := `SELECT ` + genLogCols + ` ` + genLogFromJoins + ` WHERE gl.deleted_at IS NULL
+	query := `SELECT ` + genLogListCols + `, ` + genLogJoinCols + ` ` + genLogFromJoins + ` WHERE gl.deleted_at IS NULL
 		ORDER BY gl.created_at DESC
 		LIMIT $1 OFFSET $2`
 
@@ -154,7 +175,7 @@ func (s *GenerationLogStore) List(page, limit int) ([]GenerationLog, int, error)
 	var logs []GenerationLog
 	for rows.Next() {
 		var l GenerationLog
-		if err := s.scanRow(&l, rows); err != nil {
+		if err := s.scanListRow(&l, rows); err != nil {
 			return nil, 0, err
 		}
 		logs = append(logs, l)
@@ -223,7 +244,7 @@ func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, s
 		return nil, 0, err
 	}
 
-	query := "SELECT " + genLogCols + " " + genLogFromJoins + " " + where + " ORDER BY gl.created_at DESC LIMIT $" + fmt.Sprintf("%d", argIdx) + " OFFSET $" + fmt.Sprintf("%d", argIdx+1)
+	query := "SELECT " + genLogListCols + ", " + genLogJoinCols + " " + genLogFromJoins + " " + where + " ORDER BY gl.created_at DESC LIMIT $" + fmt.Sprintf("%d", argIdx) + " OFFSET $" + fmt.Sprintf("%d", argIdx+1)
 	args = append(args, limit, offset)
 
 	rows, err := s.db.Query(query, args...)
@@ -235,7 +256,7 @@ func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, s
 	var logs []GenerationLog
 	for rows.Next() {
 		var l GenerationLog
-		if err := s.scanRow(&l, rows); err != nil {
+		if err := s.scanListRow(&l, rows); err != nil {
 			return nil, 0, err
 		}
 		logs = append(logs, l)
