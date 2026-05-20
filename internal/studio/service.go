@@ -397,6 +397,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 		FileID:       req.FileID,
 		AssetGroupID: groupID,
 		Status:       "syncing",
+		AssetType:    strings.ToUpper(detectAssetType(f.MimeType)),
 	}
 	if err := s.assetSyncStore.Create(record); err != nil {
 		log.Printf("[sync-asset] Create sync record error: %v", err)
@@ -414,7 +415,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 	result, err := api.CreateAsset(fileURL, f.Filename, detectAssetType(f.MimeType), "")
 	if err != nil {
 		log.Printf("[sync-asset] CreateAsset FAILED: %v", err)
-		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error())
+		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error(), "", "", "")
 		return &SyncAssetResponse{
 			ID:           record.ID,
 			ModelID:      req.ModelID,
@@ -431,6 +432,8 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 	// Poll until Active (up to ~2 min)
 	log.Printf("[sync-asset] polling asset %s for Active status", assetID)
 	assetStatus := ""
+	assetURL := ""
+	assetType := ""
 	for i := 0; i < 20; i++ {
 		statusResult, err := api.GetAsset(assetID, "")
 		if err != nil {
@@ -439,7 +442,13 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 			continue
 		}
 		assetStatus, _ = statusResult["Status"].(string)
-		log.Printf("[sync-asset] poll[%d] status=%q", i, assetStatus)
+		if url, ok := statusResult["URL"].(string); ok && url != "" {
+			assetURL = url
+		}
+		if at, ok := statusResult["AssetType"].(string); ok && at != "" {
+			assetType = strings.ToUpper(at)
+		}
+		log.Printf("[sync-asset] poll[%d] status=%q url_set=%v", i, assetStatus, assetURL != "")
 		if assetStatus == "Active" || assetStatus == "Failed" {
 			break
 		}
@@ -453,17 +462,19 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 		errMsg = fmt.Sprintf("asset did not become Active, last status: %s", assetStatus)
 		log.Printf("[sync-asset] final status NOT Active: %q", assetStatus)
 	} else {
-		log.Printf("[sync-asset] asset is now Active")
+		log.Printf("[sync-asset] asset is now Active url=%s", assetURL)
 	}
 
 	// Update the record
-	if err := s.assetSyncStore.UpdateStatus(record.ID, finalStatus, errMsg); err != nil {
+	if err := s.assetSyncStore.UpdateStatus(record.ID, finalStatus, errMsg, assetID, assetURL, assetType); err != nil {
 		return nil, fmt.Errorf("failed to update sync status: %w", err)
 	}
 
 	// Also update the in-memory record
 	record.Status = finalStatus
 	record.ErrorMessage = errMsg
+	record.AssetURL = assetURL
+	record.AssetType = assetType
 
 	log.Printf("[sync-asset] SyncAsset done record_id=%s asset_id=%s status=%s", record.ID, assetID, finalStatus)
 	return &SyncAssetResponse{
@@ -763,6 +774,7 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *Asse
 		FileID:       fileID,
 		AssetGroupID: groupID,
 		Status:       "syncing",
+		AssetType:    strings.ToUpper(detectAssetType(f.MimeType)),
 	}
 	if err := s.assetSyncStore.Create(record); err != nil {
 		return nil, fmt.Errorf("failed to create sync record: %w", err)
@@ -774,7 +786,7 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *Asse
 	// Upload to the asset library
 	result, err := api.CreateAsset(fileURL, f.Filename, detectAssetType(f.MimeType), "")
 	if err != nil {
-		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error())
+		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error(), "", "", "")
 		return &SyncAssetResponse{
 			ID:           record.ID,
 			ModelID:      modelID,
@@ -789,6 +801,8 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *Asse
 
 	// Poll until Active (up to ~2 min)
 	assetStatus := ""
+	assetURL := ""
+	assetType := ""
 	for i := 0; i < 20; i++ {
 		statusResult, err := api.GetAsset(assetID, "")
 		if err != nil {
@@ -796,6 +810,12 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *Asse
 			continue
 		}
 		assetStatus, _ = statusResult["Status"].(string)
+		if url, ok := statusResult["URL"].(string); ok && url != "" {
+			assetURL = url
+		}
+		if at, ok := statusResult["AssetType"].(string); ok && at != "" {
+			assetType = strings.ToUpper(at)
+		}
 		if assetStatus == "Active" || assetStatus == "Failed" {
 			break
 		}
@@ -810,12 +830,14 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *Asse
 	}
 
 	// Update the record
-	if err := s.assetSyncStore.UpdateStatus(record.ID, finalStatus, errMsg); err != nil {
+	if err := s.assetSyncStore.UpdateStatus(record.ID, finalStatus, errMsg, assetID, assetURL, assetType); err != nil {
 		return nil, fmt.Errorf("failed to update sync status: %w", err)
 	}
 
 	record.Status = finalStatus
 	record.ErrorMessage = errMsg
+	record.AssetURL = assetURL
+	record.AssetType = assetType
 
 	return &SyncAssetResponse{
 		ID:           record.ID,

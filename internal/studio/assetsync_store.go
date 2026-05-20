@@ -18,6 +18,8 @@ type ModelAsset struct {
 	AssetGroupID  string    `json:"asset_group_id"`
 	Status        string    `json:"status"` // "syncing", "active", "failed"
 	ErrorMessage  string    `json:"error_message,omitempty"`
+	AssetURL      string    `json:"asset_url,omitempty"`
+	AssetType     string    `json:"asset_type,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
@@ -25,21 +27,21 @@ type ModelAsset struct {
 // ─── Queries ─────────────────────────────────────────────────────
 
 const (
-	createModelAssetSQL = `INSERT INTO model_assets (id, model_id, file_id, asset_id, asset_group_id, status, error_message)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	createModelAssetSQL = `INSERT INTO model_assets (id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_type)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at, updated_at`
 
-	getModelAssetSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, created_at, updated_at
+	getModelAssetSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, created_at, updated_at
 		FROM model_assets WHERE id = $1`
 
-	getModelAssetByFileSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, created_at, updated_at
+	getModelAssetByFileSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, created_at, updated_at
 		FROM model_assets WHERE model_id = $1 AND file_id = $2 ORDER BY created_at DESC LIMIT 1`
 
-	listModelAssetsSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, created_at, updated_at
+	listModelAssetsSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, created_at, updated_at
 		FROM model_assets WHERE model_id = $1 ORDER BY created_at DESC`
 
-	updateModelAssetStatusSQL = `UPDATE model_assets SET status = $1, error_message = $2, updated_at = NOW()
-		WHERE id = $3`
+	updateModelAssetStatusSQL = `UPDATE model_assets SET status = $1, error_message = $2, asset_id = $3, asset_url = $4, asset_type = $5, updated_at = NOW()
+		WHERE id = $6`
 
 	deleteModelAssetSQL = `DELETE FROM model_assets WHERE id = $1`
 )
@@ -59,14 +61,14 @@ func (s *AssetSyncStore) Create(ma *ModelAsset) error {
 		ma.ID = uuid.New().String()
 	}
 	return s.db.QueryRow(createModelAssetSQL, ma.ID, ma.ModelID, ma.FileID, ma.AssetID,
-		ma.AssetGroupID, ma.Status, ma.ErrorMessage).
+		ma.AssetGroupID, ma.Status, ma.ErrorMessage, ma.AssetType).
 		Scan(&ma.CreatedAt, &ma.UpdatedAt)
 }
 
 func (s *AssetSyncStore) GetByID(id string) (*ModelAsset, error) {
 	ma := &ModelAsset{}
 	err := s.db.QueryRow(getModelAssetSQL, id).Scan(&ma.ID, &ma.ModelID, &ma.FileID, &ma.AssetID,
-		&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.CreatedAt, &ma.UpdatedAt)
+		&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.CreatedAt, &ma.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -79,7 +81,7 @@ func (s *AssetSyncStore) GetByID(id string) (*ModelAsset, error) {
 func (s *AssetSyncStore) GetByModelAndFile(modelID, fileID string) (*ModelAsset, error) {
 	ma := &ModelAsset{}
 	err := s.db.QueryRow(getModelAssetByFileSQL, modelID, fileID).Scan(&ma.ID, &ma.ModelID, &ma.FileID, &ma.AssetID,
-		&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.CreatedAt, &ma.UpdatedAt)
+		&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.CreatedAt, &ma.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -100,7 +102,7 @@ func (s *AssetSyncStore) ListByModel(modelID string) ([]ModelAsset, error) {
 	for rows.Next() {
 		var ma ModelAsset
 		if err := rows.Scan(&ma.ID, &ma.ModelID, &ma.FileID, &ma.AssetID,
-			&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.CreatedAt, &ma.UpdatedAt); err != nil {
+			&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.CreatedAt, &ma.UpdatedAt); err != nil {
 			return nil, err
 		}
 		assets = append(assets, ma)
@@ -108,8 +110,8 @@ func (s *AssetSyncStore) ListByModel(modelID string) ([]ModelAsset, error) {
 	return assets, nil
 }
 
-func (s *AssetSyncStore) UpdateStatus(id, status, errorMessage string) error {
-	_, err := s.db.Exec(updateModelAssetStatusSQL, status, errorMessage, id)
+func (s *AssetSyncStore) UpdateStatus(id, status, errorMessage, assetID, assetURL, assetType string) error {
+	_, err := s.db.Exec(updateModelAssetStatusSQL, status, errorMessage, assetID, assetURL, assetType, id)
 	return err
 }
 
@@ -133,7 +135,7 @@ func (s *AssetSyncStore) GetByFileIDs(fileIDs []string) (map[string][]ModelAsset
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
 
-	query := fmt.Sprintf(`SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, created_at, updated_at
+	query := fmt.Sprintf(`SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, created_at, updated_at
 		FROM model_assets WHERE file_id IN (%s) AND status = 'active' ORDER BY created_at DESC`,
 		strings.Join(placeholders, ","))
 
@@ -146,7 +148,7 @@ func (s *AssetSyncStore) GetByFileIDs(fileIDs []string) (map[string][]ModelAsset
 	for rows.Next() {
 		var ma ModelAsset
 		if err := rows.Scan(&ma.ID, &ma.ModelID, &ma.FileID, &ma.AssetID,
-			&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.CreatedAt, &ma.UpdatedAt); err != nil {
+			&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.CreatedAt, &ma.UpdatedAt); err != nil {
 			return nil, err
 		}
 		result[ma.FileID] = append(result[ma.FileID], ma)
