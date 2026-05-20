@@ -105,19 +105,19 @@ func (s *Store) CreateModel(m *Model) error {
 	if m.APIKey == "" {
 		m.APIKey = "pending"
 	}
-	query := `INSERT INTO models (id, provider_id, name, api_key, url, endpoint, access_key_id, secret_access_key, default_asset_group_id, favorite)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	query := `INSERT INTO models (id, provider_id, name, model_type, api_key, url, endpoint, access_key_id, secret_access_key, default_asset_group_id, favorite)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, m.ID, m.ProviderID, m.Name, m.APIKey, m.URL, m.Endpoint,
+	return s.db.QueryRow(query, m.ID, m.ProviderID, m.Name, m.ModelType, m.APIKey, m.URL, m.Endpoint,
 		m.AccessKeyID, m.SecretAccessKey, m.DefaultAssetGroupID, m.Favorite).
 		Scan(&m.CreatedAt, &m.UpdatedAt)
 }
 
 func (s *Store) GetModelByName(name string) (*Model, error) {
 	m := &Model{}
-	query := `SELECT id, provider_id, name, api_key, url, endpoint, access_key_id, secret_access_key, default_asset_group_id, active, favorite, created_at, updated_at, deleted_at
+	query := `SELECT id, provider_id, name, model_type, api_key, url, endpoint, access_key_id, secret_access_key, default_asset_group_id, active, favorite, created_at, updated_at, deleted_at
 		FROM models WHERE name = $1 AND deleted_at IS NULL`
-	err := s.db.QueryRow(query, name).Scan(&m.ID, &m.ProviderID, &m.Name, &m.APIKey, &m.URL, &m.Endpoint,
+	err := s.db.QueryRow(query, name).Scan(&m.ID, &m.ProviderID, &m.Name, &m.ModelType, &m.APIKey, &m.URL, &m.Endpoint,
 		&m.AccessKeyID, &m.SecretAccessKey, &m.DefaultAssetGroupID,
 		&m.Active, &m.Favorite, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt)
 	if err != nil {
@@ -131,9 +131,9 @@ func (s *Store) GetModelByName(name string) (*Model, error) {
 
 func (s *Store) GetModelByID(id string) (*Model, error) {
 	m := &Model{}
-	query := `SELECT id, provider_id, name, api_key, url, endpoint, access_key_id, secret_access_key, default_asset_group_id, active, favorite, created_at, updated_at, deleted_at
+	query := `SELECT id, provider_id, name, model_type, api_key, url, endpoint, access_key_id, secret_access_key, default_asset_group_id, active, favorite, created_at, updated_at, deleted_at
 		FROM models WHERE id = $1 AND deleted_at IS NULL`
-	err := s.db.QueryRow(query, id).Scan(&m.ID, &m.ProviderID, &m.Name, &m.APIKey, &m.URL, &m.Endpoint,
+	err := s.db.QueryRow(query, id).Scan(&m.ID, &m.ProviderID, &m.Name, &m.ModelType, &m.APIKey, &m.URL, &m.Endpoint,
 		&m.AccessKeyID, &m.SecretAccessKey, &m.DefaultAssetGroupID,
 		&m.Active, &m.Favorite, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt)
 	if err != nil {
@@ -145,14 +145,21 @@ func (s *Store) GetModelByID(id string) (*Model, error) {
 	return m, nil
 }
 
-func (s *Store) ListModels() ([]ModelWithProvider, error) {
-	rows, err := s.db.Query(`
-		SELECT m.id, m.provider_id, m.name, m.api_key, m.url, m.endpoint, m.access_key_id, m.secret_access_key, m.default_asset_group_id, m.active, m.favorite,
+func (s *Store) ListModels(modelType string) ([]ModelWithProvider, error) {
+	query := `
+		SELECT m.id, m.provider_id, m.name, m.model_type, m.api_key, m.url, m.endpoint, m.access_key_id, m.secret_access_key, m.default_asset_group_id, m.active, m.favorite,
 		       m.created_at, m.updated_at, m.deleted_at, p.name AS provider_name
 		FROM models m
 		JOIN providers p ON p.id = m.provider_id
-		WHERE m.deleted_at IS NULL
-		ORDER BY m.favorite DESC, m.created_at DESC`)
+		WHERE m.deleted_at IS NULL`
+	args := []interface{}{}
+	if modelType != "" {
+		query += ` AND m.model_type = $1`
+		args = append(args, modelType)
+	}
+	query += ` ORDER BY m.favorite DESC, m.created_at DESC`
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +168,7 @@ func (s *Store) ListModels() ([]ModelWithProvider, error) {
 	var models []ModelWithProvider
 	for rows.Next() {
 		var m ModelWithProvider
-		if err := rows.Scan(&m.ID, &m.ProviderID, &m.Name, &m.APIKey, &m.URL, &m.Endpoint,
+		if err := rows.Scan(&m.ID, &m.ProviderID, &m.Name, &m.ModelType, &m.APIKey, &m.URL, &m.Endpoint,
 			&m.AccessKeyID, &m.SecretAccessKey, &m.DefaultAssetGroupID,
 			&m.Active, &m.Favorite, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt, &m.ProviderName); err != nil {
 			return nil, err
@@ -173,7 +180,7 @@ func (s *Store) ListModels() ([]ModelWithProvider, error) {
 
 func (s *Store) ListModelsByProvider(providerID string) ([]Model, error) {
 	rows, err := s.db.Query(`
-		SELECT id, provider_id, name, api_key, url, endpoint, access_key_id, secret_access_key, default_asset_group_id, active, favorite, created_at, updated_at, deleted_at
+		SELECT id, provider_id, name, model_type, api_key, url, endpoint, access_key_id, secret_access_key, default_asset_group_id, active, favorite, created_at, updated_at, deleted_at
 		FROM models WHERE provider_id = $1 AND deleted_at IS NULL
 		ORDER BY favorite DESC, created_at DESC`, providerID)
 	if err != nil {
@@ -184,7 +191,7 @@ func (s *Store) ListModelsByProvider(providerID string) ([]Model, error) {
 	var models []Model
 	for rows.Next() {
 		var m Model
-		if err := rows.Scan(&m.ID, &m.ProviderID, &m.Name, &m.APIKey, &m.URL, &m.Endpoint,
+		if err := rows.Scan(&m.ID, &m.ProviderID, &m.Name, &m.ModelType, &m.APIKey, &m.URL, &m.Endpoint,
 			&m.AccessKeyID, &m.SecretAccessKey, &m.DefaultAssetGroupID,
 			&m.Active, &m.Favorite, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt); err != nil {
 			return nil, err
@@ -208,7 +215,7 @@ func (s *Store) ListModelsForProviders(providerIDs []string) (map[string][]Model
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, provider_id, name, api_key, url, endpoint, access_key_id, secret_access_key, default_asset_group_id, active, favorite, created_at, updated_at, deleted_at
+		SELECT id, provider_id, name, model_type, api_key, url, endpoint, access_key_id, secret_access_key, default_asset_group_id, active, favorite, created_at, updated_at, deleted_at
 		FROM models WHERE provider_id IN (%s) AND deleted_at IS NULL
 		ORDER BY favorite DESC, created_at DESC`, strings.Join(placeholders, ","))
 
@@ -220,7 +227,7 @@ func (s *Store) ListModelsForProviders(providerIDs []string) (map[string][]Model
 
 	for rows.Next() {
 		var m Model
-		if err := rows.Scan(&m.ID, &m.ProviderID, &m.Name, &m.APIKey, &m.URL, &m.Endpoint,
+		if err := rows.Scan(&m.ID, &m.ProviderID, &m.Name, &m.ModelType, &m.APIKey, &m.URL, &m.Endpoint,
 			&m.AccessKeyID, &m.SecretAccessKey, &m.DefaultAssetGroupID,
 			&m.Active, &m.Favorite, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt); err != nil {
 			return nil, err
@@ -291,9 +298,9 @@ func (s *Store) SetFavorite(id string) error {
 
 func (s *Store) GetFavoriteModel() (*Model, error) {
 	m := &Model{}
-	query := `SELECT id, provider_id, name, api_key, url, endpoint, access_key_id, secret_access_key, default_asset_group_id, active, favorite, created_at, updated_at, deleted_at
+	query := `SELECT id, provider_id, name, model_type, api_key, url, endpoint, access_key_id, secret_access_key, default_asset_group_id, active, favorite, created_at, updated_at, deleted_at
 		FROM models WHERE favorite = TRUE AND deleted_at IS NULL LIMIT 1`
-	err := s.db.QueryRow(query).Scan(&m.ID, &m.ProviderID, &m.Name, &m.APIKey, &m.URL, &m.Endpoint,
+	err := s.db.QueryRow(query).Scan(&m.ID, &m.ProviderID, &m.Name, &m.ModelType, &m.APIKey, &m.URL, &m.Endpoint,
 		&m.AccessKeyID, &m.SecretAccessKey, &m.DefaultAssetGroupID,
 		&m.Active, &m.Favorite, &m.CreatedAt, &m.UpdatedAt, &m.DeletedAt)
 	if err != nil {

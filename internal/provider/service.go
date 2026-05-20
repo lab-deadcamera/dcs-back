@@ -64,10 +64,18 @@ func (s *Service) CreateModel(req CreateModelRequest) (*Model, error) {
 	if req.Active != nil {
 		active = *req.Active
 	}
+	modelType := req.ModelType
+	if modelType == "" {
+		modelType = string(ModelTypeVideo)
+	} else if !IsValidModelType(modelType) {
+		return nil, fmt.Errorf("invalid model_type: %q (valid: video, text, audio, image)", modelType)
+	}
+
 	m := &Model{
 		ID:                  uuid.New().String(),
 		ProviderID:          req.ProviderID,
 		Name:                req.Name,
+		ModelType:           modelType,
 		APIKey:              req.APIKey,
 		URL:                 req.URL,
 		Endpoint:            req.Endpoint,
@@ -90,8 +98,8 @@ func (s *Service) GetModelByName(name string) (*Model, error) {
 	return s.store.GetModelByName(name)
 }
 
-func (s *Service) ListModels() ([]ModelWithProvider, error) {
-	return s.store.ListModels()
+func (s *Service) ListModels(modelType string) ([]ModelWithProvider, error) {
+	return s.store.ListModels(modelType)
 }
 
 func (s *Service) ListModelsByProvider(providerID string) ([]Model, error) {
@@ -130,6 +138,12 @@ func (s *Service) UpdateModel(id string, req UpdateModelRequest) (*Model, error)
 	}
 	if req.Active != nil {
 		updates["active"] = *req.Active
+	}
+	if req.ModelType != nil {
+		if !IsValidModelType(*req.ModelType) {
+			return nil, fmt.Errorf("invalid model_type: %q (valid: video, text, audio, image)", *req.ModelType)
+		}
+		updates["model_type"] = *req.ModelType
 	}
 	if len(updates) == 0 {
 		return s.store.GetModelByID(id)

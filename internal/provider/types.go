@@ -2,6 +2,27 @@ package provider
 
 import "time"
 
+// ModelType enumerates the supported model categories.
+type ModelType string
+
+const (
+	ModelTypeVideo ModelType = "video"
+	ModelTypeText  ModelType = "text"
+	ModelTypeAudio ModelType = "audio"
+	ModelTypeImage ModelType = "image"
+)
+
+var validModelTypes = map[ModelType]bool{
+	ModelTypeVideo: true,
+	ModelTypeText:  true,
+	ModelTypeAudio: true,
+	ModelTypeImage: true,
+}
+
+func IsValidModelType(t string) bool {
+	return validModelTypes[ModelType(t)]
+}
+
 type Provider struct {
 	ID        string     `json:"id"`
 	Name      string     `json:"name"`
@@ -15,6 +36,7 @@ type Model struct {
 	ID                  string     `json:"id"`
 	ProviderID          string     `json:"provider_id"`
 	Name                string     `json:"name"`
+	ModelType           string     `json:"model_type"`
 	APIKey              string     `json:"api_key"`
 	URL                 string     `json:"url"`
 	Endpoint            string     `json:"endpoint"`
@@ -50,6 +72,7 @@ type UpdateProviderRequest struct {
 type CreateModelRequest struct {
 	ProviderID          string `json:"provider_id" binding:"required"`
 	Name                string `json:"name" binding:"required"`
+	ModelType           string `json:"model_type"`
 	APIKey              string `json:"api_key" binding:"required"`
 	URL                 string `json:"url" binding:"required"`
 	Endpoint            string `json:"endpoint" binding:"required"`
@@ -61,6 +84,7 @@ type CreateModelRequest struct {
 
 type UpdateModelRequest struct {
 	Name                *string `json:"name"`
+	ModelType           *string `json:"model_type"`
 	APIKey              *string `json:"api_key"`
 	URL                 *string `json:"url"`
 	Endpoint            *string `json:"endpoint"`

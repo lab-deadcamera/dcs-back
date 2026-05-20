@@ -119,7 +119,8 @@ func (h *Handler) GetModel(c *gin.Context) {
 }
 
 func (h *Handler) ListModels(c *gin.Context) {
-	models, err := h.svc.ListModels()
+	modelType := c.Query("model_type")
+	models, err := h.svc.ListModels(modelType)
 	if err != nil {
 		utils.InternalError(c, err.Error())
 		return
