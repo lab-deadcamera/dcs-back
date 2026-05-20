@@ -82,6 +82,8 @@ func (s *Service) CreateModel(req CreateModelRequest) (*Model, error) {
 		AccessKeyID:         req.AccessKeyID,
 		SecretAccessKey:     req.SecretAccessKey,
 		DefaultAssetGroupID: req.DefaultAssetGroupID,
+		ProjectName:         req.ProjectName,
+		ProjectNumber:       req.ProjectNumber,
 		Active:              active,
 	}
 	if err := s.store.CreateModel(m); err != nil {
@@ -135,6 +137,12 @@ func (s *Service) UpdateModel(id string, req UpdateModelRequest) (*Model, error)
 	}
 	if req.DefaultAssetGroupID != nil {
 		updates["default_asset_group_id"] = *req.DefaultAssetGroupID
+	}
+	if req.ProjectName != nil {
+		updates["project_name"] = *req.ProjectName
+	}
+	if req.ProjectNumber != nil {
+		updates["project_number"] = *req.ProjectNumber
 	}
 	if req.Active != nil {
 		updates["active"] = *req.Active

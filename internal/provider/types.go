@@ -43,6 +43,8 @@ type Model struct {
 	AccessKeyID         string     `json:"access_key_id"`
 	SecretAccessKey     string     `json:"secret_access_key"`
 	DefaultAssetGroupID string     `json:"default_asset_group_id"`
+	ProjectName         string     `json:"project_name"`
+	ProjectNumber       string     `json:"project_number"`
 	Active              bool       `json:"active"`
 	Favorite            bool       `json:"favorite"`
 	CreatedAt           time.Time  `json:"created_at"`
@@ -79,6 +81,8 @@ type CreateModelRequest struct {
 	AccessKeyID         string `json:"access_key_id"`
 	SecretAccessKey     string `json:"secret_access_key"`
 	DefaultAssetGroupID string `json:"default_asset_group_id"`
+	ProjectName         string `json:"project_name"`
+	ProjectNumber       string `json:"project_number"`
 	Active              *bool  `json:"active"`
 }
 
@@ -91,5 +95,7 @@ type UpdateModelRequest struct {
 	AccessKeyID         *string `json:"access_key_id"`
 	SecretAccessKey     *string `json:"secret_access_key"`
 	DefaultAssetGroupID *string `json:"default_asset_group_id"`
+	ProjectName         *string `json:"project_name"`
+	ProjectNumber       *string `json:"project_number"`
 	Active              *bool   `json:"active"`
 }
