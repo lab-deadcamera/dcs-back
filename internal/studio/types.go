@@ -9,22 +9,22 @@ import (
 // ─── Legacy types (Selection-based) ─────────────────────────────
 
 type Selection struct {
-	UserPrompt   string            `json:"userPrompt"`
-	ModelID      string            `json:"model_id" binding:"required"`
-	Duration     float64           `json:"duration"`
-	SoundOn      *bool             `json:"soundOn"`
-	AspectRatio  *SelectionField   `json:"aspectRatio"`
-	Resolution   *SelectionField   `json:"resolution"`
-	CameraMotion *SelectionPrompt  `json:"cameraMotion"`
-	Camera       *SelectionPrompt  `json:"camera"`
-	Lens         *SelectionPrompt  `json:"lens"`
-	ColorGrading *SelectionPrompt  `json:"colorGrading"`
-	Genre        *SelectionPrompt  `json:"genre"`
-	FirstFrame   *DataRef          `json:"firstFrame"`
-	LastFrame    *DataRef          `json:"lastFrame"`
-	RefImages    []DataRef         `json:"refImages"`
-	RefVideos    []DataRef         `json:"refVideos"`
-	RefAudios    []DataRef         `json:"refAudios"`
+	UserPrompt   string           `json:"userPrompt"`
+	ModelID      string           `json:"model_id" binding:"required"`
+	Duration     float64          `json:"duration"`
+	SoundOn      *bool            `json:"soundOn"`
+	AspectRatio  *SelectionField  `json:"aspectRatio"`
+	Resolution   *SelectionField  `json:"resolution"`
+	CameraMotion *SelectionPrompt `json:"cameraMotion"`
+	Camera       *SelectionPrompt `json:"camera"`
+	Lens         *SelectionPrompt `json:"lens"`
+	ColorGrading *SelectionPrompt `json:"colorGrading"`
+	Genre        *SelectionPrompt `json:"genre"`
+	FirstFrame   *DataRef         `json:"firstFrame"`
+	LastFrame    *DataRef         `json:"lastFrame"`
+	RefImages    []DataRef        `json:"refImages"`
+	RefVideos    []DataRef        `json:"refVideos"`
+	RefAudios    []DataRef        `json:"refAudios"`
 }
 
 type SelectionField struct {
@@ -47,9 +47,9 @@ type DataRef struct {
 // DataURL is set by resolveContent() before passing to the generator pipeline.
 type ContentItem struct {
 	Type    string `json:"type" binding:"required"` // "text", "image", "video", "audio"
-	Text    string `json:"text,omitempty"`           // prompt text or asset description
-	Name    string `json:"name,omitempty"`           // original filename (file types)
-	ID      string `json:"id,omitempty"`             // file UUID from the file store
+	Text    string `json:"text,omitempty"`          // prompt text or asset description
+	Name    string `json:"name,omitempty"`          // original filename (file types)
+	ID      string `json:"id,omitempty"`            // file UUID from the file store
 	DataURL string `json:"-"`                       // resolved data URL (populated by service)
 }
 
@@ -202,6 +202,7 @@ type SyncAssetResponse struct {
 	AssetGroupID string `json:"asset_group_id,omitempty"`
 	Status       string `json:"status"`
 	ErrorMessage string `json:"error_message,omitempty"`
+	ReferenceURI string `json:"reference_uri,omitempty"`
 }
 
 // ─── In-memory task tracking ────────────────────────────────────
@@ -228,9 +229,9 @@ type GenerationLog struct {
 	SceneID       string     `json:"scene_id,omitempty"`
 	SceneCode     string     `json:"scene_code,omitempty"`
 	TakeNumber    int        `json:"take_number,omitempty"`
-	Request       string     `json:"request"`                     // original client payload (JSON)
-	AIResponse    string     `json:"ai_response"`                 // raw AI API response (JSON)
-	AICallPayload string     `json:"ai_call_payload,omitempty"`  // payload sent to AI API (JSON)
+	Request       string     `json:"request"`                   // original client payload (JSON)
+	AIResponse    string     `json:"ai_response"`               // raw AI API response (JSON)
+	AICallPayload string     `json:"ai_call_payload,omitempty"` // payload sent to AI API (JSON)
 	Outputs       string     `json:"outputs,omitempty"`
 	Status        string     `json:"status"`
 	ErrorMessage  string     `json:"error_message,omitempty"`

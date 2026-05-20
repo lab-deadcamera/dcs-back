@@ -1,4 +1,4 @@
-﻿package studio
+package studio
 
 import (
 	"encoding/json"
@@ -27,22 +27,22 @@ type PipelineRunner interface {
 }
 
 type Service struct {
-	providerStore      *provider.Store
-	fileService        *file.Service
-	charService        *character.Service
-	outputsDir         string
-	handlers           []ModelHandler
-	pipelineGens       []PipelineRunner
-	tasks              map[string]*TaskRecord
-	assetSyncStore     *AssetSyncStore
-	baseURL            string
-	logStore           *GenerationLogStore
-	commStore          *ServerCommunicationStore
-	assetStore         *GeneratedAssetStore
+	providerStore        *provider.Store
+	fileService          *file.Service
+	charService          *character.Service
+	outputsDir           string
+	handlers             []ModelHandler
+	pipelineGens         []PipelineRunner
+	tasks                map[string]*TaskRecord
+	assetSyncStore       *AssetSyncStore
+	baseURL              string
+	logStore             *GenerationLogStore
+	commStore            *ServerCommunicationStore
+	assetStore           *GeneratedAssetStore
 	assetAccessKeyID     string
 	assetSecretAccessKey string
 	assetDefaultGroupID  string
-	mu                 sync.RWMutex
+	mu                   sync.RWMutex
 }
 
 func NewService(providerStore *provider.Store, fileService *file.Service, outputsDir, baseURL string) *Service {
@@ -239,38 +239,38 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-		genStart := time.Now()
-		result, err := gen.Generate(genReq)
-		genDur := time.Since(genStart).Milliseconds()
+	genStart := time.Now()
+	result, err := gen.Generate(genReq)
+	genDur := time.Since(genStart).Milliseconds()
 
-		// Log server communication
-		if s.commStore != nil {
-			reqBody, _ := json.Marshal(genReq)
-			respBody := ""
-			genStatus := 200
-			if err != nil {
-				genStatus = 0
-				respBody = err.Error()
-			} else if result != nil && result.Raw != nil {
-				rawBytes, _ := json.Marshal(result.Raw)
-				respBody = string(rawBytes)
-			}
-			errMsg := ""
-			if err != nil {
-				errMsg = err.Error()
-			}
-			s.commStore.Create(&ServerCommunication{
-				ModelName:    m.Name,
-				Endpoint:     m.URL + m.Endpoint,
-				Method:       "POST",
-				RequestBody:  string(reqBody),
-				ResponseBody: respBody,
-				StatusCode:   genStatus,
-				DurationMs:   genDur,
-				ErrorMessage: errMsg,
-			})
+	// Log server communication
+	if s.commStore != nil {
+		reqBody, _ := json.Marshal(genReq)
+		respBody := ""
+		genStatus := 200
+		if err != nil {
+			genStatus = 0
+			respBody = err.Error()
+		} else if result != nil && result.Raw != nil {
+			rawBytes, _ := json.Marshal(result.Raw)
+			respBody = string(rawBytes)
 		}
-		log.Printf("[generate-unified] gen.Generate dur=%dms err=%v", genDur, err != nil)
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		}
+		s.commStore.Create(&ServerCommunication{
+			ModelName:    m.Name,
+			Endpoint:     m.URL + m.Endpoint,
+			Method:       "POST",
+			RequestBody:  string(reqBody),
+			ResponseBody: respBody,
+			StatusCode:   genStatus,
+			DurationMs:   genDur,
+			ErrorMessage: errMsg,
+		})
+	}
+	log.Printf("[generate-unified] gen.Generate dur=%dms err=%v", genDur, err != nil)
 
 	// Capture result data for the log
 	genReqBytes, _ := json.Marshal(genReq)
@@ -411,11 +411,11 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 	// Upload to the asset library
 	log.Printf("[sync-asset] calling CreateAsset url=%q filename=%q type=%q", fileURL, f.Filename, detectAssetType(f.MimeType))
 	api := NewAssetAPI(ak, sk, groupID)
-		api.SetCommStore(s.commStore)
+	api.SetCommStore(s.commStore)
 	result, err := api.CreateAsset(fileURL, f.Filename, detectAssetType(f.MimeType), "")
 	if err != nil {
 		log.Printf("[sync-asset] CreateAsset FAILED: %v", err)
-		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error(), "", "", "")
+		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error(), "", "", "", "")
 		return &SyncAssetResponse{
 			ID:           record.ID,
 			ModelID:      req.ModelID,
@@ -434,6 +434,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 	assetStatus := ""
 	assetURL := ""
 	assetType := ""
+	referenceURI := ""
 	for i := 0; i < 20; i++ {
 		statusResult, err := api.GetAsset(assetID, "")
 		if err != nil {
@@ -455,6 +456,9 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 		time.Sleep(3 * time.Second)
 	}
 
+	// Construir la URI de referencia según el tipo de modelo
+	referenceURI = BuildReferenceURI(m.Name, assetID, assetURL)
+
 	finalStatus := "active"
 	errMsg := ""
 	if assetStatus != "Active" {
@@ -466,7 +470,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 	}
 
 	// Update the record
-	if err := s.assetSyncStore.UpdateStatus(record.ID, finalStatus, errMsg, assetID, assetURL, assetType); err != nil {
+	if err := s.assetSyncStore.UpdateStatus(record.ID, finalStatus, errMsg, assetID, assetURL, assetType, referenceURI); err != nil {
 		return nil, fmt.Errorf("failed to update sync status: %w", err)
 	}
 
@@ -475,6 +479,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 	record.ErrorMessage = errMsg
 	record.AssetURL = assetURL
 	record.AssetType = assetType
+	record.ReferenceURI = referenceURI
 
 	log.Printf("[sync-asset] SyncAsset done record_id=%s asset_id=%s status=%s", record.ID, assetID, finalStatus)
 	return &SyncAssetResponse{
@@ -485,6 +490,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 		AssetGroupID: groupID,
 		Status:       finalStatus,
 		ErrorMessage: errMsg,
+		ReferenceURI: referenceURI,
 	}, nil
 }
 
@@ -674,7 +680,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 
 	// Create API client (with or without existing group)
 	api := NewAssetAPI(ak, sk, groupID)
-		api.SetCommStore(s.commStore)
+	api.SetCommStore(s.commStore)
 
 	// Create asset group only if none exists for this character+model
 	if groupID == "" {
@@ -690,7 +696,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 		}
 		log.Printf("[sync-char] created asset group id=%s", groupID)
 		api = NewAssetAPI(ak, sk, groupID)
-			api.SetCommStore(s.commStore)
+		api.SetCommStore(s.commStore)
 	}
 
 	// Process each file â€” skip if already synced, upload if new or failed
@@ -711,6 +717,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 					AssetID:      a.AssetID,
 					AssetGroupID: groupID,
 					Status:       "active",
+					ReferenceURI: a.ReferenceURI,
 				})
 				break
 			}
@@ -721,7 +728,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 
 		// Not synced or previously failed â€” upload
 		log.Printf("[sync-char] uploading file %q to group %s", cf.FileID, groupID)
-		r, err := s.uploadAndTrackAsset(req.ModelID, cf.FileID, groupID, api)
+		r, err := s.uploadAndTrackAsset(req.ModelID, cf.FileID, groupID, m.Name, api)
 		if err != nil {
 			log.Printf("[sync-char] uploadAndTrackAsset FAILED file=%q err=%v", cf.FileID, err)
 			results = append(results, SyncAssetResponse{
@@ -755,7 +762,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 
 // uploadAndTrackAsset uploads a file to the BytePlus asset library via CreateAsset,
 // polls until Active or Failed, and stores the mapping in model_assets.
-func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *AssetAPI) (*SyncAssetResponse, error) {
+func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID, modelName string, api *AssetAPI) (*SyncAssetResponse, error) {
 	if s.assetSyncStore == nil {
 		return nil, fmt.Errorf("asset sync store not available")
 	}
@@ -786,7 +793,7 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *Asse
 	// Upload to the asset library
 	result, err := api.CreateAsset(fileURL, f.Filename, detectAssetType(f.MimeType), "")
 	if err != nil {
-		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error(), "", "", "")
+		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error(), "", "", "", "")
 		return &SyncAssetResponse{
 			ID:           record.ID,
 			ModelID:      modelID,
@@ -803,6 +810,7 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *Asse
 	assetStatus := ""
 	assetURL := ""
 	assetType := ""
+	referenceURI := ""
 	for i := 0; i < 20; i++ {
 		statusResult, err := api.GetAsset(assetID, "")
 		if err != nil {
@@ -822,6 +830,9 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *Asse
 		time.Sleep(3 * time.Second)
 	}
 
+	// Construir la URI de referencia según el tipo de modelo
+	referenceURI = BuildReferenceURI(modelName, assetID, assetURL)
+
 	finalStatus := "active"
 	errMsg := ""
 	if assetStatus != "Active" {
@@ -830,7 +841,7 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *Asse
 	}
 
 	// Update the record
-	if err := s.assetSyncStore.UpdateStatus(record.ID, finalStatus, errMsg, assetID, assetURL, assetType); err != nil {
+	if err := s.assetSyncStore.UpdateStatus(record.ID, finalStatus, errMsg, assetID, assetURL, assetType, referenceURI); err != nil {
 		return nil, fmt.Errorf("failed to update sync status: %w", err)
 	}
 
@@ -838,6 +849,7 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *Asse
 	record.ErrorMessage = errMsg
 	record.AssetURL = assetURL
 	record.AssetType = assetType
+	record.ReferenceURI = referenceURI
 
 	return &SyncAssetResponse{
 		ID:           record.ID,
@@ -847,6 +859,7 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID string, api *Asse
 		AssetGroupID: groupID,
 		Status:       finalStatus,
 		ErrorMessage: errMsg,
+		ReferenceURI: referenceURI,
 	}, nil
 }
 
@@ -920,34 +933,34 @@ func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
 
 	result, err := gen.GetStatus(log.TaskID, m.APIKey, m.URL, m.Endpoint)
 
-		// Log server communication
-		if s.commStore != nil {
-			reqBytes, _ := json.Marshal(map[string]string{"task_id": log.TaskID})
-			respBody := ""
-			genStatus := 200
-			if err != nil {
-				genStatus = 0
-				respBody = err.Error()
-			} else if result != nil && result.Raw != nil {
-				rawBytes, _ := json.Marshal(result.Raw)
-				respBody = string(rawBytes)
-			}
-			errMsg := ""
-			if err != nil {
-				errMsg = err.Error()
-			}
-			s.commStore.Create(&ServerCommunication{
-				TaskID:       log.TaskID,
-				ModelName:    m.Name,
-				Endpoint:     m.URL + m.Endpoint,
-				Method:       "GET",
-				RequestBody:  string(reqBytes),
-				ResponseBody: respBody,
-				StatusCode:   genStatus,
-				ErrorMessage: errMsg,
-			})
+	// Log server communication
+	if s.commStore != nil {
+		reqBytes, _ := json.Marshal(map[string]string{"task_id": log.TaskID})
+		respBody := ""
+		genStatus := 200
+		if err != nil {
+			genStatus = 0
+			respBody = err.Error()
+		} else if result != nil && result.Raw != nil {
+			rawBytes, _ := json.Marshal(result.Raw)
+			respBody = string(rawBytes)
 		}
-		fmt.Printf("[status-from-log] gen.GetStatus err=%v", err != nil)
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		}
+		s.commStore.Create(&ServerCommunication{
+			TaskID:       log.TaskID,
+			ModelName:    m.Name,
+			Endpoint:     m.URL + m.Endpoint,
+			Method:       "GET",
+			RequestBody:  string(reqBytes),
+			ResponseBody: respBody,
+			StatusCode:   genStatus,
+			ErrorMessage: errMsg,
+		})
+	}
+	fmt.Printf("[status-from-log] gen.GetStatus err=%v", err != nil)
 	if err != nil {
 		// Error consultando al generator, devolver el estado del log
 		return &StatusResult{Status: log.Status, Error: err.Error()}, nil
@@ -1004,34 +1017,34 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	if gen != nil {
 		result, err := gen.GetStatus(taskID, m.APIKey, m.URL, m.Endpoint)
 
-			// Log server communication
-			if s.commStore != nil {
-				reqBytes, _ := json.Marshal(map[string]string{"task_id": taskID})
-				respBody := ""
-				genStatus := 200
-				if err != nil {
-					genStatus = 0
-					respBody = err.Error()
-				} else if result != nil && result.Raw != nil {
-					rawBytes, _ := json.Marshal(result.Raw)
-					respBody = string(rawBytes)
-				}
-				errMsg := ""
-				if err != nil {
-					errMsg = err.Error()
-				}
-				s.commStore.Create(&ServerCommunication{
-					TaskID:       taskID,
-					ModelName:    m.Name,
-					Endpoint:     m.URL + m.Endpoint,
-					Method:       "GET",
-					RequestBody:  string(reqBytes),
-					ResponseBody: respBody,
-					StatusCode:   genStatus,
-					ErrorMessage: errMsg,
-				})
+		// Log server communication
+		if s.commStore != nil {
+			reqBytes, _ := json.Marshal(map[string]string{"task_id": taskID})
+			respBody := ""
+			genStatus := 200
+			if err != nil {
+				genStatus = 0
+				respBody = err.Error()
+			} else if result != nil && result.Raw != nil {
+				rawBytes, _ := json.Marshal(result.Raw)
+				respBody = string(rawBytes)
 			}
-			log.Printf("[get-status] gen.GetStatus err=%v", err != nil)
+			errMsg := ""
+			if err != nil {
+				errMsg = err.Error()
+			}
+			s.commStore.Create(&ServerCommunication{
+				TaskID:       taskID,
+				ModelName:    m.Name,
+				Endpoint:     m.URL + m.Endpoint,
+				Method:       "GET",
+				RequestBody:  string(reqBytes),
+				ResponseBody: respBody,
+				StatusCode:   genStatus,
+				ErrorMessage: errMsg,
+			})
+		}
+		log.Printf("[get-status] gen.GetStatus err=%v", err != nil)
 		if err != nil {
 			return nil, err
 		}
@@ -1052,9 +1065,9 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 
 			// Update generation log with final AI response
 			s.updateLogWithFinalStatus(taskID, result)
-if result.Status == "succeeded" {
-					s.saveGeneratedAssets(taskID, result)
-				}
+			if result.Status == "succeeded" {
+				s.saveGeneratedAssets(taskID, result)
+			}
 		}
 		return statusResult, nil
 	}
@@ -1310,7 +1323,8 @@ func (s *Service) resolveContent(items []ContentItem, modelID string) ([]Content
 			if modelID != "" && s.assetSyncStore != nil {
 				synced, err := s.assetSyncStore.GetByModelAndFile(modelID, item.ID)
 				if err == nil && synced != nil && synced.Status == "active" && synced.AssetID != "" {
-					ci.DataURL = "asset://" + synced.AssetID
+					// Usar la reference_uri específica del modelo (asset:// para gallery, URL directa para otros)
+					ci.DataURL = synced.ReferenceURI
 					resolved[i] = ci
 					continue
 				}
@@ -1421,7 +1435,7 @@ func (s *Service) GallerySyncContent(items []ContentItem, modelName string) ([]C
 		synced, err := s.assetSyncStore.GetByModelAndFile(m.ID, item.ID)
 		if err == nil && synced != nil && synced.Status == "active" && synced.AssetID != "" {
 			log.Printf("[gallery-sync] item[%d] already synced asset_id=%s", i, synced.AssetID)
-			result[i].DataURL = "asset://" + synced.AssetID
+			result[i].DataURL = synced.ReferenceURI
 			continue
 		}
 		log.Printf("[gallery-sync] item[%d] not synced yet, checking character linkage", i)
@@ -1433,7 +1447,7 @@ func (s *Service) GallerySyncContent(items []ContentItem, modelName string) ([]C
 			log.Printf("[gallery-sync] item[%d] belongs to characters %v, syncing character assets", i, charIDs)
 			for _, charID := range charIDs {
 				if _, syncErr := s.SyncCharacterAssets(&SyncCharacterRequest{
-					ModelID: m.ID,
+					ModelID:     m.ID,
 					CharacterID: charID,
 				}); syncErr != nil {
 					log.Printf("[gallery-sync] item[%d] SyncCharacterAssets(%s) error: %v", i, charID, syncErr)
@@ -1443,7 +1457,7 @@ func (s *Service) GallerySyncContent(items []ContentItem, modelName string) ([]C
 				synced2, _ := s.assetSyncStore.GetByModelAndFile(m.ID, item.ID)
 				if synced2 != nil && synced2.Status == "active" && synced2.AssetID != "" {
 					log.Printf("[gallery-sync] item[%d] synced via character %s asset_id=%s", i, charID, synced2.AssetID)
-					result[i].DataURL = "asset://" + synced2.AssetID
+					result[i].DataURL = synced2.ReferenceURI
 					charSynced = true
 					break
 				}
@@ -1460,7 +1474,7 @@ func (s *Service) GallerySyncContent(items []ContentItem, modelName string) ([]C
 			})
 			if err == nil && resp.Status == "active" && resp.AssetID != "" {
 				log.Printf("[gallery-sync] item[%d] single file sync OK asset_id=%s", i, resp.AssetID)
-				result[i].DataURL = "asset://" + resp.AssetID
+				result[i].DataURL = resp.ReferenceURI
 			} else if err != nil {
 				log.Printf("[gallery-sync] item[%d] single file sync FAILED err=%v", i, err)
 			} else {

@@ -9,19 +9,24 @@ import (
 	"github.com/google/uuid"
 )
 
-// ModelAsset represents a file that has been synced to a model's asset library.
+// ModelAsset representa un archivo sincronizado con la galería de un modelo.
+// Cada modelo puede tener su propio formato de referencia:
+//
+//	Modelos "gallery" (BytePlus) → ReferenceURI = "asset://" + AssetID
+//	Otros modelos              → ReferenceURI = AssetURL (CDN)
 type ModelAsset struct {
-	ID            string    `json:"id"`
-	ModelID       string    `json:"model_id"`
-	FileID        string    `json:"file_id"`
-	AssetID       string    `json:"asset_id"`
-	AssetGroupID  string    `json:"asset_group_id"`
-	Status        string    `json:"status"` // "syncing", "active", "failed"
-	ErrorMessage  string    `json:"error_message,omitempty"`
-	AssetURL      string    `json:"asset_url,omitempty"`
-	AssetType     string    `json:"asset_type,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	ModelID      string    `json:"model_id"`
+	FileID       string    `json:"file_id"`
+	AssetID      string    `json:"asset_id"`
+	AssetGroupID string    `json:"asset_group_id"`
+	Status       string    `json:"status"` // "syncing", "active", "failed"
+	ErrorMessage string    `json:"error_message,omitempty"`
+	AssetURL     string    `json:"asset_url,omitempty"`
+	AssetType    string    `json:"asset_type,omitempty"`
+	ReferenceURI string    `json:"reference_uri,omitempty"` // URI lista para usar según el tipo de modelo
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // ─── Queries ─────────────────────────────────────────────────────
@@ -31,17 +36,17 @@ const (
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at, updated_at`
 
-	getModelAssetSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, created_at, updated_at
+	getModelAssetSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, reference_uri, created_at, updated_at
 		FROM model_assets WHERE id = $1`
 
-	getModelAssetByFileSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, created_at, updated_at
+	getModelAssetByFileSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, reference_uri, created_at, updated_at
 		FROM model_assets WHERE model_id = $1 AND file_id = $2 ORDER BY created_at DESC LIMIT 1`
 
-	listModelAssetsSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, created_at, updated_at
+	listModelAssetsSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, reference_uri, created_at, updated_at
 		FROM model_assets WHERE model_id = $1 ORDER BY created_at DESC`
 
-	updateModelAssetStatusSQL = `UPDATE model_assets SET status = $1, error_message = $2, asset_id = $3, asset_url = $4, asset_type = $5, updated_at = NOW()
-		WHERE id = $6`
+	updateModelAssetStatusSQL = `UPDATE model_assets SET status = $1, error_message = $2, asset_id = $3, asset_url = $4, asset_type = $5, reference_uri = $6, updated_at = NOW()
+		WHERE id = $7`
 
 	deleteModelAssetSQL = `DELETE FROM model_assets WHERE id = $1`
 )
@@ -68,7 +73,7 @@ func (s *AssetSyncStore) Create(ma *ModelAsset) error {
 func (s *AssetSyncStore) GetByID(id string) (*ModelAsset, error) {
 	ma := &ModelAsset{}
 	err := s.db.QueryRow(getModelAssetSQL, id).Scan(&ma.ID, &ma.ModelID, &ma.FileID, &ma.AssetID,
-		&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.CreatedAt, &ma.UpdatedAt)
+		&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.ReferenceURI, &ma.CreatedAt, &ma.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -81,7 +86,7 @@ func (s *AssetSyncStore) GetByID(id string) (*ModelAsset, error) {
 func (s *AssetSyncStore) GetByModelAndFile(modelID, fileID string) (*ModelAsset, error) {
 	ma := &ModelAsset{}
 	err := s.db.QueryRow(getModelAssetByFileSQL, modelID, fileID).Scan(&ma.ID, &ma.ModelID, &ma.FileID, &ma.AssetID,
-		&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.CreatedAt, &ma.UpdatedAt)
+		&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.ReferenceURI, &ma.CreatedAt, &ma.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -102,7 +107,7 @@ func (s *AssetSyncStore) ListByModel(modelID string) ([]ModelAsset, error) {
 	for rows.Next() {
 		var ma ModelAsset
 		if err := rows.Scan(&ma.ID, &ma.ModelID, &ma.FileID, &ma.AssetID,
-			&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.CreatedAt, &ma.UpdatedAt); err != nil {
+			&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.ReferenceURI, &ma.CreatedAt, &ma.UpdatedAt); err != nil {
 			return nil, err
 		}
 		assets = append(assets, ma)
@@ -110,8 +115,10 @@ func (s *AssetSyncStore) ListByModel(modelID string) ([]ModelAsset, error) {
 	return assets, nil
 }
 
-func (s *AssetSyncStore) UpdateStatus(id, status, errorMessage, assetID, assetURL, assetType string) error {
-	_, err := s.db.Exec(updateModelAssetStatusSQL, status, errorMessage, assetID, assetURL, assetType, id)
+// UpdateStatus persiste el resultado final de una sincronización.
+// referenceURI es la URI específica del modelo (asset://id, URL directa, etc.).
+func (s *AssetSyncStore) UpdateStatus(id, status, errorMessage, assetID, assetURL, assetType, referenceURI string) error {
+	_, err := s.db.Exec(updateModelAssetStatusSQL, status, errorMessage, assetID, assetURL, assetType, referenceURI, id)
 	return err
 }
 
@@ -135,7 +142,7 @@ func (s *AssetSyncStore) GetByFileIDs(fileIDs []string) (map[string][]ModelAsset
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
 
-	query := fmt.Sprintf(`SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, created_at, updated_at
+	query := fmt.Sprintf(`SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, reference_uri, created_at, updated_at
 		FROM model_assets WHERE file_id IN (%s) AND status = 'active' ORDER BY created_at DESC`,
 		strings.Join(placeholders, ","))
 
@@ -148,7 +155,7 @@ func (s *AssetSyncStore) GetByFileIDs(fileIDs []string) (map[string][]ModelAsset
 	for rows.Next() {
 		var ma ModelAsset
 		if err := rows.Scan(&ma.ID, &ma.ModelID, &ma.FileID, &ma.AssetID,
-			&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.CreatedAt, &ma.UpdatedAt); err != nil {
+			&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.ReferenceURI, &ma.CreatedAt, &ma.UpdatedAt); err != nil {
 			return nil, err
 		}
 		result[ma.FileID] = append(result[ma.FileID], ma)
