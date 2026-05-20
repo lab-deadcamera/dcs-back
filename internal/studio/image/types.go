@@ -19,11 +19,11 @@ type GenerateRequest struct {
 	Quality   string        `json:"quality"`
 	Quantity  int           `json:"quantity"`
 	Watermark *bool         `json:"watermark"`
-	// Session tracking
-	ProjectID  string `json:"project_id" binding:"required"`
-	SceneID    string `json:"scene_id" binding:"required"`
-	SceneCode  string `json:"scene_code" binding:"required"`
-	TakeNumber int    `json:"take_number" binding:"required"`
+	// Session tracking — opcional para el panel de imágenes standalone
+	ProjectID  string `json:"project_id"`
+	SceneID    string `json:"scene_id"`
+	SceneCode  string `json:"scene_code"`
+	TakeNumber int    `json:"take_number"`
 	UserID     int    `json:"user_id"`
 }
 
