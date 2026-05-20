@@ -1,4 +1,4 @@
-package image
+﻿package image
 
 import (
 	"bytes"
@@ -250,7 +250,7 @@ func (g *GeminiNanoGenerator) Generate(req *studio.GeneratorRequest) (*studio.Ge
 			}
 
 			outputs = append(outputs, studio.OutputResource{
-				URL:  outputFilename,
+				URL:  "/outputs/" + outputFilename,
 				Type: "image",
 			})
 		}
@@ -280,3 +280,4 @@ func (g *GeminiNanoGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string
 func (g *GeminiNanoGenerator) CancelTask(taskID, apiKey, baseURL, endpoint string) error {
 	return nil
 }
+
