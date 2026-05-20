@@ -115,6 +115,7 @@ func main() {
 	studioSvc.RegisterGenerator(videogens.NewSeedanceGenerator(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(videogens.NewSeedanceGalleryGenerator(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(studioimage.NewSeedreamGenerator(cfg.OutputsDir))
+	studioSvc.RegisterGenerator(studioimage.NewGeminiNanoGenerator(cfg.OutputsDir))
 	studioHdl := studio.NewHandler(studioSvc)
 
 	vidSvc := studiovideo.NewService(studioSvc)
