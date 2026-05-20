@@ -10,17 +10,17 @@ import (
 
 // ServerCommunication stores a trace of every request sent to an external AI API.
 type ServerCommunication struct {
-	ID           string     `json:"id"`
-	TaskID       string     `json:"task_id"`
-	ModelName    string     `json:"model_name"`
-	Endpoint     string     `json:"endpoint"`
-	Method       string     `json:"method"`
-	RequestBody  string     `json:"request_body,omitempty"`
-	ResponseBody string     `json:"response_body,omitempty"`
-	StatusCode   int        `json:"status_code"`
-	DurationMs   int64      `json:"duration_ms"`
-	ErrorMessage string     `json:"error_message,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
+	ID           string    `json:"id"`
+	TaskID       string    `json:"task_id"`
+	ModelName    string    `json:"model_name"`
+	Endpoint     string    `json:"endpoint"`
+	Method       string    `json:"method"`
+	RequestBody  string    `json:"request_body,omitempty"`
+	ResponseBody string    `json:"response_body,omitempty"`
+	StatusCode   int       `json:"status_code"`
+	DurationMs   int64     `json:"duration_ms"`
+	ErrorMessage string    `json:"error_message,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type ServerCommunicationStore struct {

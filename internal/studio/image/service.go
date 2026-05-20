@@ -82,18 +82,18 @@ func toStudioRequest(req *GenerateRequest) *studio.StudioGenerateRequest {
 		}
 	}
 	return &studio.StudioGenerateRequest{
-		Model:     req.Model,
-		Content:   content,
-		Ratio:     req.Ratio,
-		Seed:      req.Seed,
-		Quality:   req.Quality,
-		Quantity:  req.Quantity,
-		Watermark: req.Watermark,
-		ProjectID: req.ProjectID,
-		SceneID:   req.SceneID,
-		SceneCode: req.SceneCode,
+		Model:      req.Model,
+		Content:    content,
+		Ratio:      req.Ratio,
+		Seed:       req.Seed,
+		Quality:    req.Quality,
+		Quantity:   req.Quantity,
+		Watermark:  req.Watermark,
+		ProjectID:  req.ProjectID,
+		SceneID:    req.SceneID,
+		SceneCode:  req.SceneCode,
 		TakeNumber: req.TakeNumber,
-		UserID:    req.UserID,
+		UserID:     req.UserID,
 	}
 }
 

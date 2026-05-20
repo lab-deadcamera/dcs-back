@@ -32,7 +32,7 @@ type CharacterFile struct {
 }
 
 type CharacterWithFiles struct {
-	Character Character        `json:"character"`
+	Character Character       `json:"character"`
 	Files     []CharacterFile `json:"files"`
 }
 

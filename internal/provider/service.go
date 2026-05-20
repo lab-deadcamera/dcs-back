@@ -65,16 +65,16 @@ func (s *Service) CreateModel(req CreateModelRequest) (*Model, error) {
 		active = *req.Active
 	}
 	m := &Model{
-		ID:                 uuid.New().String(),
-		ProviderID:         req.ProviderID,
-		Name:               req.Name,
-		APIKey:             req.APIKey,
-		URL:                req.URL,
-		Endpoint:           req.Endpoint,
-		AccessKeyID:        req.AccessKeyID,
-		SecretAccessKey:    req.SecretAccessKey,
+		ID:                  uuid.New().String(),
+		ProviderID:          req.ProviderID,
+		Name:                req.Name,
+		APIKey:              req.APIKey,
+		URL:                 req.URL,
+		Endpoint:            req.Endpoint,
+		AccessKeyID:         req.AccessKeyID,
+		SecretAccessKey:     req.SecretAccessKey,
 		DefaultAssetGroupID: req.DefaultAssetGroupID,
-		Active:             active,
+		Active:              active,
 	}
 	if err := s.store.CreateModel(m); err != nil {
 		return nil, err

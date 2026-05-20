@@ -45,7 +45,9 @@ const genAssetCols = `id, task_id, COALESCE(model_name, '') AS model_name,
 	COALESCE(file_size, 0) AS file_size, status,
 	confirmed_at, created_at, updated_at, deleted_at`
 
-func (s *GeneratedAssetStore) scanAsset(a *GeneratedAsset, scanner interface{ Scan(dest ...interface{}) error }) error {
+func (s *GeneratedAssetStore) scanAsset(a *GeneratedAsset, scanner interface {
+	Scan(dest ...interface{}) error
+}) error {
 	return scanner.Scan(
 		&a.ID, &a.TaskID, &a.ModelName,
 		&a.UserID, &a.ProjectID, &a.SceneID, &a.SceneCode, &a.TakeNumber,

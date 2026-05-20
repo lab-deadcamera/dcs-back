@@ -5,9 +5,9 @@ package text
 // ContentItem represents a single entry in the content array for text generation.
 type ContentItem struct {
 	Type string `json:"type" binding:"required"` // "text"
-	Text string `json:"text,omitempty"`           // prompt text
-	Name string `json:"name,omitempty"`           // not used for text
-	ID   string `json:"id,omitempty"`             // not used for text
+	Text string `json:"text,omitempty"`          // prompt text
+	Name string `json:"name,omitempty"`          // not used for text
+	ID   string `json:"id,omitempty"`            // not used for text
 }
 
 // GenerateRequest is the payload for POST /studio/text/generate.

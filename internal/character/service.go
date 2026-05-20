@@ -10,9 +10,9 @@ import (
 type FileEnricher func(files []CharacterFile)
 
 type Service struct {
-	store     *Store
-	baseURL   string
-	enricher  FileEnricher
+	store    *Store
+	baseURL  string
+	enricher FileEnricher
 }
 
 func NewService(store *Store, baseURL string) *Service {

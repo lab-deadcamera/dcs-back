@@ -122,9 +122,9 @@ func (h *Handler) List(c *gin.Context) {
 	var result []map[string]string
 	for _, f := range files {
 		result = append(result, map[string]string{
-			"filename":       f,
-			"url":            h.svc.baseURL + "/api/v1/images/" + f,
-			"thumbnail_url":  h.svc.baseURL + "/api/v1/images/thumbnails/" + f,
+			"filename":      f,
+			"url":           h.svc.baseURL + "/api/v1/images/" + f,
+			"thumbnail_url": h.svc.baseURL + "/api/v1/images/thumbnails/" + f,
 		})
 	}
 

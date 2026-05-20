@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	ErrUserExists      = errors.New("username already exists")
-	ErrInvalidCreds    = errors.New("invalid username or password")
-	ErrInsufficientRole = errors.New("insufficient role level")
+	ErrUserExists        = errors.New("username already exists")
+	ErrInvalidCreds      = errors.New("invalid username or password")
+	ErrInsufficientRole  = errors.New("insufficient role level")
 	ErrCannotCreateAdmin = errors.New("only super admin can create admins")
 )
 
@@ -156,17 +156,17 @@ func (s *Service) Login(username, password string) (*TokenResponse, error) {
 	// Generate JWT with role info
 	now := time.Now()
 	claims := jwt.MapClaims{
-		"sub":       user.ID,
-		"username":  user.Username,
-		"name":      user.Name,
-		"surname":   user.Surname,
-		"user_name": user.UserName,
-		"email":     user.Email,
-		"role_id":   user.RoleID,
-		"role_name": role.Name,
+		"sub":        user.ID,
+		"username":   user.Username,
+		"name":       user.Name,
+		"surname":    user.Surname,
+		"user_name":  user.UserName,
+		"email":      user.Email,
+		"role_id":    user.RoleID,
+		"role_name":  role.Name,
 		"role_level": role.Level,
-		"iat":       now.Unix(),
-		"exp":       now.Add(24 * time.Hour).Unix(),
+		"iat":        now.Unix(),
+		"exp":        now.Add(24 * time.Hour).Unix(),
 	}
 
 	tokenStr, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(s.jwtSecret))
@@ -196,10 +196,10 @@ func (s *Service) CreateUser(callerLevel int, req *CreateUserRequest) (*UserResp
 	}
 
 	// Only SUPER_ADMIN (level 0) can create ADMIN (level 1)
-		// SUPER_ADMIN (level 0) is reserved for the seeded user from .env
-		if targetRole.Level == 0 {
-			return nil, errors.New("cannot create SUPER_ADMIN users manually")
-		}
+	// SUPER_ADMIN (level 0) is reserved for the seeded user from .env
+	if targetRole.Level == 0 {
+		return nil, errors.New("cannot create SUPER_ADMIN users manually")
+	}
 	if targetRole.Level == 1 && callerLevel > 0 {
 		return nil, ErrCannotCreateAdmin
 	}

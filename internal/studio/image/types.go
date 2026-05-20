@@ -5,20 +5,20 @@ package image
 // ContentItem represents a single entry in the content array for image generation.
 type ContentItem struct {
 	Type string `json:"type" binding:"required"` // "text", "image", "video"
-	Text string `json:"text,omitempty"`           // prompt text or asset description
-	Name string `json:"name,omitempty"`           // original filename (file types)
-	ID   string `json:"id,omitempty"`             // file UUID from the file store
+	Text string `json:"text,omitempty"`          // prompt text or asset description
+	Name string `json:"name,omitempty"`          // original filename (file types)
+	ID   string `json:"id,omitempty"`            // file UUID from the file store
 }
 
 // GenerateRequest is the payload for POST /studio/image/generate.
 type GenerateRequest struct {
-	Model    string        `json:"model" binding:"required"`
-	Content  []ContentItem `json:"content" binding:"required"`
-	Ratio    string        `json:"ratio"`
-	Seed     string        `json:"seed"`
-	Quality  string        `json:"quality"`
-	Quantity int           `json:"quantity"`
-	Watermark *bool        `json:"watermark"`
+	Model     string        `json:"model" binding:"required"`
+	Content   []ContentItem `json:"content" binding:"required"`
+	Ratio     string        `json:"ratio"`
+	Seed      string        `json:"seed"`
+	Quality   string        `json:"quality"`
+	Quantity  int           `json:"quantity"`
+	Watermark *bool         `json:"watermark"`
 	// Session tracking
 	ProjectID  string `json:"project_id" binding:"required"`
 	SceneID    string `json:"scene_id" binding:"required"`

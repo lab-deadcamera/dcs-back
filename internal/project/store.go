@@ -19,7 +19,9 @@ const projectCols = `id, name, COALESCE(description, '') AS description,
 	COALESCE(metadata, '') AS metadata, active,
 	created_at, updated_at, deleted_at`
 
-func (s *ProjectStore) scanProject(p *Project, scanner interface{ Scan(dest ...interface{}) error }) error {
+func (s *ProjectStore) scanProject(p *Project, scanner interface {
+	Scan(dest ...interface{}) error
+}) error {
 	return scanner.Scan(&p.ID, &p.Name, &p.Description, &p.Metadata, &p.Active, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt)
 }
 
@@ -105,7 +107,9 @@ const sceneCols = `id, project_id, number, COALESCE(name, '') AS name,
 	COALESCE(description, '') AS description, active,
 	created_at, updated_at, deleted_at`
 
-func (s *ProjectStore) scanScene(sc *Scene, scanner interface{ Scan(dest ...interface{}) error }) error {
+func (s *ProjectStore) scanScene(sc *Scene, scanner interface {
+	Scan(dest ...interface{}) error
+}) error {
 	return scanner.Scan(&sc.ID, &sc.ProjectID, &sc.Number, &sc.Name, &sc.Description, &sc.Active, &sc.CreatedAt, &sc.UpdatedAt, &sc.DeletedAt)
 }
 
@@ -192,7 +196,9 @@ const takeCols = `id, scene_id, number, COALESCE(video_url, '') AS video_url,
 	COALESCE(status, 'pending') AS status, active,
 	created_at, updated_at, deleted_at`
 
-func (s *ProjectStore) scanTake(t *Take, scanner interface{ Scan(dest ...interface{}) error }) error {
+func (s *ProjectStore) scanTake(t *Take, scanner interface {
+	Scan(dest ...interface{}) error
+}) error {
 	return scanner.Scan(&t.ID, &t.SceneID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
 }
 

@@ -15,6 +15,12 @@ go build ./...
 
 No tests, linters, or CI config present.
 
+## Format code 
+
+```bash
+go fmt ./...
+```
+
 ## Architecture
 
 All image logic lives in `internal/image/`. No database — purely filesystem-backed.

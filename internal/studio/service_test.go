@@ -3,8 +3,6 @@ package studio
 import (
 	"testing"
 	"time"
-
-	
 )
 
 func TestDetectAssetType(t *testing.T) {
@@ -80,8 +78,8 @@ func TestConvertOutputs_WithResources(t *testing.T) {
 
 func TestListGenerationLogsResponse_PageCalculation(t *testing.T) {
 	tests := []struct {
-		total      int
-		limit      int
+		total     int
+		limit     int
 		wantPages int
 	}{
 		{0, 20, 0},

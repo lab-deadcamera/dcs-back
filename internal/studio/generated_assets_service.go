@@ -2,8 +2,6 @@ package studio
 
 import (
 	"fmt"
-
-	
 )
 
 // saveGeneratedAssets guarda las URLs de salida como GeneratedAssets (status: pending)

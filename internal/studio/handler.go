@@ -39,7 +39,6 @@ func (h *Handler) Generate(c *gin.Context) {
 	utils.Created(c, result)
 }
 
-
 func (h *Handler) GetStatusLegacy(c *gin.Context) {
 	taskID := c.Param("taskId")
 	if taskID == "" {

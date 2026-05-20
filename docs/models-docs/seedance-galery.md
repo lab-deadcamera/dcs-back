@@ -1,4 +1,4 @@
-:::danger danger
+## Seedance 2.0-Gallery 
 
 * The upload asset (CreateAsset) API is asynchronous. System processing may result in queuing, which can increase the time required for storage; higher latency is expected for uploading video.
 * SLA for uploading time is not guaranteed.

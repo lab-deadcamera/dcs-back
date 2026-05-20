@@ -12,19 +12,19 @@ import (
 )
 
 type Service struct {
-	store          *Store
-	thumbnailW     int
-	thumbnailH     int
-	baseURL        string
-	allowedExts    map[string]bool
-	maxFileSize    int64
+	store       *Store
+	thumbnailW  int
+	thumbnailH  int
+	baseURL     string
+	allowedExts map[string]bool
+	maxFileSize int64
 }
 
 type UploadResult struct {
-	Filename      string `json:"filename"`
-	URL           string `json:"url"`
-	ThumbnailURL  string `json:"thumbnail_url"`
-	Size          int64  `json:"size"`
+	Filename     string `json:"filename"`
+	URL          string `json:"url"`
+	ThumbnailURL string `json:"thumbnail_url"`
+	Size         int64  `json:"size"`
 }
 
 func NewService(store *Store, baseURL string, thumbW, thumbH int, allowedExts map[string]bool, maxSize int64) *Service {

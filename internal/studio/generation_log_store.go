@@ -41,7 +41,9 @@ const genLogFromJoins = `FROM generation_logs gl
 
 const genLogCols = genLogBaseCols + ", " + genLogJoinCols
 
-func (s *GenerationLogStore) scanRow(row *GenerationLog, scanner interface{ Scan(dest ...interface{}) error }) error {
+func (s *GenerationLogStore) scanRow(row *GenerationLog, scanner interface {
+	Scan(dest ...interface{}) error
+}) error {
 	return scanner.Scan(
 		&row.ID, &row.TaskID, &row.ModelName,
 		&row.Request, &row.AIResponse, &row.AICallPayload,

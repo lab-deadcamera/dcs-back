@@ -64,7 +64,9 @@ func (s *Store) ListRoles() ([]Role, error) {
 const userCols = `id, username, name, surname, COALESCE(user_name, '') AS user_name,
 	COALESCE(email, '') AS email, role_id, active, created_at, updated_at, deleted_at`
 
-func (s *Store) scanUser(u *User, scanner interface{ Scan(dest ...interface{}) error }) error {
+func (s *Store) scanUser(u *User, scanner interface {
+	Scan(dest ...interface{}) error
+}) error {
 	return scanner.Scan(&u.ID, &u.Username, &u.Name, &u.Surname, &u.UserName, &u.Email, &u.RoleID, &u.Active, &u.CreatedAt, &u.UpdatedAt, &u.DeletedAt)
 }
 

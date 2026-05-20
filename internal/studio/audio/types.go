@@ -5,9 +5,9 @@ package audio
 // ContentItem represents a single entry in the content array for audio generation.
 type ContentItem struct {
 	Type string `json:"type" binding:"required"` // "text", "audio"
-	Text string `json:"text,omitempty"`           // prompt text or asset description
-	Name string `json:"name,omitempty"`           // original filename (file types)
-	ID   string `json:"id,omitempty"`             // file UUID from the file store
+	Text string `json:"text,omitempty"`          // prompt text or asset description
+	Name string `json:"name,omitempty"`          // original filename (file types)
+	ID   string `json:"id,omitempty"`            // file UUID from the file store
 }
 
 // GenerateRequest is the payload for POST /studio/audio/generate.
