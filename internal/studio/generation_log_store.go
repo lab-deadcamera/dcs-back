@@ -107,13 +107,13 @@ func (s *GenerationLogStore) GetByTaskID(taskID string) (*GenerationLog, error) 
 }
 
 // UpdateByTaskID updates a log entry by its task ID (used when async tasks complete).
-func (s *GenerationLogStore) UpdateByTaskID(taskID, aiResponse, outputs, status, errorMessage string) error {
+func (s *GenerationLogStore) UpdateByTaskID(taskID, outputs, status, errorMessage string) error {
 	query := `UPDATE generation_logs
-		SET ai_response = $1, outputs = $2, status = $3, error_message = $4, updated_at = NOW()
-		WHERE task_id = $5 AND deleted_at IS NULL`
+		SET outputs = $1, status = $2, error_message = $3, updated_at = NOW()
+		WHERE task_id = $4 AND deleted_at IS NULL`
 
 	result, err := s.db.Exec(query,
-		nullIfEmpty(aiResponse), nullIfEmpty(outputs), status, nullIfEmpty(errorMessage), taskID,
+		nullIfEmpty(outputs), status, nullIfEmpty(errorMessage), taskID,
 	)
 	if err != nil {
 		return err

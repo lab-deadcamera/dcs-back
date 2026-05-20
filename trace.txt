@@ -1,0 +1,67 @@
+
+# DATOS ENVIADOS HACIA EL BACKEND
+
+POST {{BASE_URL}}/api/v1/studio/video/generate
+Content-Type: application/json
+
+{
+    "model": "dreamina-seedance-2-0-gallery",
+    "content": [
+        {
+            "type": "text",
+            "text": "la mujer  [Image1] cuando ve un perro callejero se asusta"
+        },
+        {
+            "type": "image",
+            "id": "8b0352bb-2c71-4b48-8d7b-6996e0292265",
+            "name": "44.jpg",
+            "text": "Sofia"
+        }
+    ],
+    "ratio": "16:9",
+    "duration": 5,
+    "camerafixed": false,
+    "seed": "",
+    "quality": "standard",
+    "quantity": 1,
+    "watermark": false,
+    "resolution": "480p",
+    "generate_audio": false,
+    "image_mode": "PIL",
+    "project_id": "388083eb-3b0c-4321-af47-24bf112086d0",
+    "scene_id": "956729b0-3aa1-4e22-ac56-7e8f66b1f56e",
+    "scene_code": "SC02",
+    "take_number": 1,
+    "user_id": 2
+}
+
+# RESPUESTA RECIBIDA DEL BACKEND
+{
+    "data": null,
+    "message": "dreamina-seedance-2-0-gallery 400: The parameter `content[1].image_url.url` specified in the request is not valid: Your account has not activated the Asset Service. You may activate it it at https://console.byteplus.com/ark/region:ark+ap-southeast-1/openManagement?LLM=%!B(MISSING)%!D(MISSING)&advancedActiveKey=model. Request id: 021779248521069df1fe1cc6cb558c8468775817e951d5d4d39d7",
+    "success": false
+}
+
+# LOG DE GENERACION DE VIDEO
+{
+    "id": "b8e0179c-6261-42ad-9521-0d1148f1dac5",
+    "task_id": "<no-task>",
+    "model_name": "dreamina-seedance-2-0-gallery",
+    "user_id": 2,
+    "project_id": "388083eb-3b0c-4321-af47-24bf112086d0",
+    "scene_id": "956729b0-3aa1-4e22-ac56-7e8f66b1f56e",
+    "scene_code": "SC02",
+    "take_number": 1,
+    "request": "{\"model\":\"dreamina-seedance-2-0-gallery\",\"content\":[{\"type\":\"text\",\"text\":\"la mujer  [Image1] cuando ve un perro callejero se asusta\"},{\"type\":\"image\",\"text\":\"Sofia\",\"name\":\"44.jpg\",\"id\":\"8b0352bb-2c71-4b48-8d7b-6996e0292265\"}],\"ratio\":\"16:9\",\"duration\":5,\"camerafixed\":false,\"seed\":\"\",\"quality\":\"standard\",\"quantity\":1,\"watermark\":false,\"resolution\":\"480p\",\"generate_audio\":false,\"image_mode\":\"\",\"project_id\":\"388083eb-3b0c-4321-af47-24bf112086d0\",\"scene_id\":\"956729b0-3aa1-4e22-ac56-7e8f66b1f56e\",\"scene_code\":\"SC02\",\"take_number\":1,\"user_id\":2}",
+    "ai_response": "",
+    "ai_call_payload": "{\"Model\":\"dreamina-seedance-2-0-gallery\",\"Content\":[{\"type\":\"text\",\"text\":\"la mujer  [Image1] cuando ve un perro callejero se asusta\"},{\"type\":\"image\",\"text\":\"Sofia\",\"name\":\"44.jpg\",\"id\":\"8b0352bb-2c71-4b48-8d7b-6996e0292265\"}],\"Ratio\":\"16:9\",\"Duration\":5,\"CameraFixed\":false,\"Seed\":\"\",\"Quality\":\"standard\",\"Quantity\":1,\"Watermark\":false,\"Resolution\":\"480p\",\"GenerateAudio\":false,\"ImageMode\":\"\",\"APIKey\":\"ark-3a23d7ac-4eb1-4f7d-9f18-dd15fb7dffec-90c64\",\"BaseURL\":\"https://ark.ap-southeast.bytepluses.com/api/v3\",\"Endpoint\":\"/contents/generations/tasks\"}",
+    "status": "failed",
+    "error_message": "dreamina-seedance-2-0-gallery 400: The parameter `content[1].image_url.url` specified in the request is not valid: Your account has not activated the Asset Service. You may activate it it at https://console.byteplus.com/ark/region:ark+ap-southeast-1/openManagement?LLM=%!B(MISSING)%!D(MISSING)&advancedActiveKey=model. Request id: 021779248521069df1fe1cc6cb558c8468775817e951d5d4d39d7",
+    "created_at": "2026-05-20T03:42:01.212276Z",
+    "updated_at": "2026-05-20T03:42:01.212276Z",
+    "user_name": "drako",
+    "user_display_name": "Drako Lord",
+    "project_name": "Proyecto 1",
+    "scene_name": "Escena 2",
+    "scene_number": 2
+}

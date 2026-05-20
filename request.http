@@ -1,22 +1,24 @@
 
 @BASE_URL = https://back.road2theoscars.tech
+# @BASE_URL = http://localhost:9099
 
-### TESTEAR GENERACION DE PROMPTS
-POST {{BASE_URL}}/api/v1/studio/preview
+
+### TESTEAR GENERACION DE VIDEOS CON SINCRONIZACION DE GALERIA
+POST {{BASE_URL}}/api/v1/studio/video/generate
 Content-Type: application/json
 
 {
-    "model": "dreamina-seedream-4-pro-251224",
+    "model": "dreamina-seedance-2-0-gallery",
     "content": [
         {
             "type": "text",
-            "text": "crea este gato bailando bachata"
+            "text": "la mujer  [Image1] cuando ve un perro callejero se asusta"
         },
         {
             "type": "image",
-            "id": "f9214b91-5327-45f2-b2b8-78054e7dcbfa",
-            "name": "descarga (2).jpg",
-            "text": "Personaje 1"
+            "id": "8b0352bb-2c71-4b48-8d7b-6996e0292265",
+            "name": "44.jpg",
+            "text": "Sofia"
         }
     ],
     "ratio": "16:9",
@@ -28,5 +30,10 @@ Content-Type: application/json
     "watermark": false,
     "resolution": "480p",
     "generate_audio": false,
-    "image_mode": "PIL"
+    "image_mode": "PIL",
+    "project_id": "388083eb-3b0c-4321-af47-24bf112086d0",
+    "scene_id": "956729b0-3aa1-4e22-ac56-7e8f66b1f56e",
+    "scene_code": "SC02",
+    "take_number": 1,
+    "user_id": 2
 }
