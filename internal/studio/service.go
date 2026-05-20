@@ -239,13 +239,17 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
+	// Build the actual API payload (for logging and server communications)
+	apiPayload := gen.BuildPayload(genReq)
+	apiPayloadBytes, _ := json.Marshal(apiPayload)
+	aiCall = string(apiPayloadBytes)
+
 	genStart := time.Now()
 	result, err := gen.Generate(genReq)
 	genDur := time.Since(genStart).Milliseconds()
 
-	// Log server communication
+	// Log server communication with the actual request body
 	if s.commStore != nil {
-		reqBody, _ := json.Marshal(genReq)
 		respBody := ""
 		genStatus := 200
 		if err != nil {
@@ -263,7 +267,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 			ModelName:    m.Name,
 			Endpoint:     m.URL + m.Endpoint,
 			Method:       "POST",
-			RequestBody:  string(reqBody),
+			RequestBody:  string(apiPayloadBytes),
 			ResponseBody: respBody,
 			StatusCode:   genStatus,
 			DurationMs:   genDur,
@@ -272,9 +276,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 	}
 	log.Printf("[generate-unified] gen.Generate dur=%dms err=%v", genDur, err != nil)
 
-	// Capture result data for the log
-	genReqBytes, _ := json.Marshal(genReq)
-	aiCall = string(genReqBytes)
+	// aiCall already set above from BuildPayload
 	if result != nil {
 		taskID = result.TaskID
 		status = result.Status
