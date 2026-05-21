@@ -166,8 +166,12 @@ func (s *Store) GetFileByID(id string) (*File, error) {
 }
 
 func (s *Store) ListFiles(category, storage string, trashed bool) ([]File, error) {
+	// `trashed` alone distinguishes active vs. trashed rows (soft delete
+	// sets trashed=true AND deleted_at=<ts>; hard delete removes the row
+	// outright). A `deleted_at IS NULL` filter here would contradict
+	// trashed=true and make the trash list always come back empty.
 	query := `SELECT id, filename, path, size, mime_type, category, format, storage, trashed, created_at, updated_at, deleted_at
-		FROM files WHERE trashed = $1 AND deleted_at IS NULL`
+		FROM files WHERE trashed = $1`
 	args := []interface{}{trashed}
 	argIdx := 2
 

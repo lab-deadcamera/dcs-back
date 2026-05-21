@@ -122,7 +122,7 @@ func (s *Store) ListFiles(characterID string) ([]CharacterFile, error) {
 		       COALESCE(f.category, ''), COALESCE(f.format, '')
 		FROM character_files cf
 		LEFT JOIN files f ON f.id = cf.file_id
-		WHERE cf.character_id = $1
+		WHERE cf.character_id = $1 AND COALESCE(f.trashed, false) = false
 		ORDER BY cf.created_at ASC`, characterID)
 	if err != nil {
 		return nil, err
@@ -160,7 +160,7 @@ func (s *Store) ListFilesForCharacters(ids []string) (map[string][]CharacterFile
 		       COALESCE(f.category, ''), COALESCE(f.format, '')
 		FROM character_files cf
 		LEFT JOIN files f ON f.id = cf.file_id
-		WHERE cf.character_id IN (%s)
+		WHERE cf.character_id IN (%s) AND COALESCE(f.trashed, false) = false
 		ORDER BY cf.character_id, cf.created_at ASC`, strings.Join(placeholders, ","))
 
 	rows, err := s.db.Query(query, args...)
