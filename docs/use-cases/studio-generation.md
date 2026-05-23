@@ -1,67 +1,29 @@
-# Generación de contenido vía Studio (unified payload)
+# Generación de Video vía Studio
 
-Flujo completo usando el payload unificado de `/api/v1/studio/generate`.
+Flujo completo para generar videos usando el endpoint unificado.
 
-## Endpoints disponibles
+> Consulta la arquitectura completa del sistema en [`internal/studio/ARCHITECTURE.md`](../../internal/studio/ARCHITECTURE.md).
+
+## Endpoints
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| POST | `/api/v1/studio/generate` | Nuevo payload unificado |
-| POST | `/api/v1/studio/generate-legacy` | Legacy (basado en `Selection`) |
-| GET | `/api/v1/studio/status/{taskId}` | Polling de estado con `outputs[]` |
-| GET | `/api/v1/studio/status-legacy/{taskId}` | Polling formato legacy |
-| DELETE | `/api/v1/studio/task/{taskId}` | Cancelar tarea |
-| POST | `/api/v1/studio/sync-asset` | Sincronizar un archivo a la galería del modelo |
-| POST | `/api/v1/studio/sync-character-assets` | Sincronizar TODOS los archivos de un personaje a un modelo |
-| GET | `/api/v1/studio/synced-assets?model_id=x` | Listar assets sincronizados de un modelo |
-| GET | `/api/v1/studio/files-with-sync?category=&storage=&trashed=` | Listar archivos con sus modelos sincronizados |
-| GET | `/api/v1/studio/characters/:id/files-with-sync` | Listar archivos de un personaje con sus modelos sincronizados |
-| GET | `/api/v1/studio/logs/generation` | Listar logs de generación (paginado) |
-| GET | `/api/v1/studio/logs/generation/:id` | Ver detalle de un log de generación |
+| POST | `/api/v1/studio/video/generate` | Iniciar generación de video |
+| GET | `/api/v1/studio/video/status/:taskId` | Consultar estado de una tarea |
+| DELETE | `/api/v1/studio/video/task/:taskId` | Cancelar tarea en ejecución |
+| POST | `/api/v1/studio/video/preview` | Previsualizar payload sin enviarlo |
 
-## Arquitectura de generadores
+## Campos obligatorios de sesión
 
-```
-POST /api/v1/studio/generate
-         │
-         ▼
-  Handler.GenerateUnified
-         │
-         ▼
-  Service.GenerateUnified
-         │
-         ├── 1. providerStore.GetModelByName(name) → API key, URL, endpoint
-         │
-         ├── 2. resolveContent(content, modelID)
-         │      │
-         │      ├── ¿File sincronizado? (model_assets: active)
-         │      │     └── Sí → DataURL = "asset://asset-id"  (asset library URI)
-         │      │
-         │      └── No → Lee archivo del disco → data:...;base64,...  (data URL)
-         │
-         ├── 3. pickGenerator(modelName) → Seedance | Seedream | ...
-         │
-         └── 4. Generator.Generate(req)
-                  │
-                  └── BytePlus ModelArk API
-```
+Todos los endpoints de generación requieren `project_id`, `scene_id`, `scene_code` y `take_number` para registrar el contexto en los logs:
 
-### Asset sync (pre-carga a la galería del modelo)
-
-```
-POST /api/v1/studio/sync-asset
-         │
-         ▼
-  Service.SyncAsset
-         │
-         ├── 1. Busca modelo → AK/SK + default_asset_group_id
-         ├── 2. Crea registro en model_assets (status: "syncing")
-         ├── 3. CreateAsset(fileURL) a BytePlus asset library
-         ├── 4. Poll GetAsset hasta "Active" (~20s-60s)
-         └── 5. Actualiza model_assets (status: "active" | "failed")
-```
-
-Cuando el archivo está sincronizado, `resolveContent` usa `asset://asset-id` en vez de la data URL. Esto permite que BytePlus use el asset directamente de su galería sin re-subirlo cada vez.
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `project_id` | string | ID del proyecto |
+| `scene_id` | string | ID de la escena |
+| `scene_code` | string | Código de la escena |
+| `take_number` | int | Número de take |
+| `user_id` | int | ID del usuario (opcional, para logs) |
 
 ## Paso 1: Subir archivos de referencia (opcional)
 
@@ -79,59 +41,24 @@ async function uploadFile(file, category = 'images') {
 }
 ```
 
-## Paso 1b: Sincronizar archivo a la galería del modelo (opcional pero recomendado)
-
-Si el modelo tiene AK/SK configurados y un asset group, puedes sincronizar el archivo para usar `asset://` URIs:
+## Paso 2: Generar video
 
 ```javascript
-async function syncAsset(modelId, fileId) {
-  const res = await fetch('/api/v1/studio/sync-asset', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model_id: modelId, file_id: fileId })
-  });
-  return res.json();
-}
-
-const syncResult = await syncAsset(model.id, file.id);
-// syncResult.data.status → "active"
-// syncResult.data.asset_id → "asset-20260318-xxxxx"
-```
-
-### Requisitos para sync
-
-Para sincronizar archivos, el modelo debe tener configurado:
-
-| Campo | Ejemplo | Descripción |
-|-------|---------|-------------|
-| `access_key_id` | `AKLTxxx...` | Access Key de BytePlus (NO es el API key Bearer) |
-| `secret_access_key` | `YzIx...` | Secret Key correspondiente |
-| `default_asset_group_id` | `group-20260318-xxxxx` | Asset group creado en BytePlus Console |
-
-> **Nota**: El API Key (Bearer) y el AK/SK son credenciales diferentes. El API Key se usa para la generación, el AK/SK para la API de asset library (CreateAsset, GetAsset, etc.).
-
-El asset group debe crearse primero desde la [BytePlus Console](https://console.byteplus.com/ark/region:ark+ap-southeast-1/experience/vision) o vía API. Una vez creado, el ID del grupo se asigna al campo `default_asset_group_id` del modelo.
-
-## Paso 2: Generar contenido (video)
-
-El payload unificado permite referenciar archivos por su UUID:
-
-```javascript
-const generation = await fetch('/api/v1/studio/generate', {
+const generation = await fetch('/api/v1/studio/video/generate', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    model: "dreamina-seedance-2-0-fast-260128",
+    model: "dreamina-seedance-2-0-260128",
     content: [
       {
         type: "text",
-        text: "haz un perro caminando por la playa. shot on a 24mm wide lens, expansive framing with subtle edge distortion, deep depth of field. slow deliberate dolly-in toward the subject, smooth mechanical motion, tension building as the frame compresses, no handheld shake."
+        text: "perro caminando por la playa, atardecer, cámara lenta"
       },
       {
         type: "image",
         id: "3553d9a0-81ee-4829-8106-b7f54c5780f0",
-        name: "image1.png",
-        text: "Cyberpunk city street at night, neon lights, rain"
+        name: "ref.png",
+        text: "referencia de estilo"
       }
     ],
     ratio: "16:9",
@@ -141,20 +68,72 @@ const generation = await fetch('/api/v1/studio/generate', {
     quality: "standard",
     quantity: 1,
     watermark: false,
-    resolution: "480p",
+    resolution: "720p",
     generate_audio: true,
-    image_mode: "PIL"
+    // Session tracking — obligatorio
+    project_id: "uuid-del-proyecto",
+    scene_id: "uuid-de-la-escena",
+    scene_code: "ESC-001",
+    take_number: 3,
+    user_id: 1
   })
 });
 ```
 
-Respuesta inmediata:
+### Campos del payload
+
+| Campo | Tipo | Requerido | Descripción |
+|-------|------|-----------|-------------|
+| `model` | string | sí | Nombre del modelo (ej: `dreamina-seedance-2-0-260128`) |
+| `content` | array | sí | Array de items de contenido |
+| `ratio` | string | no | Relación de aspecto: `16:9`, `9:16`, `1:1`, etc. |
+| `duration` | number | no | Duración en segundos (1-60, default: 5) |
+| `camerafixed` | bool | no | Cámara fija / estática |
+| `seed` | string | no | Semilla para reproducibilidad |
+| `quality` | string | no | `standard`, `high` |
+| `quantity` | int | no | Cantidad de outputs |
+| `watermark` | bool | no | Incluir marca de agua |
+| `resolution` | string | no | `480p`, `720p`, `1080p` |
+| `generate_audio` | bool | no | Generar pista de audio |
+| `project_id` | string | **sí** | ID del proyecto |
+| `scene_id` | string | **sí** | ID de la escena |
+| `scene_code` | string | **sí** | Código de escena |
+| `take_number` | int | **sí** | Número de take |
+| `user_id` | int | no | ID del usuario |
+
+### Items de content
+
+Cada item en `content[]`:
+
+**Tipo `text`** — prompt:
+```json
+{ "type": "text", "text": "descripción de la escena" }
+```
+
+**Tipo `image` / `video` / `audio`** — referencia:
+```json
+{
+  "type": "image",
+  "id": "3553d9a0-81ee-4829-8106-b7f54c5780f0",
+  "name": "ref.png",
+  "text": "descripción visual"
+}
+```
+
+| Campo | Tipo | Requerido | Descripción |
+|-------|------|-----------|-------------|
+| `type` | string | sí | `text`, `image`, `video` o `audio` |
+| `text` | string | no | Prompt textual o descripción |
+| `id` | string | no | UUID del archivo en file store |
+| `name` | string | no | Nombre original del archivo |
+
+### Respuesta inmediata (tarea asíncrona)
 
 ```json
 {
   "data": {
     "taskId": "cgt-20260515-abc123def456",
-    "model": "dreamina-seedance-2-0-fast-260128",
+    "model": "dreamina-seedance-2-0-260128",
     "status": "running",
     "outputs": []
   },
@@ -163,71 +142,23 @@ Respuesta inmediata:
 }
 ```
 
-> Si el archivo está sincronizado, el content se envía como `"image_url": { "url": "asset://asset-20260318-xxxxx" }` en vez de una data URL con base64. Esto reduce el payload y permite a BytePlus usar el asset desde su galería interna.
-
-### Campos del payload
-
-| Campo | Tipo | Requerido | Descripción |
-|-------|------|-----------|-------------|
-| `model` | string | sí | Nombre del modelo registrado (ej: `dreamina-seedance-2-0-fast-260128`) |
-| `content` | array | sí | Array de items de contenido (texto, imágenes, videos, audio) |
-| `ratio` | string | no | Relación de aspecto: `16:9`, `9:16`, `1:1`, etc. |
-| `duration` | number | no | Duración en segundos (default: 5) |
-| `camerafixed` | bool | no | Cámara fija / estática |
-| `seed` | string | no | Semilla para reproducibilidad |
-| `quality` | string | no | Calidad: `standard`, `high` |
-| `quantity` | int | no | Cantidad de outputs a generar |
-| `watermark` | bool | no | Incluir marca de agua |
-| `resolution` | string | no | Resolución: `480p`, `720p`, `1080p` |
-| `generate_audio` | bool | no | Generar audio para el video |
-| `image_mode` | string | no | Modo de imagen: `PIL` |
-
-### Items de content
-
-Cada item en `content[]` tiene esta estructura:
-
-**Tipo `text`** — prompt de texto:
-```json
-{
-  "type": "text",
-  "text": "descripción de la escena"
-}
-```
-
-**Tipo `image` / `video` / `audio`** — archivo de referencia:
-```json
-{
-  "type": "image",
-  "id": "3553d9a0-81ee-4829-8106-b7f54c5780f0",
-  "name": "image1.png",
-  "text": "descripción visual de esta referencia"
-}
-```
-
-| Campo | Tipo | Requerido | Descripción |
-|-------|------|-----------|-------------|
-| `type` | string | sí | `text`, `image`, `video` o `audio` |
-| `text` | string | no | Prompt textual o descripción del asset |
-| `id` | string | no | UUID del archivo en file store (solo para `image`/`video`/`audio`) |
-| `name` | string | no | Nombre original del archivo |
+Los modelos Seedance devuelven `status: "running"` porque la generación es asíncrona. Hay que hacer polling hasta que el estado sea `"succeeded"` o `"failed"`.
 
 ## Paso 3: Hacer polling del estado
 
 ```javascript
 async function pollStatus(taskId) {
   while (true) {
-    const res = await fetch(`/api/v1/studio/status/${taskId}`);
+    const res = await fetch(`/api/v1/studio/video/status/${taskId}`);
     const data = await res.json();
     const { status, outputs } = data.data;
-    
+
     if (status === 'succeeded') {
-      // outputs → [{ url, localUrl, type }]
       return outputs;
     }
     if (status === 'failed') {
       throw new Error(data.data.error);
     }
-    // 'running' | 'queued' — seguir esperando
     await new Promise(r => setTimeout(r, 3000));
   }
 }
@@ -238,7 +169,7 @@ const outputs = await pollStatus(taskId);
 // ]
 ```
 
-Respuesta cuando la tarea se completa:
+### Respuesta cuando se completa
 
 ```json
 {
@@ -246,183 +177,106 @@ Respuesta cuando la tarea se completa:
     "status": "succeeded",
     "outputs": [
       {
-        "url": "https://ark-content-generation-v2-ap.tos-ap-southeast-1.bytepluses.com/seedance/.../output.mp4?X-Tos-Algorithm=...",
+        "url": "https://...bytepluses.com/seedance/.../output.mp4",
         "localUrl": "/outputs/seedance_1747246991123_def456ab.mp4",
         "type": "video"
       }
-    ]
+    ],
+    "progress": null
   },
   "success": true,
   "message": "success"
 }
 ```
 
-> La respuesta **siempre** contiene `outputs` como array, incluso para modelos que generan un solo recurso. Cada output tiene `type`: `"video"`, `"image"` o `"audio"`.
+## Gallery Sync (modelos gallery)
 
-## Seedream (generación de imágenes síncrona)
+Para modelos como `dreamina-seedance-2-0-gallery`, los archivos de referencia se sincronizan automáticamente con la galería BytePlus antes de generar:
 
-Modelos Seedream son **síncronos** — la respuesta de `POST /studio/generate` ya incluye outputs:
+1. Verifica si cada archivo ya está sincronizado
+2. Si no, lo sube a la galería (individualmente o por personaje)
+3. Reemplaza la URL por `asset://<AssetId>`
+
+Esto ocurre automáticamente — no requiere acciones adicionales del cliente. Ver [`docs/gallery-sync-flow.md`](../gallery-sync-flow.md) para más detalles.
+
+## Sincronización manual de assets
+
+Si quieres precargar archivos a la galería del modelo antes de generar:
 
 ```javascript
-const result = await fetch('/api/v1/studio/generate', {
+const syncResult = await fetch('/api/v1/studio/sync-asset', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    model: "dreamina-seedream-4-pro-251224",
-    content: [
-      { type: "text", text: "Cyberpunk city street at night, neon lights" }
-    ],
-    resolution: "2K",
-    watermark: false
+    model_id: "uuid-del-modelo",
+    file_id: "uuid-del-archivo"
   })
 });
-// → { data: { taskId: "seedream_xxx", model: "dreamina-seedream-4-pro-251224",
-//     status: "succeeded", outputs: [{ url: "https://...", type: "image" }] } }
+// syncResult.data.status → "active"
 ```
 
-## Generadores disponibles
+## Logs de generación
 
-| Generador | Modelos | Match | Tipo de output |
-|-----------|---------|-------|----------------|
-| Seedance | `dreamina-seedance-2-0-fast-260128`, `dreamina-seedance-2-0-260128` | Nombre contiene "dreamina-seedance-2-0-fast-260128" | video (asíncrono) |
-| Seedream | `dreamina-seedream-4-pro-251224` | Nombre contiene "dreamina-seedream-4-pro-251224" | image (síncrono) |
-
-## Listar archivos con info de sincronización
-
-Los endpoints `/api/v1/studio/files-with-sync` y `/api/v1/studio/characters/:id/files-with-sync` devuelven los mismos archivos que los endpoints regulares de `/api/v1/files` y `/api/v1/characters/:id/files`, pero incluyen el campo `synced_models` con los modelos con los que cada archivo está sincronizado.
-
-### Files with sync
+Cada generación se registra automáticamente con el contexto de proyecto/escena/take:
 
 ```javascript
-const files = await fetch('/api/v1/studio/files-with-sync?category=images').then(r => r.json());
-// files.data → [
-//   {
-//     "id": "uuid",
-//     "filename": "photo.png",
-//     "mime_type": "image/png",
-//     "synced_models": [
-//       { "model_id": "uuid", "name": "dreamina-seedance-2-0-fast-260128" }
-//     ]
-//   }
-// ]
+// Listar logs filtrados por proyecto
+const logs = await fetch('/api/v1/studio/logs/generation?project_id=X&page=1&limit=20')
+  .then(r => r.json());
+// logs.data → { logs: [...], total, page, limit, total_pages }
+
+// Ver detalle de un log
+const detail = await fetch(`/api/v1/studio/logs/generation/${logId}`)
+  .then(r => r.json());
+// detail.data → { id, task_id, model_name, project_id, scene_id,
+//                  take_number, request, outputs, status, error_message, ... }
 ```
 
-### Character files with sync
-
-Los endpoints regulares de characters (`GET /api/v1/characters/:id`, `GET /api/v1/characters`) ya incluyen `synced_models` en cada archivo automáticamente:
-
-```javascript
-const character = await fetch(`/api/v1/characters/${charId}`).then(r => r.json());
-// character.data.files → [
-//   {
-//     "file_id": "uuid",
-//     "role": "portrait",
-//     "url": "http://.../serve",
-//     "synced_models": [
-//       { "model_id": "uuid", "name": "dreamina-seedance-2-0-260128" }
-//     ]
-//   }
-// ]
-```
-
-Si necesitas solo los archivos con su sync info sin el resto del personaje, usa:
-
-```javascript
-const files = await fetch(`/api/v1/studio/characters/${charId}/files-with-sync`).then(r => r.json());
-```
-
-## Sincronizar todos los archivos de un personaje
-
-Para sincronizar todas las imágenes de un personaje a un modelo de una sola vez:
-
-```javascript
-const result = await fetch('/api/v1/studio/sync-character-assets', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    character_id: "uuid-del-personaje",
-    model_id: "uuid-del-modelo"
-  })
-});
-
-// result.data → {
-//   "model_id": "uuid",
-//   "total": 5,
-//   "successful": 4,
-//   "failed": 1,
-//   "results": [
-//     { "file_id": "uuid", "status": "active", "asset_id": "asset-xxx" },
-//     { "file_id": "uuid", "status": "failed", "error_message": "..." },
-//     ...
-//   ]
-// }
-```
-
-Para sincronizar solo una imagen específica, usa el endpoint individual:
-
-```javascript
-await fetch('/api/v1/studio/sync-asset', {
-  method: 'POST',
-  body: JSON.stringify({ model_id: modelId, file_id: fileId })
-});
-```
-
-## Generation logs
-
-Cada vez que se ejecuta `POST /api/v1/studio/generate` se guarda automáticamente un log en la base de datos con el payload enviado, la respuesta de la IA y los outputs generados. Para tareas asíncronas (Seedance), el log se actualiza cuando la tarea se completa.
-
-```javascript
-// Listar logs (paginado, más recientes primero)
-const list = await fetch('/api/v1/studio/logs/generation?page=1&limit=20').then(r => r.json());
-// list.data → { logs: [...], total, page, limit, total_pages }
-
-// Ver detalle de un log por ID
-const detail = await fetch(`/api/v1/studio/logs/generation/${logId}`).then(r => r.json());
-// detail.data → { id, task_id, model_name, request, ai_response, ai_call_payload, outputs, status, error_message, created_at, updated_at }
-```
+### Campos del log
 
 | Campo | Tipo | Descripción |
 |-------|------|-------------|
 | `id` | UUID | ID del registro |
-| `task_id` | string | ID de la tarea de generación |
-| `model_name` | string | Nombre del modelo usado |
-| `request` | TEXT (JSON) | Payload original enviado al endpoint |
-| `ai_call_payload` | TEXT (JSON) | Payload enviado a la API de IA |
-| `ai_response` | TEXT (JSON) | Respuesta cruda de la API de IA |
-| `outputs` | TEXT (JSON) | Outputs generados (URLs, tipos) |
-| `status` | string | Estado: `running`, `succeeded`, `failed` |
+| `task_id` | string | ID de la tarea |
+| `model_name` | string | Modelo usado |
+| `project_id` | string | Proyecto asociado |
+| `scene_id` | string | Escena asociada |
+| `scene_code` | string | Código de escena |
+| `take_number` | int | Número de take |
+| `request` | TEXT | Payload original del cliente |
+| `outputs` | TEXT | Outputs generados (JSON) |
+| `status` | string | `running`, `succeeded`, `failed` |
 | `error_message` | string | Mensaje de error si falló |
+| `user_name` | string | Nombre de usuario (join) |
+| `project_name` | string | Nombre del proyecto (join) |
+| `scene_name` | string | Nombre de la escena (join) |
 
-## Generadores disponibles
+## Server communications
 
-| Generador | Modelos | Match | Tipo de output |
-|-----------|---------|-------|----------------|
-| Seedance | `dreamina-seedance-2-0-fast-260128`, `dreamina-seedance-2-0-260128` | Nombre contiene "dreamina-seedance-2-0-fast-260128" | video (asíncrono) |
-| Seedream | `dreamina-seedream-4-pro-251224` | Nombre contiene "dreamina-seedream-4-pro-251224" | image (síncrono) |
+Cada llamada a la API externa se registra para trazabilidad:
 
-Para agregar un nuevo generador, implementa la interfaz `PipelineRunner` en `internal/studio/image/generators/` o `internal/studio/video/generators/` según el tipo y regístralo en `main.go`. Consulta la arquitectura completa en [`internal/studio/ARCHITECTURE.md`](../../internal/studio/ARCHITECTURE.md).
+```javascript
+const comms = await fetch('/api/v1/studio/logs/server-communications?task_id=X')
+  .then(r => r.json());
+// comms.data.logs → [{ model_name, endpoint, method, request_body,
+//                       response_body, status_code, duration_ms, ... }]
+```
 
-## Referencia de APIs externas
+## Generadores de video disponibles
 
-### BytePlus ModelArk (inferencia)
+| Generador | Match | Modelo | Tipo |
+|-----------|-------|--------|------|
+| `SeedanceGenerator` | Contiene "dreamina-seedance-2-0-260128" | Dreamina Seedance 2.0 | Async |
+| `SeedanceGalleryGenerator` | Contiene "dreamina-seedance-2-0-gallery" | Dreamina Seedance 2.0 Gallery | Async + Gallery |
 
-| Parámetro | Seedance (video) | Seedream (imagen) |
-|-----------|-----------------|-------------------|
-| Base URL | `https://ark.ap-southeast.bytepluses.com/api/v3` | Misma |
-| Auth | `Authorization: Bearer <ark-api-key>` | Misma |
-| Endpoint create | `POST /contents/generations/tasks` | `POST /images/generations` |
-| Endpoint status | `GET /contents/generations/tasks/:id` | N/A (síncrono) |
-| Output | `video/mp4` | `image/png` o `image/jpeg` |
+## Referencia de API externa
 
-### BytePlus Asset Library (sync)
+### BytePlus ModelArk (inferencia video)
 
 | Parámetro | Valor |
 |-----------|-------|
-| Host | `open.byteplusapi.com` |
-| Auth | AK/SK (HMAC-SHA256 signed request) |
-| Region | `ap-southeast-1` |
-| Service | `ark` |
-| API Version | `2024-01-01` |
-| Crear asset group | `CreateAssetGroup` |
-| Subir asset | `CreateAsset` (requiere URL pública del archivo) |
-| Consultar asset | `GetAsset` (hasta que status = "Active") |
+| Base URL | `https://ark.ap-southeast.bytepluses.com/api/v3` |
+| Auth | `Authorization: Bearer <ark-api-key>` |
+| Endpoint create | `POST /contents/generations/tasks` |
+| Endpoint status | `GET /contents/generations/tasks/:id` |
+| Output | `video/mp4` |
