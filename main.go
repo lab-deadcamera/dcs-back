@@ -16,6 +16,7 @@ import (
 	"dcs-back-v0/internal/studio"
 	studioaudio "dcs-back-v0/internal/studio/audio"
 	studioimage "dcs-back-v0/internal/studio/image"
+	studioimagegens "dcs-back-v0/internal/studio/image/generators"
 	studiotext "dcs-back-v0/internal/studio/text"
 	studiovideo "dcs-back-v0/internal/studio/video"
 	videogens "dcs-back-v0/internal/studio/video/generators"
@@ -114,8 +115,8 @@ func main() {
 	studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(videogens.NewSeedanceGenerator(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(videogens.NewSeedanceGalleryGenerator(cfg.OutputsDir))
-	studioSvc.RegisterGenerator(studioimage.NewSeedreamGenerator(cfg.OutputsDir))
-	studioSvc.RegisterGenerator(studioimage.NewGeminiNanoGenerator(cfg.OutputsDir))
+	studioSvc.RegisterGenerator(studioimagegens.NewSeedreamGenerator(cfg.OutputsDir))
+	studioSvc.RegisterGenerator(studioimagegens.NewGeminiNanoGenerator(cfg.OutputsDir))
 	studioHdl := studio.NewHandler(studioSvc)
 
 	vidSvc := studiovideo.NewService(studioSvc)

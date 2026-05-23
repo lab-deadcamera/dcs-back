@@ -1,5 +1,7 @@
 # Gallery Sync — SeedanceGalleryGenerator
 
+> Consulta la arquitectura completa del sistema de generación en [`internal/studio/ARCHITECTURE.md`](../../internal/studio/ARCHITECTURE.md).
+
 ## ¿Qué es?
 
 El `SeedanceGalleryGenerator` (modelo `dreamina-seedance-2-0-gallery`) extiende el generador Seedance estándar con sincronización automática de activos a la **galería privada del modelo** (BytePlus Asset Library).

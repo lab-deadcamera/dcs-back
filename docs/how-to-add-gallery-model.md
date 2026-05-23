@@ -1,5 +1,7 @@
 # Cómo agregar un modelo con sincronización de galería
 
+> Consulta la arquitectura completa del sistema de generación en [`internal/studio/ARCHITECTURE.md`](../../internal/studio/ARCHITECTURE.md).
+
 ## ¿Qué es la sincronización de galería?
 
 Ciertos modelos de IA (ej: Seedance Gallery) requieren que los assets de referencia (imágenes, videos) estén subidos a su galería privada en BytePlus antes de generar. El sistema sincroniza automáticamente los archivos antes de enviar el payload al modelo, reemplazando las URLs públicas por `asset://<AssetId>`.

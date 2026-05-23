@@ -1,4 +1,4 @@
-package image
+package generators
 
 // ValidResolutionsImage lists supported image resolutions.
 var ValidResolutionsImage = map[string]bool{

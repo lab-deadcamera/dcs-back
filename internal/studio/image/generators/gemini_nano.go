@@ -1,4 +1,4 @@
-﻿package image
+package generators
 
 import (
 	"bytes"
@@ -280,4 +280,3 @@ func (g *GeminiNanoGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string
 func (g *GeminiNanoGenerator) CancelTask(taskID, apiKey, baseURL, endpoint string) error {
 	return nil
 }
-

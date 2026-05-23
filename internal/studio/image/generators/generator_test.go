@@ -1,4 +1,4 @@
-package image
+package generators
 
 import (
 	"testing"

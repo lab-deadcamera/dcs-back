@@ -400,7 +400,7 @@ const detail = await fetch(`/api/v1/studio/logs/generation/${logId}`).then(r => 
 | Seedance | `dreamina-seedance-2-0-fast-260128`, `dreamina-seedance-2-0-260128` | Nombre contiene "dreamina-seedance-2-0-fast-260128" | video (asíncrono) |
 | Seedream | `dreamina-seedream-4-pro-251224` | Nombre contiene "dreamina-seedream-4-pro-251224" | image (síncrono) |
 
-Para agregar un nuevo generador, crea un archivo en `internal/studio/generators/` que implemente la interfaz `Generator` y regístralo en `main.go`.
+Para agregar un nuevo generador, implementa la interfaz `PipelineRunner` en `internal/studio/image/generators/` o `internal/studio/video/generators/` según el tipo y regístralo en `main.go`. Consulta la arquitectura completa en [`internal/studio/ARCHITECTURE.md`](../../internal/studio/ARCHITECTURE.md).
 
 ## Referencia de APIs externas
 
