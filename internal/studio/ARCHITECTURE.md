@@ -264,13 +264,10 @@ POST /studio/image/generate
    │
    ├─ image.imageService.GenerateImage()
    │   ├─ Convierte image.GenerateRequest → studio.StudioGenerateRequest
-   │   │   NOTA: image.GenerateRequest tiene project_id/scene_id/scene_code/take_number OPCIONALES
-   │   │         (a diferencia de video que son REQUIRED)
    │   └─ core.GenerateUnified(unifiedReq)
    │
    └─ core.Service.GenerateUnified()
        ├─ (mismo flujo que video)
-       ├─ NOTA: si project_id está vacío, el log se guarda igual pero sin referencia a proyecto
        └─ Generadores:
            ├─ SeedreamGenerator (dreamina-seedream-4-pro-251224)
            │   ├─ POST a API externa → respuesta SÍNCRONA
@@ -288,7 +285,7 @@ POST /studio/image/generate
 
 | Aspecto | Video | Imagen |
 |---------|-------|--------|
-| Project/Scene/Take | **REQUIRED** (`binding:"required"`) | **OPCIONAL** (sin `binding:"required"`) |
+| Project/Scene/Take | **REQUIRED** (`binding:"required"`) | **REQUIRED** (`binding:"required"`) |
 | Naturaleza | Async (Seedance) / Sync (Seedream, Gemini) | Mayormente síncrono |
 | Gallery Sync | Sí (modelos gallery) | No |
 
@@ -468,9 +465,12 @@ El detalle incluye columnas completas con JOIN a `users`, `projects`, `scenes`.
 
 ### Datos de sesión obligatorios
 
-**Para video, audio y texto:** `project_id`, `scene_id`, `scene_code` y `take_number` son **obligatorios** (`binding:"required"`).
+**Todos los endpoints `/studio/*/generate`** (video, imagen, audio, texto) requieren `project_id`, `scene_id`, `scene_code` y `take_number` como **obligatorios** (`binding:"required"`).
 
-**Para imagen:** son **opcionales** (sin `binding:"required"`), lo que permite usar el panel de imágenes independiente.
+Estos datos son necesarios para:
+- Registrar el contexto de la generación en `generation_logs`
+- Crear los `generated_assets` vinculados al proyecto/escena/take
+- Poder filtrar y consultar logs por proyecto o escena
 
 ### ¿Dónde se persisten?
 
@@ -580,7 +580,7 @@ Usa `GeneratorRequest` unificado y `PipelineRunner` interface.
 | Sistema | Handlers/Generators | Logs | Project/Scene/Take |
 |---------|-------------------|------|-------------------|
 | Legacy (Selection) | SeedanceHandler, SeedreamHandler | NO | NO |
-| Unified (Pipeline) | SeedanceGenerator, SeedanceGalleryGenerator, SeedreamGenerator, GeminiNanoGenerator | SÍ | SÍ (video obligatorio, image opcional) |
+| Unified (Pipeline) | SeedanceGenerator, SeedanceGalleryGenerator, SeedreamGenerator, GeminiNanoGenerator | SÍ | SÍ (obligatorio en todos) |
 
 La intención es migrar completamente de Legacy a Unified.
 
@@ -600,8 +600,8 @@ studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
 // Generators unificados
 studioSvc.RegisterGenerator(videogens.NewSeedanceGenerator(cfg.OutputsDir))
 studioSvc.RegisterGenerator(videogens.NewSeedanceGalleryGenerator(cfg.OutputsDir))
-studioSvc.RegisterGenerator(studioimage.NewSeedreamGenerator(cfg.OutputsDir))
-studioSvc.RegisterGenerator(studioimage.NewGeminiNanoGenerator(cfg.OutputsDir))
+studioSvc.RegisterGenerator(studioimagegens.NewSeedreamGenerator(cfg.OutputsDir))
+studioSvc.RegisterGenerator(studioimagegens.NewGeminiNanoGenerator(cfg.OutputsDir))
 ```
 
 Para agregar un nuevo generador:
