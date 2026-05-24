@@ -17,7 +17,7 @@ func NewStore(db *sql.DB) *ProjectStore {
 
 const projectCols = `id, name, COALESCE(description, '') AS description,
 	COALESCE(metadata, '') AS metadata, active,
-		(SELECT COUNT(*) FROM scenes WHERE project_id = id AND deleted_at IS NULL) AS scene_count,
+		(SELECT COUNT(*) FROM scenes WHERE project_id = projects.id AND deleted_at IS NULL) AS scene_count,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanProject(p *Project, scanner interface {
