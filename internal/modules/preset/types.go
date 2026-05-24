@@ -18,6 +18,7 @@ type Preset struct {
 	GroupID   string     `json:"group_id"`
 	Code      string     `json:"code"`
 	Label     string     `json:"label"`
+	LabelKey  string     `json:"label_key"`
 	Prompt    string     `json:"prompt"`
 	Active    bool       `json:"active"`
 	CreatedAt time.Time  `json:"created_at"`
@@ -38,10 +39,11 @@ type UpdateGroupRequest struct {
 }
 
 type CreatePresetRequest struct {
-	GroupID string `json:"group_id" binding:"required"`
-	Code    string `json:"code" binding:"required"`
-	Label   string `json:"label" binding:"required"`
-	Prompt  string `json:"prompt" binding:"required"`
+	GroupID  string `json:"group_id" binding:"required"`
+	Code     string `json:"code" binding:"required"`
+	Label    string `json:"label" binding:"required"`
+	LabelKey string `json:"label_key"`
+	Prompt   string `json:"prompt" binding:"required"`
 }
 
 type UpdatePresetRequest struct {

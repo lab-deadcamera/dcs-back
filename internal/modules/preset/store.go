@@ -76,7 +76,7 @@ func (s *Store) UpdateGroup(id string, updates map[string]interface{}) error {
 
 // ─── Presets ────────────────────────────────────────────────────
 
-const presetCols = `id, group_id, code, label, prompt, active, created_at, updated_at, deleted_at`
+const presetCols = `id, group_id, code, label, COALESCE(label_key, '') AS label_key, prompt, active, created_at, updated_at, deleted_at`
 
 func (s *Store) ListPresets(groupID string, includeInactive bool) ([]Preset, error) {
 	where := "WHERE deleted_at IS NULL"
@@ -101,7 +101,7 @@ func (s *Store) ListPresets(groupID string, includeInactive bool) ([]Preset, err
 	var presets []Preset
 	for rows.Next() {
 		var p Preset
-		if err := rows.Scan(&p.ID, &p.GroupID, &p.Code, &p.Label, &p.Prompt, &p.Active, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.GroupID, &p.Code, &p.Label, &p.LabelKey, &p.Prompt, &p.Active, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt); err != nil {
 			return nil, err
 		}
 		presets = append(presets, p)
@@ -112,7 +112,7 @@ func (s *Store) ListPresets(groupID string, includeInactive bool) ([]Preset, err
 func (s *Store) GetPresetByID(id string) (*Preset, error) {
 	p := &Preset{}
 	query := `SELECT ` + presetCols + ` FROM presets WHERE id = $1 AND deleted_at IS NULL`
-	err := s.db.QueryRow(query, id).Scan(&p.ID, &p.GroupID, &p.Code, &p.Label, &p.Prompt, &p.Active, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt)
+	err := s.db.QueryRow(query, id).Scan(&p.ID, &p.GroupID, &p.Code, &p.Label, &p.LabelKey, &p.Prompt, &p.Active, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -123,10 +123,10 @@ func (s *Store) GetPresetByID(id string) (*Preset, error) {
 }
 
 func (s *Store) CreatePreset(p *Preset) error {
-	query := `INSERT INTO presets (id, group_id, code, label, prompt, active)
-		VALUES ($1, $2, $3, $4, $5, $6)
+	query := `INSERT INTO presets (id, group_id, code, label, label_key, prompt, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, p.ID, p.GroupID, p.Code, p.Label, p.Prompt, p.Active).
+	return s.db.QueryRow(query, p.ID, p.GroupID, p.Code, p.Label, p.LabelKey, p.Prompt, p.Active).
 		Scan(&p.CreatedAt, &p.UpdatedAt)
 }
 
