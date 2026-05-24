@@ -6,7 +6,7 @@ Module: `dcs-back-v0`, Go 1.21, Gin v1.10, PostgreSQL.
 
 ## Entrypoint
 
-`main.go` — ensambla Handler → Service → Store para cada módulo.
+`main.go` — ensambla Handler → Service → Store para cada módulo y los registra vía `module.Registry`.
 
 ## Comandos
 
@@ -158,3 +158,25 @@ Helpers en `internal/utils/responses.go`: `Success`, `Created`, `Message`, `BadR
 - `internal/studio/image/generator_test.go`
 
 Sin linter ni CI configurados.
+
+## Módulos
+
+Cada grupo de rutas es un `module.Module` que se registra en el `Registry`. Todos los módulos heredan el middleware de autenticación automáticamente. Los módulos pueden exponer rutas públicas creando sub-grupos sin `authMw`.
+
+```
+main.go → module.Registry
+              │
+              ├─ auth.NewModule()        → /auth/*, /admin/*
+              ├─ image.NewModule()       → /images/*
+              ├─ file.NewModule()        → /files/*
+              ├─ character.NewModule()   → /characters/*
+              ├─ provider.NewModule()    → /providers/*, /models/*
+              ├─ project.NewModule()     → /projects/*
+              └─ studio.NewModule()      → /studio/*
+```
+
+Para crear un nuevo módulo:
+1. Crear paquete en `internal/` con Handler/Service/Store
+2. Crear `module.go` con un struct que implemente `module.Module`
+3. En `Register()`, definir las rutas usando `authMw` (protegidas) o grupos sin middleware (públicas)
+4. Registrar en `main.go` vía `registry.Register(...)`

@@ -11,6 +11,7 @@ import (
 	"dcs-back-v0/internal/file"
 	"dcs-back-v0/internal/image"
 	"dcs-back-v0/internal/middleware"
+	"dcs-back-v0/internal/module"
 	"dcs-back-v0/internal/project"
 	"dcs-back-v0/internal/provider"
 	"dcs-back-v0/internal/studio"
@@ -24,7 +25,6 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"golang.org/x/time/rate"
 )
 
 func main() {
@@ -39,6 +39,8 @@ func main() {
 		log.Fatalf("failed to connect to db: %v", err)
 	}
 	defer database.Close()
+
+	// ─── Init stores & services ──────────────────────────────────
 
 	authStore := auth.NewStore(database)
 	authSvc := auth.NewService(authStore, cfg.JWTSecret)
@@ -129,18 +131,18 @@ func main() {
 	projectSvc := project.NewService(projectStore)
 	projectHdl := project.NewHandler(projectSvc)
 
+	// ─── Router ──────────────────────────────────────────────────
+
 	r := gin.Default()
 
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "hola mundo"})
 	})
 
-	// CORS debe ir antes de las rutas estáticas para que /outputs también tenga headers CORS
 	origins := os.Getenv("CORS_ALLOW_ORIGINS")
 	if origins == "" {
 		origins = "*"
 	}
-
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{origins},
 		AllowMethods:     []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
@@ -151,144 +153,23 @@ func main() {
 	r.Static("/outputs", cfg.OutputsDir)
 	r.Static("/docs", "./docs")
 
+	// ─── Module registration ─────────────────────────────────────
+
 	v1 := r.Group("/api/v1")
-	{
-		authGroup := v1.Group("/auth")
-		{
-			authGroup.POST("/register", authHdl.Register)
-			authGroup.POST("/login", authHdl.Login)
-			authGroup.GET("/profile", middleware.Auth(cfg.JWTSecret), authHdl.GetProfile)
-		}
+	authMw := middleware.Auth(cfg.JWTSecret)
+	adminMw := middleware.RequireRole(1)
 
-		adminGroup := v1.Group("/admin")
-		adminGroup.Use(middleware.Auth(cfg.JWTSecret), middleware.RequireRole(1))
-		{
-			adminGroup.POST("/users", authHdl.CreateUser)
-			adminGroup.GET("/users", authHdl.ListUsers)
-			adminGroup.GET("/roles", authHdl.ListRoles)
-		}
+	registry := module.NewRegistry()
+	registry.Register(auth.NewModule(authHdl))
+	registry.Register(image.NewModule(imageHdl))
+	registry.Register(file.NewModule(fileHdl))
+	registry.Register(character.NewModule(charHdl))
+	registry.Register(provider.NewModule(providerHdl))
+	registry.Register(project.NewModule(projectHdl))
+	registry.Register(studio.NewModule(studioHdl, studioVideoHdl, studioImageHdl, studioAudioHdl, studioTextHdl))
+	registry.Setup(v1, authMw, adminMw)
 
-		imagesAPI := v1.Group("/images")
-		{
-			imagesAPI.GET("/:filename", middleware.RateLimit(rate.Limit(10), 20), imageHdl.Serve)
-			imagesAPI.GET("/thumbnails/:filename", middleware.RateLimit(rate.Limit(10), 20), imageHdl.ServeThumbnail)
-
-			protected := imagesAPI.Group("/")
-			protected.Use(middleware.Auth(cfg.JWTSecret))
-			{
-				protected.POST("/upload", imageHdl.Upload)
-				protected.GET("/list", imageHdl.List)
-				protected.DELETE("/:filename", imageHdl.Delete)
-			}
-		}
-
-		studioGroup := v1.Group("/studio")
-		{
-			studioGroup.POST("/generate-legacy", studioHdl.Generate)
-			studioGroup.GET("/status-legacy/:taskId", studioHdl.GetStatusLegacy)
-			studioGroup.POST("/sync-asset", studioHdl.SyncAsset)
-			studioGroup.GET("/synced-assets", studioHdl.ListSyncedAssets)
-			studioGroup.GET("/files-with-sync", studioHdl.ListFilesWithSync)
-			studioGroup.GET("/characters/:id/files-with-sync", studioHdl.ListCharacterFilesWithSync)
-			studioGroup.POST("/sync-character-assets", studioHdl.SyncCharacterAssets)
-			studioGroup.GET("/logs/generation", studioHdl.ListGenerationLogs)
-			studioGroup.GET("/logs/generation/:id", studioHdl.GetGenerationLog)
-			studioGroup.GET("/logs/server-communications", studioHdl.ListServerCommunications)
-			studioGroup.GET("/logs/server-communications/:id", studioHdl.GetServerCommunication)
-
-			videoGroup := studioGroup.Group("/video")
-			videoGroup.POST("/generate", studioVideoHdl.Generate)
-			videoGroup.GET("/status/:taskId", studioVideoHdl.GetStatus)
-			videoGroup.DELETE("/task/:taskId", studioVideoHdl.CancelTask)
-			videoGroup.POST("/preview", studioVideoHdl.PreviewPayload)
-
-			imageGroup := studioGroup.Group("/image")
-			imageGroup.POST("/generate", studioImageHdl.Generate)
-			imageGroup.GET("/status/:taskId", studioImageHdl.GetStatus)
-			imageGroup.DELETE("/task/:taskId", studioImageHdl.CancelTask)
-			imageGroup.POST("/preview", studioImageHdl.PreviewPayload)
-
-			audioGroup := studioGroup.Group("/audio")
-			audioGroup.POST("/generate", studioAudioHdl.Generate)
-			audioGroup.GET("/status/:taskId", studioAudioHdl.GetStatus)
-			audioGroup.DELETE("/task/:taskId", studioAudioHdl.CancelTask)
-			audioGroup.POST("/preview", studioAudioHdl.PreviewPayload)
-
-			textGroup := studioGroup.Group("/text")
-			textGroup.POST("/generate", studioTextHdl.Generate)
-			textGroup.GET("/status/:taskId", studioTextHdl.GetStatus)
-			textGroup.DELETE("/task/:taskId", studioTextHdl.CancelTask)
-			textGroup.POST("/preview", studioTextHdl.PreviewPayload)
-		}
-
-		filesAPI := v1.Group("/files")
-		{
-			filesAPI.POST("/upload", fileHdl.Upload)
-			filesAPI.GET("/trash", fileHdl.ListTrash)
-			filesAPI.GET("", fileHdl.ListFiles)
-			filesAPI.GET("/:id", fileHdl.GetFile)
-			filesAPI.GET("/:id/serve", fileHdl.ServeFile)
-			filesAPI.GET("/:id/thumbnail", fileHdl.ServeThumbnail)
-			filesAPI.DELETE("/:id", fileHdl.SoftDelete)
-			filesAPI.POST("/:id/restore", fileHdl.Restore)
-			filesAPI.POST("/:id/recover-temp", fileHdl.RecoverTemp)
-			filesAPI.DELETE("/:id/hard", fileHdl.HardDelete)
-		}
-
-		charactersAPI := v1.Group("/characters")
-		{
-			charactersAPI.POST("", charHdl.Create)
-			charactersAPI.GET("", charHdl.List)
-			charactersAPI.GET("/:id", charHdl.GetByID)
-			charactersAPI.PATCH("/:id", charHdl.Update)
-			charactersAPI.DELETE("/:id", charHdl.SoftDelete)
-			charactersAPI.POST("/:id/files", charHdl.AddFile)
-			charactersAPI.GET("/:id/files", charHdl.ListFiles)
-			charactersAPI.DELETE("/:id/files/:fileId", charHdl.RemoveFile)
-		}
-
-		providersAPI := v1.Group("/providers")
-		{
-			providersAPI.POST("", providerHdl.CreateProvider)
-			providersAPI.GET("", providerHdl.ListProviders)
-			providersAPI.GET("/:id", providerHdl.GetProvider)
-			providersAPI.PATCH("/:id", providerHdl.UpdateProvider)
-			providersAPI.DELETE("/:id", providerHdl.SoftDeleteProvider)
-			providersAPI.GET("/:id/models", providerHdl.ListModelsByProvider)
-		}
-
-		modelsAPI := v1.Group("/models")
-		{
-			modelsAPI.POST("", providerHdl.CreateModel)
-			modelsAPI.GET("", providerHdl.ListModels)
-			modelsAPI.GET("/:id", providerHdl.GetModel)
-			modelsAPI.PATCH("/:id", providerHdl.UpdateModel)
-			modelsAPI.GET("/favorite", providerHdl.GetFavorite)
-			modelsAPI.POST("/:id/favorite", providerHdl.SetFavorite)
-			modelsAPI.DELETE("/:id", providerHdl.SoftDeleteModel)
-		}
-
-		projectsAPI := v1.Group("/projects")
-		{
-			projectsAPI.POST("", projectHdl.Create)
-			projectsAPI.GET("", projectHdl.List)
-			projectsAPI.GET("/:id", projectHdl.GetByID)
-			projectsAPI.PATCH("/:id", projectHdl.Update)
-			projectsAPI.DELETE("/:id", projectHdl.SoftDelete)
-			projectsAPI.POST("/:id/scenes", projectHdl.CreateScene)
-			projectsAPI.GET("/:id/scenes", projectHdl.ListScenes)
-			projectsAPI.GET("/:id/scenes/:sceneId", projectHdl.GetSceneByID)
-			projectsAPI.PATCH("/:id/scenes/:sceneId", projectHdl.UpdateScene)
-			projectsAPI.DELETE("/:id/scenes/:sceneId", projectHdl.SoftDeleteScene)
-			projectsAPI.POST("/:id/scenes/:sceneId/takes", projectHdl.CreateTake)
-			projectsAPI.GET("/:id/scenes/:sceneId/takes", projectHdl.ListTakes)
-			projectsAPI.GET("/:id/scenes/:sceneId/takes/:takeId", projectHdl.GetTakeByID)
-			projectsAPI.PATCH("/:id/scenes/:sceneId/takes/:takeId", projectHdl.UpdateTake)
-			projectsAPI.DELETE("/:id/scenes/:sceneId/takes/:takeId", projectHdl.SoftDeleteTake)
-			projectsAPI.POST("/:id/scenes/:sceneId/takes/save-generation", projectHdl.SaveGeneration)
-			projectsAPI.POST("/:id/scenes/:sceneId/takes/:takeId/toggle-active", projectHdl.ToggleTakeActive)
-		}
-	}
+	// ─── Start ───────────────────────────────────────────────────
 
 	log.Printf("server starting on port %s", cfg.Port)
 	if err := r.Run(":" + cfg.Port); err != nil {
