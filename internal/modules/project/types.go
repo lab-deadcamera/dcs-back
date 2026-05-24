@@ -10,6 +10,7 @@ type Project struct {
 	Description string     `json:"description"`
 	Metadata    string     `json:"metadata,omitempty"`
 	Active      bool       `json:"active"`
+	SceneCount  int        `json:"scene_count"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
