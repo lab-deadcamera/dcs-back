@@ -149,7 +149,7 @@ func (h *Handler) ListGenerationLogs(c *gin.Context) {
 		req.Limit = 20
 	}
 
-	result, err := h.svc.ListGenerationLogs(req.Page, req.Limit, req.ProjectID, req.SceneID, req.Status, req.ModelName, req.UserID, req.DateFrom, req.DateTo)
+	result, err := h.svc.ListGenerationLogs(req.Page, req.Limit, req.ProjectID, req.SceneID, req.Status, req.ModelName, req.UserID, req.DateFrom, req.DateTo, req.ResourceType)
 	if err != nil {
 		utils.InternalError(c, err.Error())
 		return

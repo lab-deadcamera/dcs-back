@@ -94,6 +94,7 @@ func toStudioRequest(req *GenerateRequest) *studio.StudioGenerateRequest {
 		SceneCode:  req.SceneCode,
 		TakeNumber: req.TakeNumber,
 		UserID:     req.UserID,
+		ResourceType:  "image",
 	}
 }
 

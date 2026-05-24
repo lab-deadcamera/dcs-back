@@ -33,6 +33,12 @@ func (s *Service) Upload(data []byte, filename, category, storage string) (*Uplo
 	newFilename := uuid.New().String() + ext
 	fullPath := fmt.Sprintf("%s/%s", category, newFilename)
 
+	duration := float64(0)
+	if strings.HasPrefix(mimeType, "video/") {
+		savedPath := filepath.Join(s.store.uploadDir, fullPath)
+		duration = ReadMediaDuration(savedPath)
+	}
+
 	file := &File{
 		ID:       uuid.New().String(),
 		Filename: filename,
@@ -42,6 +48,7 @@ func (s *Service) Upload(data []byte, filename, category, storage string) (*Uplo
 		Category: category,
 		Format:   ext[1:],
 		Storage:  storage,
+		Duration: duration,
 	}
 
 	if err := s.store.SaveFile(data, fullPath); err != nil {

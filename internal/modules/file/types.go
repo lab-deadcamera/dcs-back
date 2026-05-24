@@ -11,6 +11,7 @@ type File struct {
 	Category  string     `json:"category"`
 	Format    string     `json:"format"`
 	Storage   string     `json:"storage"`
+	Duration  float64    `json:"duration"` // seconds (video/audio)
 	Trashed   bool       `json:"trashed"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`

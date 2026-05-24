@@ -22,6 +22,8 @@ const genLogListCols = `gl.id, gl.task_id, gl.model_name,
 		COALESCE(gl.scene_id, '') AS scene_id,
 		COALESCE(gl.scene_code, '') AS scene_code,
 		COALESCE(gl.take_number, 0) AS take_number,
+		gl.resource_type, gl.content_types,
+		gl.estimated_cost, gl.cost_source,
 		gl.created_at, gl.updated_at`
 
 // Full columns for detail queries (includes request payload and outputs).
@@ -35,6 +37,8 @@ const genLogFullCols = `gl.id, gl.task_id, gl.model_name,
 		COALESCE(gl.scene_id, '') AS scene_id,
 		COALESCE(gl.scene_code, '') AS scene_code,
 		COALESCE(gl.take_number, 0) AS take_number,
+		gl.resource_type, gl.content_types,
+		gl.estimated_cost, gl.cost_source,
 		gl.created_at, gl.updated_at, gl.deleted_at`
 
 const genLogJoinCols = `COALESCE(u.username, '') AS user_name,
@@ -57,6 +61,8 @@ func (s *GenerationLogStore) scanListRow(row *GenerationLog, scanner interface {
 		&row.Status, &row.ErrorMessage,
 		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
 		&row.TakeNumber,
+		&row.ResourceType, &row.ContentTypes,
+		&row.EstimatedCost, &row.CostSource,
 		&row.CreatedAt, &row.UpdatedAt,
 		&row.UserName, &row.UserDisplayName, &row.ProjectName, &row.SceneName, &row.SceneNumber,
 	)
@@ -72,6 +78,8 @@ func (s *GenerationLogStore) scanDetailRow(row *GenerationLog, scanner interface
 		&row.Status, &row.ErrorMessage,
 		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
 		&row.TakeNumber,
+		&row.ResourceType, &row.ContentTypes,
+		&row.EstimatedCost, &row.CostSource,
 		&row.CreatedAt, &row.UpdatedAt, &row.DeletedAt,
 		&row.UserName, &row.UserDisplayName, &row.ProjectName, &row.SceneName, &row.SceneNumber,
 	)
@@ -79,15 +87,14 @@ func (s *GenerationLogStore) scanDetailRow(row *GenerationLog, scanner interface
 
 // Create inserts a new generation log entry.
 func (s *GenerationLogStore) Create(log *GenerationLog) error {
-	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, outputs, status, error_message, user_id, project_id, scene_id, scene_code, take_number)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, outputs, status, error_message, user_id, project_id, scene_id, scene_code, take_number, resource_type, content_types, estimated_cost, cost_source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, created_at, updated_at`
 
 	return s.db.QueryRow(query,
 		log.TaskID,
 		log.ModelName,
 		nullIfEmpty(log.Request),
-
 		nullIfEmpty(log.Outputs),
 		log.Status,
 		nullIfEmpty(log.ErrorMessage),
@@ -96,7 +103,28 @@ func (s *GenerationLogStore) Create(log *GenerationLog) error {
 		nullIfEmpty(log.SceneID),
 		nullIfEmpty(log.SceneCode),
 		log.TakeNumber,
+		log.ResourceType,
+		log.ContentTypes,
+		log.EstimatedCost,
+		log.CostSource,
 	).Scan(&log.ID, &log.CreatedAt, &log.UpdatedAt)
+}
+
+// UpdateCost updates the estimated cost for a completed generation log.
+func (s *GenerationLogStore) UpdateCost(taskID string, cost float64, source string) error {
+	query := `UPDATE generation_logs
+		SET estimated_cost = $1, cost_source = $2, updated_at = NOW()
+		WHERE task_id = $3 AND deleted_at IS NULL`
+
+	result, err := s.db.Exec(query, cost, source, taskID)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("generation log not found for task: %s", taskID)
+	}
+	return nil
 }
 
 // GetByID returns a single log entry by its ID (includes full payload).
@@ -189,7 +217,7 @@ func (s *GenerationLogStore) List(page, limit int) ([]GenerationLog, int, error)
 
 // ListByFilter returns paginated generation logs filtered by the given criteria, newest first.
 // Empty filter values are ignored (no filter applied for that field).
-func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, status, modelName string, userID int, dateFrom, dateTo string) ([]GenerationLog, int, error) {
+func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, status, modelName string, userID int, dateFrom, dateTo, resourceType string) ([]GenerationLog, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -235,6 +263,11 @@ func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, s
 	if dateTo != "" {
 		where += fmt.Sprintf(" AND created_at <= $%d", argIdx)
 		args = append(args, dateTo+"T23:59:59Z")
+		argIdx++
+	}
+	if resourceType != "" {
+		where += fmt.Sprintf(" AND gl.resource_type = $%d", argIdx)
+		args = append(args, resourceType)
 		argIdx++
 	}
 

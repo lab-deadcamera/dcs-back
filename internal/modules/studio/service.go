@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+		"sort"
 	"time"
 
 	"dcs-back-v0/internal/modules/character"
@@ -33,6 +34,7 @@ type Service struct {
 	outputsDir           string
 	handlers             []ModelHandler
 	pipelineGens         []PipelineRunner
+		costCalcs            []CostCalculator
 	tasks                map[string]*TaskRecord
 	assetSyncStore       *AssetSyncStore
 	baseURL              string
@@ -53,6 +55,7 @@ func NewService(providerStore *provider.Store, fileService *file.Service, output
 		baseURL:       baseURL,
 		handlers:      []ModelHandler{},
 		pipelineGens:  []PipelineRunner{},
+			costCalcs:  []CostCalculator{},
 		tasks:         make(map[string]*TaskRecord),
 	}
 }
@@ -131,6 +134,21 @@ func (s *Service) pickGenerator(modelName string) PipelineRunner {
 	}
 	return nil
 }
+// ─── Cost calculator registration ──────────────────────────────────
+
+func (s *Service) RegisterCalculator(calc CostCalculator) {
+	s.costCalcs = append(s.costCalcs, calc)
+}
+
+func (s *Service) pickCalculator(modelName string) CostCalculator {
+	for _, c := range s.costCalcs {
+		if c.Match(modelName) {
+			return c
+		}
+	}
+	return nil
+}
+
 
 // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Unified payload generation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
@@ -147,6 +165,8 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		status    = "failed"
 				outputs   string
 				errLog    string
+		estimatedCost float64
+			costSource    string
 	)
 
 	// Defer log save Ã¢â‚¬â€ runs on every return path (including early errors)
@@ -173,9 +193,13 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 			SceneCode:     req.SceneCode,
 			TakeNumber:    req.TakeNumber,
 			Request:       string(reqBytes),
-									Outputs:       outputs,
+			Outputs:       outputs,
 			Status:        status,
 			ErrorMessage:  errLog,
+			ResourceType:  req.ResourceType,
+			ContentTypes:  extractContentTypes(req.Content),
+			EstimatedCost: estimatedCost,
+			CostSource:    costSource,
 		}
 		if saveErr := s.logStore.Create(logEntry); saveErr != nil {
 			fmt.Printf("failed to save generation log: %v\n", saveErr)
@@ -200,6 +224,16 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		errLog = fmt.Sprintf("failed to resolve content: %v", err)
 		return nil, fmt.Errorf("failed to resolve content: %w", err)
 	}
+	// Compute total input video duration from resolved content
+	inputDuration := float64(0)
+	for _, item := range resolvedContent {
+		if item.Type == "video" && item.ID != "" {
+			if f, err := s.fileService.GetFile(item.ID); err == nil && f != nil {
+				inputDuration += f.Duration
+			}
+		}
+	}
+
 
 	// Convert to generator request
 	genReq = &GeneratorRequest{
@@ -284,6 +318,20 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		errLog = err.Error()
 		return nil, err
 	}
+	// Calculate estimated cost
+	if calc := s.pickCalculator(modelName); calc != nil {
+		if cost, ok := calc.CalculateFromResponse(result.Raw, genReq); ok {
+			estimatedCost = cost
+			costSource = "api_response"
+		} else if !calc.NeedsBackgroundCalc() {
+			estimatedCost = calc.CalculateEstimated(genReq)
+			costSource = "calculator"
+		} else {
+			costSource = "pending"
+			// Background calculation handled separately
+		}
+	}
+
 
 	// Track the task for status polling
 	s.mu.Lock()
@@ -1161,7 +1209,7 @@ func (s *Service) CancelTask(taskID string) error {
 // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Log listing Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 // ListGenerationLogs returns paginated generation logs, optionally filtered.
-func (s *Service) ListGenerationLogs(page, limit int, projectID, sceneID, status, modelName string, userID int, dateFrom, dateTo string) (*ListGenerationLogsResponse, error) {
+func (s *Service) ListGenerationLogs(page, limit int, projectID, sceneID, status, modelName string, userID int, dateFrom, dateTo, resourceType string) (*ListGenerationLogsResponse, error) {
 	if s.logStore == nil {
 		return nil, fmt.Errorf("log store not available")
 	}
@@ -1171,8 +1219,8 @@ func (s *Service) ListGenerationLogs(page, limit int, projectID, sceneID, status
 		total int
 		err   error
 	)
-	if projectID != "" || sceneID != "" || status != "" || modelName != "" || userID > 0 || dateFrom != "" || dateTo != "" {
-		logs, total, err = s.logStore.ListByFilter(page, limit, projectID, sceneID, status, modelName, userID, dateFrom, dateTo)
+	if projectID != "" || sceneID != "" || status != "" || modelName != "" || userID > 0 || dateFrom != "" || dateTo != "" || resourceType != "" {
+		logs, total, err = s.logStore.ListByFilter(page, limit, projectID, sceneID, status, modelName, userID, dateFrom, dateTo, resourceType)
 	} else {
 		logs, total, err = s.logStore.List(page, limit)
 	}
@@ -1474,7 +1522,22 @@ func (s *Service) GallerySyncContent(items []ContentItem, modelName string) ([]C
 	return result, nil
 }
 
-
+// extractContentTypes returns a sorted, comma-separated list of unique content types.
+func extractContentTypes(items []ContentItem) string {
+	seen := make(map[string]bool)
+	var types []string
+	for _, item := range items {
+		if item.Type != "" && !seen[item.Type] {
+			seen[item.Type] = true
+			types = append(types, item.Type)
+		}
+	}
+	sort.Strings(types)
+	if len(types) == 0 {
+		return ""
+	}
+	return strings.Join(types, ",")
+}
 
 
 

@@ -80,8 +80,6 @@ func (s *Store) CopyFile(src io.Reader, subpath string) error {
 	return err
 }
 
-// ─── Thumbnails ────────────────────────────────────────────────
-
 func (s *Store) GenerateThumbnail(srcSubpath string, width, height int) (string, error) {
 	srcPath := filepath.Join(s.uploadDir, srcSubpath)
 	thumbName := "thumbnails/" + srcSubpath
@@ -143,19 +141,22 @@ func decodeImage(path string) (image.Image, error) {
 // ─── DB operations ────────────────────────────────────────────
 
 func (s *Store) CreateFile(f *File) error {
-	query := `INSERT INTO files (id, filename, path, size, mime_type, category, format, storage)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	query := `INSERT INTO files (id, filename, path, size, mime_type, category, format, storage, duration)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, f.ID, f.Filename, f.Path, f.Size, f.MimeType, f.Category, f.Format, f.Storage).
+	return s.db.QueryRow(query, f.ID, f.Filename, f.Path, f.Size, f.MimeType, f.Category, f.Format, f.Storage, f.Duration).
 		Scan(&f.CreatedAt, &f.UpdatedAt)
 }
 
 func (s *Store) GetFileByID(id string) (*File, error) {
 	f := &File{}
-	query := `SELECT id, filename, path, size, mime_type, category, format, storage, trashed, created_at, updated_at, deleted_at
+	query := `SELECT id, filename, path, size, mime_type, category, format, storage, duration, trashed, created_at, updated_at, deleted_at
 		FROM files WHERE id = $1`
-	err := s.db.QueryRow(query, id).Scan(&f.ID, &f.Filename, &f.Path, &f.Size, &f.MimeType,
-		&f.Category, &f.Format, &f.Storage, &f.Trashed, &f.CreatedAt, &f.UpdatedAt, &f.DeletedAt)
+	err := s.db.QueryRow(query, id).Scan(
+		&f.ID, &f.Filename, &f.Path, &f.Size, &f.MimeType,
+		&f.Category, &f.Format, &f.Storage, &f.Duration, &f.Trashed,
+		&f.CreatedAt, &f.UpdatedAt, &f.DeletedAt,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -166,7 +167,7 @@ func (s *Store) GetFileByID(id string) (*File, error) {
 }
 
 func (s *Store) ListFiles(category, storage string, trashed bool) ([]File, error) {
-	query := `SELECT id, filename, path, size, mime_type, category, format, storage, trashed, created_at, updated_at, deleted_at
+	query := `SELECT id, filename, path, size, mime_type, category, format, storage, duration, trashed, created_at, updated_at, deleted_at
 		FROM files WHERE trashed = $1 AND deleted_at IS NULL`
 	args := []interface{}{trashed}
 	argIdx := 2
@@ -191,8 +192,11 @@ func (s *Store) ListFiles(category, storage string, trashed bool) ([]File, error
 	var files []File
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.Filename, &f.Path, &f.Size, &f.MimeType,
-			&f.Category, &f.Format, &f.Storage, &f.Trashed, &f.CreatedAt, &f.UpdatedAt, &f.DeletedAt); err != nil {
+		if err := rows.Scan(
+			&f.ID, &f.Filename, &f.Path, &f.Size, &f.MimeType,
+			&f.Category, &f.Format, &f.Storage, &f.Duration, &f.Trashed,
+			&f.CreatedAt, &f.UpdatedAt, &f.DeletedAt,
+		); err != nil {
 			return nil, err
 		}
 		files = append(files, f)
@@ -217,7 +221,7 @@ func (s *Store) HardDeleteFile(id string) error {
 }
 
 func (s *Store) ListExpiredTemp(maxAge time.Duration) ([]File, error) {
-	query := `SELECT id, filename, path, size, mime_type, category, format, storage, trashed, created_at, updated_at, deleted_at
+	query := `SELECT id, filename, path, size, mime_type, category, format, storage, duration, trashed, created_at, updated_at, deleted_at
 		FROM files WHERE storage = 'temp' AND deleted_at IS NULL AND created_at < $1`
 	cutoff := time.Now().Add(-maxAge)
 	rows, err := s.db.Query(query, cutoff)
@@ -229,8 +233,11 @@ func (s *Store) ListExpiredTemp(maxAge time.Duration) ([]File, error) {
 	var files []File
 	for rows.Next() {
 		var f File
-		if err := rows.Scan(&f.ID, &f.Filename, &f.Path, &f.Size, &f.MimeType,
-			&f.Category, &f.Format, &f.Storage, &f.Trashed, &f.CreatedAt, &f.UpdatedAt, &f.DeletedAt); err != nil {
+		if err := rows.Scan(
+			&f.ID, &f.Filename, &f.Path, &f.Size, &f.MimeType,
+			&f.Category, &f.Format, &f.Storage, &f.Duration, &f.Trashed,
+			&f.CreatedAt, &f.UpdatedAt, &f.DeletedAt,
+		); err != nil {
 			return nil, err
 		}
 		files = append(files, f)

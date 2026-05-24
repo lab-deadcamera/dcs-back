@@ -73,6 +73,8 @@ type StudioGenerateRequest struct {
 	SceneCode  string `json:"scene_code" binding:"required"`
 	TakeNumber int    `json:"take_number" binding:"required"`
 	UserID     int    `json:"user_id"`
+	// Resource type -- lo setea cada dominio (video/image/audio/text) automaticamente.
+	ResourceType string `json:"-"`
 }
 
 // OutputResource represents a single generated output (video, image, audio).
@@ -236,6 +238,14 @@ type GenerationLog struct {
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at,omitempty"`
 	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
+	// Tipo de recurso de la generacion (video, image, audio, text).
+	ResourceType string `json:"resource_type"`
+	// Tipos de contenido enviados (ej. "text,image").
+	ContentTypes string `json:"content_types"`
+// Costo estimado de la generacion en USD.
+	EstimatedCost float64 `json:"estimated_cost"`
+	// Fuente del costo: "api_response", "calculator", "pending".
+	CostSource string `json:"cost_source"`
 	// Enriched fields (LEFT JOIN, no almacenados en generation_logs)
 	UserName        string `json:"user_name"`
 	UserDisplayName string `json:"user_display_name"`
@@ -255,6 +265,7 @@ type ListGenerationLogsRequest struct {
 	UserID    int    `form:"user_id"`
 	DateFrom  string `form:"date_from"`
 	DateTo    string `form:"date_to"`
+	ResourceType string `form:"resource_type"`
 }
 
 // ListGenerationLogsResponse holds the paginated response for listing logs.
@@ -289,6 +300,7 @@ type GeneratorRequest struct {
 	Watermark     bool
 	Resolution    string
 	GenerateAudio bool
+InputDuration    float64
 	ImageMode     string
 	APIKey        string
 	BaseURL       string
