@@ -11,7 +11,7 @@ CREATE TABLE roles (
 INSERT INTO roles (name, level) VALUES
     ('SUPER_ADMIN', 0),
     ('ADMIN', 1),
-    ('SUPERVISOR', 2),
+    ('DIRECTOR', 2),
     ('USER', 3);
 
 -- ─── Users ────────────────────────────────────────────────────

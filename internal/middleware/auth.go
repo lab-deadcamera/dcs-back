@@ -84,7 +84,7 @@ func Auth(jwtSecret string) gin.HandlerFunc {
 // is greater than maxLevel (lower level = more privilege).
 //   - RequireRole(0) = only SUPER_ADMIN
 //   - RequireRole(1) = SUPER_ADMIN or ADMIN
-//   - RequireRole(2) = SUPER_ADMIN, ADMIN, or SUPERVISOR
+//   - RequireRole(2) = SUPER_ADMIN, ADMIN, or DIRECTOR
 //   - RequireRole(3) = anyone authenticated
 func RequireRole(maxLevel int) gin.HandlerFunc {
 	return func(c *gin.Context) {
