@@ -106,7 +106,6 @@ func (s *ProjectStore) SoftDelete(id string) error {
 
 const sceneCols = `id, project_id, number, COALESCE(name, '') AS name,
 	COALESCE(description, '') AS description, active,
-		(SELECT COUNT(*) FROM scenes WHERE project_id = id AND deleted_at IS NULL) AS scene_count,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanScene(sc *Scene, scanner interface {
@@ -196,7 +195,6 @@ func (s *ProjectStore) SoftDeleteScene(id string) error {
 const takeCols = `id, scene_id, number, COALESCE(video_url, '') AS video_url,
 	COALESCE(video_local_url, '') AS video_local_url,
 	COALESCE(status, 'pending') AS status, active,
-		(SELECT COUNT(*) FROM scenes WHERE project_id = id AND deleted_at IS NULL) AS scene_count,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanTake(t *Take, scanner interface {
