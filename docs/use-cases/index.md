@@ -9,7 +9,7 @@
 | 3 | Crear personajes | [`create-characters.md`](./create-characters.md) |
 | 4 | Agregar archivos a un personaje | [`add-files-to-character.md`](./add-files-to-character.md) |
 | 5 | Proveedores y modelos de IA | [`providers-and-models.md`](./providers-and-models.md) |
-| 6 | Generación de video (Studio) | [`studio-generation.md`](./studio-generation.md) |
+| 6 | Generación de video (Studio) | [`studio-video-generation.md`](./studio-video-generation.md) |
 | 7 | Generación de imagen (Studio) | [`studio-image-generation.md`](./studio-image-generation.md) |
 | 8 | Generación de audio (Studio) | [`studio-audio-generation.md`](./studio-audio-generation.md) |
 | 9 | Generación de texto (Studio) | [`studio-text-generation.md`](./studio-text-generation.md) |
