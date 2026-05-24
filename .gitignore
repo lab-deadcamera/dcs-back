@@ -19,6 +19,7 @@ vendor/
 .env
 
 # App
+screen/
 uploads/
 thumbnails/
 
