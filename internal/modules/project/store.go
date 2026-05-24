@@ -332,3 +332,144 @@ func nullIfEmpty(s string) interface{} {
 	}
 	return s
 }
+
+// ─── Scene Assignment Store ─────────────────────────────────────
+
+func (s *ProjectStore) GetScenePresets(sceneID string) ([]ScenePresetAssignment, error) {
+	query := `SELECT sp.id, sp.scene_id, sp.preset_id, p.code, p.label, pg.slug AS group_slug, sp.created_at
+		FROM scene_presets sp
+		JOIN presets p ON p.id = sp.preset_id
+		JOIN preset_groups pg ON pg.id = p.group_id
+		WHERE sp.scene_id = $1
+		ORDER BY pg.slug, p.code`
+	rows, err := s.db.Query(query, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ScenePresetAssignment
+	for rows.Next() {
+		var a ScenePresetAssignment
+		if err := rows.Scan(&a.ID, &a.SceneID, &a.PresetID, &a.Code, &a.Label, &a.GroupSlug, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (s *ProjectStore) GetSceneCharacters(sceneID string) ([]SceneCharacterAssignment, error) {
+	query := `SELECT sc.id, sc.scene_id, sc.character_id, c.name, sc.created_at
+		FROM scene_characters sc
+		JOIN characters c ON c.id = sc.character_id
+		WHERE sc.scene_id = $1
+		ORDER BY c.name`
+	rows, err := s.db.Query(query, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []SceneCharacterAssignment
+	for rows.Next() {
+		var a SceneCharacterAssignment
+		if err := rows.Scan(&a.ID, &a.SceneID, &a.CharacterID, &a.Name, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (s *ProjectStore) GetSceneAssets(sceneID string) ([]SceneAssetAssignment, error) {
+	query := `SELECT sa.id, sa.scene_id, sa.file_id, f.filename, f.mime_type, sa.created_at
+		FROM scene_assets sa
+		JOIN files f ON f.id = sa.file_id
+		WHERE sa.scene_id = $1
+		ORDER BY f.filename`
+	rows, err := s.db.Query(query, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []SceneAssetAssignment
+	for rows.Next() {
+		var a SceneAssetAssignment
+		if err := rows.Scan(&a.ID, &a.SceneID, &a.FileID, &a.Filename, &a.MimeType, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (s *ProjectStore) AssignPresetToScene(sceneID, presetID string) (string, error) {
+	var id string
+	query := `INSERT INTO scene_presets (id, scene_id, preset_id)
+		VALUES (gen_random_uuid(), $1, $2)
+		RETURNING id`
+	err := s.db.QueryRow(query, sceneID, presetID).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) AssignCharacterToScene(sceneID, characterID string) (string, error) {
+	var id string
+	query := `INSERT INTO scene_characters (id, scene_id, character_id)
+		VALUES (gen_random_uuid(), $1, $2)
+		RETURNING id`
+	err := s.db.QueryRow(query, sceneID, characterID).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) AssignAssetToScene(sceneID, fileID string) (string, error) {
+	var id string
+	query := `INSERT INTO scene_assets (id, scene_id, file_id)
+		VALUES (gen_random_uuid(), $1, $2)
+		RETURNING id`
+	err := s.db.QueryRow(query, sceneID, fileID).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) RemoveScenePreset(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM scene_presets WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) RemoveSceneCharacter(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM scene_characters WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) RemoveSceneAsset(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM scene_assets WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}

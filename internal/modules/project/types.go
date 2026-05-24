@@ -94,3 +94,38 @@ type SceneWithTakes struct {
 	Scene Scene  `json:"scene"`
 	Takes []Take `json:"takes"`
 }
+
+// ─── Scene Assignments ─────────────────────────────────────────
+
+type ScenePresetAssignment struct {
+	ID        string    `json:"id"`
+	SceneID   string    `json:"scene_id"`
+	PresetID  string    `json:"preset_id"`
+	Code      string    `json:"code"`
+	Label     string    `json:"label"`
+	GroupSlug string    `json:"group_slug"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type SceneCharacterAssignment struct {
+	ID          string    `json:"id"`
+	SceneID     string    `json:"scene_id"`
+	CharacterID string    `json:"character_id"`
+	Name        string    `json:"name"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type SceneAssetAssignment struct {
+	ID        string    `json:"id"`
+	SceneID   string    `json:"scene_id"`
+	FileID    string    `json:"file_id"`
+	Filename  string    `json:"filename"`
+	MimeType  string    `json:"mime_type"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type SceneAssignments struct {
+	Presets    []ScenePresetAssignment    `json:"presets"`
+	Characters []SceneCharacterAssignment `json:"characters"`
+	Assets     []SceneAssetAssignment     `json:"assets"`
+}

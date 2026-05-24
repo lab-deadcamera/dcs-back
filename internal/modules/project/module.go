@@ -1,6 +1,8 @@
 package project
 
 import (
+	"dcs-back-v0/internal/middleware"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -37,5 +39,14 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 		g.DELETE("/:id/scenes/:sceneId/takes/:takeId", m.hdl.SoftDeleteTake)
 		g.POST("/:id/scenes/:sceneId/takes/save-generation", m.hdl.SaveGeneration)
 		g.POST("/:id/scenes/:sceneId/takes/:takeId/toggle-active", m.hdl.ToggleTakeActive)
+
+		// Scene assignments (GET anyone auth'd, POST/DELETE admin+director)
+		g.GET("/:id/scenes/:sceneId/assignments", m.hdl.GetSceneAssignments)
+		g.POST("/:id/scenes/:sceneId/assignments/presets", middleware.RequireRole(2), m.hdl.AssignPresetToScene)
+		g.POST("/:id/scenes/:sceneId/assignments/characters", middleware.RequireRole(2), m.hdl.AssignCharacterToScene)
+		g.POST("/:id/scenes/:sceneId/assignments/assets", middleware.RequireRole(2), m.hdl.AssignAssetToScene)
+		g.DELETE("/:id/scenes/:sceneId/assignments/presets/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveScenePreset)
+		g.DELETE("/:id/scenes/:sceneId/assignments/characters/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveSceneCharacter)
+		g.DELETE("/:id/scenes/:sceneId/assignments/assets/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveSceneAsset)
 	}
 }

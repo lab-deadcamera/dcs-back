@@ -14,6 +14,7 @@ import (
 	"dcs-back-v0/internal/modules"
 	"dcs-back-v0/internal/modules/project"
 	"dcs-back-v0/internal/modules/provider"
+"dcs-back-v0/internal/modules/preset"
 	"dcs-back-v0/internal/modules/studio"
 	studioaudio "dcs-back-v0/internal/modules/studio/audio"
 	studioimage "dcs-back-v0/internal/modules/studio/image"
@@ -61,6 +62,9 @@ func main() {
 	providerStore := provider.NewStore(database)
 	providerSvc := provider.NewService(providerStore)
 	providerHdl := provider.NewHandler(providerSvc)
+	presetStore := preset.NewStore(database)
+	presetSvc := preset.NewService(presetStore)
+	presetHdl := preset.NewHandler(presetSvc)
 
 	fileStore, err := file.NewStore(database, cfg.UploadDir)
 	if err != nil {
@@ -170,6 +174,7 @@ func main() {
 	registry.Register(file.NewModule(fileHdl))
 	registry.Register(character.NewModule(charHdl))
 	registry.Register(provider.NewModule(providerHdl))
+registry.Register(preset.NewModule(presetHdl))
 	registry.Register(project.NewModule(projectHdl))
 	registry.Register(studio.NewModule(studioHdl, studioVideoHdl, studioImageHdl, studioAudioHdl, studioTextHdl))
 	registry.Setup(v1, authMw, adminMw)

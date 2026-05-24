@@ -28,6 +28,16 @@ type projectStore interface {
 	DeactivateTakesByNumber(sceneID string, number int) error
 	UpdateTake(id string, updates map[string]interface{}) error
 	SoftDeleteTake(id string) error
+
+	GetScenePresets(sceneID string) ([]ScenePresetAssignment, error)
+	GetSceneCharacters(sceneID string) ([]SceneCharacterAssignment, error)
+	GetSceneAssets(sceneID string) ([]SceneAssetAssignment, error)
+	AssignPresetToScene(sceneID, presetID string) (string, error)
+	AssignCharacterToScene(sceneID, characterID string) (string, error)
+	AssignAssetToScene(sceneID, fileID string) (string, error)
+	RemoveScenePreset(assignmentID string) error
+	RemoveSceneCharacter(assignmentID string) error
+	RemoveSceneAsset(assignmentID string) error
 }
 
 type Service struct {
@@ -375,4 +385,50 @@ func (s *Service) ToggleTakeActive(id string) (*Take, error) {
 		return nil, err
 	}
 	return s.store.GetTakeByID(id)
+}
+
+// ─── Scene Assignments ──────────────────────────────────────────
+
+func (s *Service) GetSceneAssignments(sceneID string) (*SceneAssignments, error) {
+	presets, err := s.store.GetScenePresets(sceneID)
+	if err != nil {
+		return nil, err
+	}
+	characters, err := s.store.GetSceneCharacters(sceneID)
+	if err != nil {
+		return nil, err
+	}
+	assets, err := s.store.GetSceneAssets(sceneID)
+	if err != nil {
+		return nil, err
+	}
+	return &SceneAssignments{
+		Presets:    presets,
+		Characters: characters,
+		Assets:     assets,
+	}, nil
+}
+
+func (s *Service) AssignPresetToScene(sceneID, presetID string) (string, error) {
+	return s.store.AssignPresetToScene(sceneID, presetID)
+}
+
+func (s *Service) AssignCharacterToScene(sceneID, characterID string) (string, error) {
+	return s.store.AssignCharacterToScene(sceneID, characterID)
+}
+
+func (s *Service) AssignAssetToScene(sceneID, fileID string) (string, error) {
+	return s.store.AssignAssetToScene(sceneID, fileID)
+}
+
+func (s *Service) RemoveScenePreset(assignmentID string) error {
+	return s.store.RemoveScenePreset(assignmentID)
+}
+
+func (s *Service) RemoveSceneCharacter(assignmentID string) error {
+	return s.store.RemoveSceneCharacter(assignmentID)
+}
+
+func (s *Service) RemoveSceneAsset(assignmentID string) error {
+	return s.store.RemoveSceneAsset(assignmentID)
 }

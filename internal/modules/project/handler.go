@@ -365,3 +365,121 @@ func (h *Handler) SoftDeleteTake(c *gin.Context) {
 
 	utils.Message(c, "take deleted")
 }
+
+// ─── Scene Assignments ──────────────────────────────────────────
+
+func (h *Handler) GetSceneAssignments(c *gin.Context) {
+	sceneID := c.Param("sceneId")
+	if sceneID == "" {
+		utils.BadRequest(c, "sceneId is required")
+		return
+	}
+	result, err := h.svc.GetSceneAssignments(sceneID)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Success(c, result)
+}
+
+func (h *Handler) AssignPresetToScene(c *gin.Context) {
+	sceneID := c.Param("sceneId")
+	var req struct {
+		PresetID string `json:"preset_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+	id, err := h.svc.AssignPresetToScene(sceneID, req.PresetID)
+	if err != nil {
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			utils.BadRequest(c, "preset already assigned to this scene")
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Created(c, map[string]string{"id": id})
+}
+
+func (h *Handler) AssignCharacterToScene(c *gin.Context) {
+	sceneID := c.Param("sceneId")
+	var req struct {
+		CharacterID string `json:"character_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+	id, err := h.svc.AssignCharacterToScene(sceneID, req.CharacterID)
+	if err != nil {
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			utils.BadRequest(c, "character already assigned to this scene")
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Created(c, map[string]string{"id": id})
+}
+
+func (h *Handler) AssignAssetToScene(c *gin.Context) {
+	sceneID := c.Param("sceneId")
+	var req struct {
+		FileID string `json:"file_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+	id, err := h.svc.AssignAssetToScene(sceneID, req.FileID)
+	if err != nil {
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			utils.BadRequest(c, "asset already assigned to this scene")
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Created(c, map[string]string{"id": id})
+}
+
+func (h *Handler) RemoveScenePreset(c *gin.Context) {
+	assignmentID := c.Param("assignmentId")
+	if err := h.svc.RemoveScenePreset(assignmentID); err != nil {
+		if err.Error() == "assignment not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Message(c, "preset unassigned")
+}
+
+func (h *Handler) RemoveSceneCharacter(c *gin.Context) {
+	assignmentID := c.Param("assignmentId")
+	if err := h.svc.RemoveSceneCharacter(assignmentID); err != nil {
+		if err.Error() == "assignment not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Message(c, "character unassigned")
+}
+
+func (h *Handler) RemoveSceneAsset(c *gin.Context) {
+	assignmentID := c.Param("assignmentId")
+	if err := h.svc.RemoveSceneAsset(assignmentID); err != nil {
+		if err.Error() == "assignment not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Message(c, "asset unassigned")
+}
