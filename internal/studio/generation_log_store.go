@@ -79,15 +79,15 @@ func (s *GenerationLogStore) scanDetailRow(row *GenerationLog, scanner interface
 
 // Create inserts a new generation log entry.
 func (s *GenerationLogStore) Create(log *GenerationLog) error {
-	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, ai_response, ai_call_payload, outputs, status, error_message, user_id, project_id, scene_id, scene_code, take_number)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, outputs, status, error_message, user_id, project_id, scene_id, scene_code, take_number)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at, updated_at`
 
 	return s.db.QueryRow(query,
 		log.TaskID,
 		log.ModelName,
 		nullIfEmpty(log.Request),
-		nil, nil,
+
 		nullIfEmpty(log.Outputs),
 		log.Status,
 		nullIfEmpty(log.ErrorMessage),
