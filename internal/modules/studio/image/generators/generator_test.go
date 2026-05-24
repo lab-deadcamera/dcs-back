@@ -3,7 +3,7 @@ package generators
 import (
 	"testing"
 
-	"dcs-back-v0/internal/studio"
+	"dcs-back-v0/internal/modules/studio"
 )
 
 func TestSeedreamValidate_Valid(t *testing.T) {

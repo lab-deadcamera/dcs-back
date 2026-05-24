@@ -3,7 +3,7 @@ package video
 import (
 	"log"
 
-	"dcs-back-v0/internal/studio"
+	"dcs-back-v0/internal/modules/studio"
 )
 
 type videoService struct {

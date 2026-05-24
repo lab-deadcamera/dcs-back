@@ -1,7 +1,7 @@
 package image
 
 import (
-	"dcs-back-v0/internal/studio"
+	"dcs-back-v0/internal/modules/studio"
 )
 
 type imageService struct {

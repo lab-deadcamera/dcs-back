@@ -3,7 +3,7 @@
 // TextGenerator is the interface that all text generators must implement.
 package text
 
-import "dcs-back-v0/internal/studio"
+import "dcs-back-v0/internal/modules/studio"
 
 // TextGenerator defines the contract that all text generators must satisfy.
 type TextGenerator interface {

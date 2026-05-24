@@ -3,7 +3,7 @@
 // AudioGenerator is the interface that all audio generators must implement.
 package audio
 
-import "dcs-back-v0/internal/studio"
+import "dcs-back-v0/internal/modules/studio"
 
 // AudioGenerator defines the contract that all audio generators must satisfy.
 type AudioGenerator interface {

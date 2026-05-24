@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"dcs-back-v0/internal/character"
-	"dcs-back-v0/internal/file"
-	"dcs-back-v0/internal/provider"
+	"dcs-back-v0/internal/modules/character"
+	"dcs-back-v0/internal/modules/file"
+	"dcs-back-v0/internal/modules/provider"
 )
 
 // PipelineRunner is the internal interface satisfied by all domain generators

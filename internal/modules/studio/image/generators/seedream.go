@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"dcs-back-v0/internal/studio"
+	"dcs-back-v0/internal/modules/studio"
 )
 
 var nameModelSeedream = "dreamina-seedream-4-pro-251224"

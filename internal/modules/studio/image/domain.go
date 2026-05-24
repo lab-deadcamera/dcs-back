@@ -5,7 +5,7 @@
 // Internally, generators work with shared types from the generators package.
 package image
 
-import "dcs-back-v0/internal/studio"
+import "dcs-back-v0/internal/modules/studio"
 
 // ImageGenerator defines the contract that all image generators must satisfy.
 type ImageGenerator interface {

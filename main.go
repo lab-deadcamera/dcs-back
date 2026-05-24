@@ -5,22 +5,22 @@ import (
 	"os"
 
 	"dcs-back-v0/config"
-	"dcs-back-v0/internal/auth"
-	"dcs-back-v0/internal/character"
+	"dcs-back-v0/internal/modules/auth"
+	"dcs-back-v0/internal/modules/character"
 	"dcs-back-v0/internal/db"
-	"dcs-back-v0/internal/file"
-	"dcs-back-v0/internal/image"
+	"dcs-back-v0/internal/modules/file"
+	"dcs-back-v0/internal/modules/image"
 	"dcs-back-v0/internal/middleware"
-	"dcs-back-v0/internal/module"
-	"dcs-back-v0/internal/project"
-	"dcs-back-v0/internal/provider"
-	"dcs-back-v0/internal/studio"
-	studioaudio "dcs-back-v0/internal/studio/audio"
-	studioimage "dcs-back-v0/internal/studio/image"
-	studioimagegens "dcs-back-v0/internal/studio/image/generators"
-	studiotext "dcs-back-v0/internal/studio/text"
-	studiovideo "dcs-back-v0/internal/studio/video"
-	videogens "dcs-back-v0/internal/studio/video/generators"
+	"dcs-back-v0/internal/modules"
+	"dcs-back-v0/internal/modules/project"
+	"dcs-back-v0/internal/modules/provider"
+	"dcs-back-v0/internal/modules/studio"
+	studioaudio "dcs-back-v0/internal/modules/studio/audio"
+	studioimage "dcs-back-v0/internal/modules/studio/image"
+	studioimagegens "dcs-back-v0/internal/modules/studio/image/generators"
+	studiotext "dcs-back-v0/internal/modules/studio/text"
+	studiovideo "dcs-back-v0/internal/modules/studio/video"
+	videogens "dcs-back-v0/internal/modules/studio/video/generators"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -159,7 +159,7 @@ func main() {
 	authMw := middleware.Auth(cfg.JWTSecret)
 	adminMw := middleware.RequireRole(1)
 
-	registry := module.NewRegistry()
+	registry := modules.NewRegistry()
 	registry.Register(auth.NewModule(authHdl))
 	registry.Register(image.NewModule(imageHdl))
 	registry.Register(file.NewModule(fileHdl))

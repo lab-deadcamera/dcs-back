@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"dcs-back-v0/internal/studio"
+	"dcs-back-v0/internal/modules/studio"
 )
 
 var nameModeldreamina = "dreamina-seedance-2-0-260128"

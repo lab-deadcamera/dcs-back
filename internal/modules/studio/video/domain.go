@@ -5,7 +5,7 @@
 // Internally, generators work with shared types from the generators package.
 package video
 
-import "dcs-back-v0/internal/studio"
+import "dcs-back-v0/internal/modules/studio"
 
 // VideoGenerator defines the contract that all video generators must satisfy.
 type VideoGenerator interface {
