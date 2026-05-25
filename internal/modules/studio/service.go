@@ -2,12 +2,14 @@
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"time"
 	"fmt"
 	"log"
 	"strings"
 	"sync"
-		"sort"
-	"time"
+	"sort"
 
 	"dcs-back-v0/internal/modules/character"
 	"dcs-back-v0/internal/modules/file"
@@ -330,31 +332,37 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 			costSource = "pending"
 			// Background calculation handled separately
 		}
-	}
+t	}
+		// Store naming info in task record for local filename
+		uid := 0
+		if req.UserID > 0 { uid = req.UserID }
 
 
-	// Track the task for status polling
-	s.mu.Lock()
-	s.tasks[result.TaskID] = &TaskRecord{
-		TaskID:    result.TaskID,
+		// Track the task for status polling
+		s.mu.Lock()
+		s.tasks[result.TaskID] = &TaskRecord{
+			TaskID:    result.TaskID,
 		ModelID:   m.ID,
 		ModelName: m.Name,
 		Status:    result.Status,
-		Result: &StatusResult{
-			Status: result.Status,
-			Raw:    result.Raw,
-		},
-	}
-	s.mu.Unlock()
+			SceneCode:  req.SceneCode,
+			TakeNumber: req.TakeNumber,
+			UserHandle: fmt.Sprint(uid),
+			Result: &StatusResult{
+				Status: result.Status,
+				Raw:    result.Raw,
+			},
+		}
+		s.mu.Unlock()
 
-	out := convertOutputs(result.Outputs)
+		out := convertOutputs(result.Outputs)
 
-	return &StudioGenerateResponse{
-		TaskID:  result.TaskID,
-		Model:   result.Model,
-		Status:  result.Status,
-		Outputs: out,
-	}, nil
+		return &StudioGenerateResponse{
+			TaskID:  result.TaskID,
+			Model:   result.Model,
+			Status:  result.Status,
+			Outputs: out,
+}
 }
 
 // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Legacy generation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
@@ -1074,6 +1082,7 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 			if err != nil {
 				errMsg = err.Error()
 			}
+		}
 			s.commStore.Create(&ServerCommunication{
 				TaskID:       taskID,
 				ModelName:    m.Name,
@@ -1088,7 +1097,6 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 		log.Printf("[get-status] gen.GetStatus err=%v", err != nil)
 		if err != nil {
 			return nil, err
-		}
 		statusResult := &StatusResult{
 			Status: result.Status,
 			Error:  result.Error,
@@ -1098,12 +1106,19 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 			statusResult.VideoURL = result.Outputs[0].URL
 			statusResult.LocalURL = result.Outputs[0].LocalURL
 		}
+		// Rename local file to follow project/scene/take pattern
+		if result.Status == "succeeded" && statusResult.LocalURL != "" {
+			newPath := s.renameOutputFile(statusResult.LocalURL, record.SceneCode, record.TakeNumber, record.UserHandle)
+			if newPath != "" {
+				statusResult.LocalURL = newPath
+				result.Outputs[0].LocalURL = newPath
+			}
+		}
 		if result.Status == "succeeded" || result.Status == "failed" {
 			s.mu.Lock()
 			record.Status = result.Status
 			record.Result = statusResult
 			s.mu.Unlock()
-
 			// Update generation log with final AI response
 			s.updateLogWithFinalStatus(taskID, result)
 			if result.Status == "succeeded" {
@@ -1542,3 +1557,45 @@ func extractContentTypes(items []ContentItem) string {
 
 
 
+
+
+// renameOutputFile renames a locally-downloaded output file to follow the
+// pattern: {SceneCode}_T{take}_{user}_{datetime}.mp4
+func (s *Service) renameOutputFile(localURL, sceneCode string, takeNumber int, userHandle string) string {
+	if localURL == "" || sceneCode == "" {
+		return ""
+text := ".mp4"
+	now := time.Now()
+	ts := fmt.Sprintf("%s_%s",
+		now.Format("20060102"),
+		now.Format("150405"))
+	}
+
+	ext := ".mp4"
+	now := time.Now()
+	ts := fmt.Sprintf("%s%s%s_%s%s%s",
+		now.Format("20060102"),
+		now.Format("150405"))
+
+	safe := func(s string) string {
+		r := strings.NewReplacer("/", "_", " ", "_", ":", "_")
+		return r.Replace(s)
+	}
+
+	userPart := "u" + userHandle
+	if userPart == "u0" || userPart == "u" {
+		userPart = ""
+	} else {
+		userPart = "_" + userPart
+	}
+
+	newName := fmt.Sprintf("%s_T%d%s_%s%s",
+		safe(sceneCode), takeNumber, userPart, ts, ext)
+	newPath := s.outputsDir + "/" + newName
+
+	if err := os.Rename(oldPath, newPath); err != nil {
+		return ""
+	}
+
+	return "/outputs/" + newName
+}

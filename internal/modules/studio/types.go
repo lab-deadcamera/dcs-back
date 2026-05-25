@@ -216,6 +216,10 @@ type TaskRecord struct {
 	CreatedAt time.Time
 	Status    string
 	Result    *StatusResult
+	// Naming info for local video filename
+	SceneCode  string
+	TakeNumber int
+	UserHandle string
 }
 
 // ─── Generation log types ───────────────────────────────────────
