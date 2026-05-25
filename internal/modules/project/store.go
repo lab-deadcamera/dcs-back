@@ -1,4 +1,4 @@
-package project
+﻿package project
 
 import (
 	"database/sql"
@@ -194,13 +194,13 @@ func (s *ProjectStore) SoftDeleteScene(id string) error {
 
 const takeCols = `id, scene_id, number, COALESCE(video_url, '') AS video_url,
 	COALESCE(video_local_url, '') AS video_local_url,
-	COALESCE(status, 'pending') AS status, active,
+	COALESCE(status, 'pending') AS status, active, final,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanTake(t *Take, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(&t.ID, &t.SceneID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
+return scanner.Scan(&t.ID, &t.SceneID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.Final, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
 }
 
 func (s *ProjectStore) CreateTake(t *Take) error {

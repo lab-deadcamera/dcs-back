@@ -66,6 +66,8 @@ type Take struct {
 	VideoLocalURL string     `json:"video_local_url,omitempty"`
 	Status        string     `json:"status"`
 	Active        bool       `json:"active"`
+	Final         bool       `json:"final"`
+	FinalizedAt   *time.Time `json:"finalized_at,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
@@ -81,6 +83,7 @@ type UpdateTakeRequest struct {
 	VideoLocalURL *string `json:"video_local_url"`
 	Status        *string `json:"status"`
 	Active        *bool   `json:"active"`
+	Final         *bool   `json:"final"`
 }
 
 // ─── Combined responses ─────────────────────────────────────────
