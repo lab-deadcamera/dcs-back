@@ -3,7 +3,6 @@
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"time"
 	"fmt"
 	"log"
@@ -332,7 +331,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 			costSource = "pending"
 			// Background calculation handled separately
 		}
-t	}
+		}
 		// Store naming info in task record for local filename
 		uid := 0
 		if req.UserID > 0 { uid = req.UserID }
@@ -362,7 +361,7 @@ t	}
 			Model:   result.Model,
 			Status:  result.Status,
 			Outputs: out,
-}
+		}, nil
 }
 
 // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Legacy generation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
@@ -1082,7 +1081,6 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 			if err != nil {
 				errMsg = err.Error()
 			}
-		}
 			s.commStore.Create(&ServerCommunication{
 				TaskID:       taskID,
 				ModelName:    m.Name,
@@ -1097,6 +1095,7 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 		log.Printf("[get-status] gen.GetStatus err=%v", err != nil)
 		if err != nil {
 			return nil, err
+		}
 		statusResult := &StatusResult{
 			Status: result.Status,
 			Error:  result.Error,
@@ -1564,11 +1563,6 @@ func extractContentTypes(items []ContentItem) string {
 func (s *Service) renameOutputFile(localURL, sceneCode string, takeNumber int, userHandle string) string {
 	if localURL == "" || sceneCode == "" {
 		return ""
-text := ".mp4"
-	now := time.Now()
-	ts := fmt.Sprintf("%s_%s",
-		now.Format("20060102"),
-		now.Format("150405"))
 	}
 
 	ext := ".mp4"
@@ -1593,7 +1587,7 @@ text := ".mp4"
 		safe(sceneCode), takeNumber, userPart, ts, ext)
 	newPath := s.outputsDir + "/" + newName
 
-	if err := os.Rename(oldPath, newPath); err != nil {
+	if err := os.Rename(localURL, newPath); err != nil {
 		return ""
 	}
 
