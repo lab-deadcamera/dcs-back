@@ -235,6 +235,7 @@ type GenerationLog struct {
 	ModelName     string     `json:"model_name"`
 	UserID        *int       `json:"user_id,omitempty"`
 	ProjectID     string     `json:"project_id,omitempty"`
+	ProjectName   string     `json:"project_name,omitempty"`
 	SceneID       string     `json:"scene_id,omitempty"`
 	SceneCode     string     `json:"scene_code,omitempty"`
 	TakeNumber    int        `json:"take_number,omitempty"`
@@ -256,7 +257,6 @@ type GenerationLog struct {
 	// Enriched fields (LEFT JOIN, no almacenados en generation_logs)
 	UserName        string `json:"user_name"`
 	UserDisplayName string `json:"user_display_name"`
-	ProjectName     string `json:"project_name"`
 	SceneName       string `json:"scene_name"`
 	SceneNumber     int    `json:"scene_number"`
 }

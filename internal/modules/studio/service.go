@@ -191,6 +191,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 			ModelName:     modelName,
 			UserID:        intPtrOrNil(req.UserID),
 			ProjectID:     req.ProjectID,
+			ProjectName:   req.ProjectName,
 			SceneID:       req.SceneID,
 			SceneCode:     req.SceneCode,
 			TakeNumber:    req.TakeNumber,
@@ -1052,6 +1053,13 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 		resp, err := s.statusFromLog(log)
 		if err != nil {
 			return nil, err
+		}
+		// Rename local file if the generator downloaded it
+		if resp.Status == "succeeded" && resp.LocalURL != "" {
+			newPath := s.renameOutputFile(resp.LocalURL, log.ProjectName, log.SceneCode, log.TakeNumber, log.UserName)
+			if newPath != "" {
+				resp.LocalURL = newPath
+			}
 		}
 		return resp, nil
 	}
