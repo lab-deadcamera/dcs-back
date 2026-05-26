@@ -36,6 +36,7 @@ type projectStore interface {
 	ListActiveTakes(sceneID string) ([]Take, error)
 	GetActiveTakeByNumber(sceneID string, number int) (*Take, error)
 	DeactivateTakesByNumber(sceneID string, number int) error
+	DeactivateFinalsByNumber(sceneID string, number int) error
 	UpdateTake(id string, updates map[string]interface{}) error
 	SoftDeleteTake(id string) error
 
@@ -291,11 +292,19 @@ func (s *Service) UpdateTake(id string, req *UpdateTakeRequest) (*Take, error) {
 	if req.Active != nil {
 		updates["active"] = *req.Active
 	}
-	if req.Final != nil {
-		updates["final"] = *req.Final
-		if *req.Final {
-			updates["finalized_at"] = time.Now()
+	if req.Final != nil && *req.Final {
+		t, err := s.store.GetTakeByID(id)
+		if err != nil {
+			return nil, err
 		}
+		if t == nil {
+			return nil, fmt.Errorf("take not found")
+		}
+		if err := s.store.DeactivateFinalsByNumber(t.SceneID, t.Number); err != nil {
+			return nil, err
+		}
+		updates["final"] = true
+		updates["finalized_at"] = time.Now()
 	}
 
 	if err := s.store.UpdateTake(id, updates); err != nil {

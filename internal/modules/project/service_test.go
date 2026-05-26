@@ -191,6 +191,15 @@ func (m *mockStore) GetActiveTakeByNumber(sceneID string, number int) (*Take, er
 	return nil, nil
 }
 
+func (m *mockStore) DeactivateFinalsByNumber(sceneID string, number int) error {
+	for _, t := range m.takes {
+		if t.SceneID == sceneID && t.Number == number && t.Final {
+			t.Final = false
+		}
+	}
+	return nil
+}
+
 func (m *mockStore) DeactivateTakesByNumber(sceneID string, number int) error {
 	for _, t := range m.takes {
 		if t.SceneID == sceneID && t.Number == number && t.Active {

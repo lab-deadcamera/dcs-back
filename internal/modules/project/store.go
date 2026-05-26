@@ -287,6 +287,14 @@ func (s *ProjectStore) DeactivateTakesByNumber(sceneID string, number int) error
 	return err
 }
 
+func (s *ProjectStore) DeactivateFinalsByNumber(sceneID string, number int) error {
+	_, err := s.db.Exec(
+		`UPDATE takes SET final = false, finalized_at = NULL, updated_at = NOW() WHERE scene_id = $1 AND number = $2 AND deleted_at IS NULL AND final = true`,
+		sceneID, number,
+	)
+	return err
+}
+
 func (s *ProjectStore) UpdateTake(id string, updates map[string]interface{}) error {
 	if len(updates) == 0 {
 		return nil
