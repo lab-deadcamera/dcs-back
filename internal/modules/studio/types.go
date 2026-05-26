@@ -69,7 +69,8 @@ type StudioGenerateRequest struct {
 	ImageMode     string        `json:"image_mode"`
 	// Session tracking — obligatorio para registrar en logs y recuperar estado.
 	ProjectName string `json:"project_name"`
-	ProjectID  string `json:"project_id" binding:"required"`
+	UserName    string `json:"user_name"`
+	ProjectID   string `json:"project_id" binding:"required"`
 	SceneID    string `json:"scene_id" binding:"required"`
 	SceneCode  string `json:"scene_code" binding:"required"`
 	TakeNumber int    `json:"take_number" binding:"required"`

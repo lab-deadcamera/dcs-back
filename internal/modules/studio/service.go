@@ -334,8 +334,10 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		}
 		}
 		// Store naming info in task record for local filename
-		uid := 0
-		if req.UserID > 0 { uid = req.UserID }
+		userName := req.UserName
+		if userName == "" {
+			userName = fmt.Sprintf("u%d", req.UserID)
+		}
 
 
 		// Track the task for status polling
@@ -348,7 +350,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 			ProjectName: req.ProjectName,
 			SceneCode:  req.SceneCode,
 			TakeNumber: req.TakeNumber,
-			UserHandle: fmt.Sprint(uid),
+			UserHandle: userName,
 			Result: &StatusResult{
 				Status: result.Status,
 				Raw:    result.Raw,
@@ -1576,11 +1578,9 @@ func (s *Service) renameOutputFile(localURL, projectName, sceneCode string, take
 		return r.Replace(s)
 	}
 
-	userPart := "u" + userHandle
-	if userPart == "u0" || userPart == "u" {
-		userPart = ""
-	} else {
-		userPart = "_" + userPart
+	userPart := ""
+	if userHandle != "" && userHandle != "0" && userHandle != "u0" {
+		userPart = "_" + userHandle
 	}
 
 	prefix := safe(projectName)

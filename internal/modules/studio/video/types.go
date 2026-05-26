@@ -25,7 +25,8 @@ type GenerateRequest struct {
 	GenerateAudio *bool         `json:"generate_audio"`
 	// Session tracking
 	ProjectName string `json:"project_name"`
-	ProjectID  string `json:"project_id" binding:"required"`
+	UserName    string `json:"user_name"`
+	ProjectID   string `json:"project_id" binding:"required"`
 	SceneID    string `json:"scene_id" binding:"required"`
 	SceneCode  string `json:"scene_code" binding:"required"`
 	TakeNumber int    `json:"take_number" binding:"required"`

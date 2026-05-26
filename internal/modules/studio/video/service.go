@@ -117,6 +117,7 @@ func toStudioRequest(req *GenerateRequest) *studio.StudioGenerateRequest {
 		Resolution:    req.Resolution,
 		GenerateAudio: req.GenerateAudio,
 		ProjectName:   req.ProjectName,
+		UserName:       req.UserName,
 		ProjectID:     req.ProjectID,
 		SceneID:       req.SceneID,
 		SceneCode:     req.SceneCode,
