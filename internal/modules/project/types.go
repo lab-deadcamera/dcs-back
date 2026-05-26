@@ -63,11 +63,11 @@ type Take struct {
 	SceneID       string     `json:"scene_id"`
 	Number        int        `json:"number"`
 	VideoURL      string     `json:"video_url"`
-	VideoLocalURL string     `json:"video_local_url,omitempty"`
+	VideoLocalURL string     `json:"video_local_url"`
 	Status        string     `json:"status"`
 	Active        bool       `json:"active"`
 	Final         bool       `json:"final"`
-	FinalizedAt   *time.Time `json:"finalized_at,omitempty"`
+	FinalizedAt   *time.Time `json:"finalized_at"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
