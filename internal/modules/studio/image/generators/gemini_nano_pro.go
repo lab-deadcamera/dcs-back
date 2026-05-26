@@ -103,14 +103,14 @@ func (g *GeminiNanoProGenerator) BuildPayload(req *studio.GeneratorRequest) map[
 			imageSize = "1K"
 		}
 
-		genConfig["responseFormat"] = map[string]interface{}{
-			"image": map[string]interface{}{
-				"imageSize":   imageSize,
-				"aspectRatio": req.Ratio,
-			},
-		}
 	}
 
+	genConfig["responseFormat"] = map[string]interface{}{
+		"image": map[string]interface{}{
+			"imageSize":   imageSize,
+			"aspectRatio": req.Ratio,
+		},
+	}
 	payload["generationConfig"] = genConfig
 
 	return payload
