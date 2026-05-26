@@ -520,6 +520,10 @@ func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 	filename := fmt.Sprintf("%s_%s_T%d_%s_%s.mp4", safe(proj.Name), sceneCode, t.Number, safe(userPart), ts)
 	localPath := filepath.Join(s.outputsDir, filename)
 
+	if err := os.MkdirAll(s.outputsDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create outputs dir: %w", err)
+	}
+
 	resp, err := http.Get(t.VideoURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download video: %w", err)
