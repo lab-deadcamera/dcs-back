@@ -517,13 +517,8 @@ func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 		userPart = "unknown"
 	}
 	ts := now.Format("20060102_150405")
-	dir := filepath.Join(s.outputsDir, safe(proj.Name), sceneCode, fmt.Sprintf("T%d", t.Number))
-	filename := fmt.Sprintf("%s_%s.mp4", safe(userPart), ts)
-	localPath := filepath.Join(dir, filename)
-
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create directory: %w", err)
-	}
+	filename := fmt.Sprintf("%s_%s_T%d_%s_%s.mp4", safe(proj.Name), sceneCode, t.Number, safe(userPart), ts)
+	localPath := filepath.Join(s.outputsDir, filename)
 
 	resp, err := http.Get(t.VideoURL)
 	if err != nil {
@@ -540,10 +535,7 @@ func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 		return nil, fmt.Errorf("failed to write video: %w", err)
 	}
 
-	localURL := "/" + filepath.ToSlash(filepath.Join(
-		"outputs", safe(proj.Name), sceneCode,
-		fmt.Sprintf("T%d", t.Number), filename,
-	))
+	localURL := "/outputs/" + filename
 
 	if err := s.store.UpdateTake(takeID, map[string]interface{}{
 		"video_local_url": localURL,
