@@ -138,6 +138,13 @@ func main() {
 	studioAudioHdl := studioaudio.NewHandler(studioSvc)
 	studioTextHdl := studiotext.NewHandler(studioSvc)
 	projectSvc := project.NewService(projectStore)
+	projectSvc.SetTaskLookup(func(taskID string) string {
+		sr, err := studioSvc.GetStatus(taskID)
+		if err != nil || sr.Status != "succeeded" {
+			return ""
+		}
+		return sr.LocalURL
+	})
 	projectHdl := project.NewHandler(projectSvc)
 
 	// ─── Router ──────────────────────────────────────────────────

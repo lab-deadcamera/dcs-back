@@ -6,6 +6,10 @@ import (
 	"github.com/google/uuid"
 )
 
+// TaskLookup resolves a completed generation task to its local video URL.
+// Returns empty string if the task is not found or not yet completed.
+type TaskLookup func(taskID string) string
+
 // projectStore defines the storage interface needed by Service.
 type projectStore interface {
 	Create(p *Project) error
@@ -41,11 +45,18 @@ type projectStore interface {
 }
 
 type Service struct {
-	store projectStore
+	store      projectStore
+	taskLookup TaskLookup
 }
 
 func NewService(store projectStore) *Service {
 	return &Service{store: store}
+}
+
+// SetTaskLookup injects an optional function to resolve local URLs
+// from completed generation tasks.
+func (s *Service) SetTaskLookup(lookup TaskLookup) {
+	s.taskLookup = lookup
 }
 
 // ─── Projects ───────────────────────────────────────────────────
@@ -331,11 +342,14 @@ type SaveGenerationRequest struct {
 	Number        int    `json:"number"`
 	VideoURL      string `json:"video_url"`
 	VideoLocalURL string `json:"video_local_url"`
+	TaskID        string `json:"task_id"`
 }
 
 // SaveGeneration saves a generated video URL to a take slot. If an
 // active take already exists for this scene+number, it is marked as
 // inactive (discarded) and a new take is created.
+// If task_id is provided and a TaskLookup is configured, the local
+// video URL is resolved automatically from the completed task.
 func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*Take, error) {
 	sc, err := s.store.GetSceneByID(sceneID)
 	if err != nil {
@@ -350,12 +364,22 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 		return nil, err
 	}
 
+	localURL := req.VideoLocalURL
+	if localURL == "" && req.TaskID != "" && s.taskLookup != nil {
+		localURL = s.taskLookup(req.TaskID)
+	}
+
+	videoURL := req.VideoURL
+	if localURL != "" {
+		videoURL = localURL
+	}
+
 	t := &Take{
 		ID:            uuid.New().String(),
 		SceneID:       sceneID,
 		Number:        req.Number,
-		VideoURL:      req.VideoURL,
-		VideoLocalURL: req.VideoLocalURL,
+		VideoURL:      videoURL,
+		VideoLocalURL: localURL,
 		Status:        "completed",
 		Active:        true,
 	}
