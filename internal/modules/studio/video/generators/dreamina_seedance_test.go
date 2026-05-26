@@ -94,8 +94,8 @@ func TestSeedanceBuildPayload_TextOnly(t *testing.T) {
 	}
 	payload := g.BuildPayload(req)
 
-	if payload["model"] != req.Model {
-		t.Errorf("model = %v, want %s", payload["model"], req.Model)
+	if payload["model"] != ModelDreaminaSeedance2 {
+		t.Errorf("model = %v, want %s", payload["model"], ModelDreaminaSeedance2)
 	}
 	if payload["duration"] != req.Duration {
 		t.Errorf("duration = %v, want %d", payload["duration"], req.Duration)

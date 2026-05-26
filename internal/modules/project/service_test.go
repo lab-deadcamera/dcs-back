@@ -217,6 +217,42 @@ func (m *mockStore) SoftDeleteTake(id string) error {
 	return nil
 }
 
+func (m *mockStore) GetScenePresets(sceneID string) ([]ScenePresetAssignment, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetSceneCharacters(sceneID string) ([]SceneCharacterAssignment, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetSceneAssets(sceneID string) ([]SceneAssetAssignment, error) {
+	return nil, nil
+}
+
+func (m *mockStore) AssignPresetToScene(sceneID, presetID string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStore) AssignCharacterToScene(sceneID, characterID string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStore) AssignAssetToScene(sceneID, fileID string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStore) RemoveScenePreset(assignmentID string) error {
+	return nil
+}
+
+func (m *mockStore) RemoveSceneCharacter(assignmentID string) error {
+	return nil
+}
+
+func (m *mockStore) RemoveSceneAsset(assignmentID string) error {
+	return nil
+}
+
 // ─── Tests ──────────────────────────────────────────────────────
 
 func TestCreateProject(t *testing.T) {
