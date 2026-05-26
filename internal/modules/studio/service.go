@@ -1073,7 +1073,7 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 		}
 		// Rename local file if the generator downloaded it
 		if resp.Status == "succeeded" && resp.LocalURL != "" {
-			newPath := s.renameOutputFile(resp.LocalURL, log.ProjectName, log.SceneCode, log.TakeNumber, log.UserName)
+			newPath := s.renameOutputFile(resp.LocalURL, log.ProjectName, log.SceneName, log.TakeNumber, log.UserName)
 			if newPath != "" {
 				resp.LocalURL = newPath
 			}
@@ -1138,7 +1138,11 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 		}
 		// Rename local file to follow project/scene/take pattern
 		if result.Status == "succeeded" && statusResult.LocalURL != "" {
-			newPath := s.renameOutputFile(statusResult.LocalURL, record.ProjectName, record.SceneCode, record.TakeNumber, record.UserHandle)
+			sceneName := record.SceneCode
+			if gl, glErr := s.logStore.GetByTaskID(taskID); glErr == nil && gl != nil && gl.SceneName != "" {
+				sceneName = gl.SceneName
+			}
+			newPath := s.renameOutputFile(statusResult.LocalURL, record.ProjectName, sceneName, record.TakeNumber, record.UserHandle)
 			if newPath != "" {
 				statusResult.LocalURL = newPath
 				result.Outputs[0].LocalURL = newPath
@@ -1586,9 +1590,9 @@ func extractContentTypes(items []ContentItem) string {
 }
 
 // renameOutputFile renames a locally-downloaded output file to follow the
-// pattern: {SceneCode}_T{take}_{user}_{datetime}.mp4
-func (s *Service) renameOutputFile(localURL, projectName, sceneCode string, takeNumber int, userHandle string) string {
-	if localURL == "" || sceneCode == "" {
+// pattern: {ProjectName}_{SceneName}_T{take}_{user}_{datetime}.mp4
+func (s *Service) renameOutputFile(localURL, projectName, sceneName string, takeNumber int, userHandle string) string {
+	if localURL == "" || sceneName == "" {
 		return ""
 	}
 
@@ -1611,7 +1615,7 @@ func (s *Service) renameOutputFile(localURL, projectName, sceneCode string, take
 		prefix += "_"
 	}
 	newName := fmt.Sprintf("%s%s_T%d%s_%s%s",
-		prefix, safe(sceneCode), takeNumber, userPart, ts, ext)
+		prefix, safe(sceneName), takeNumber, userPart, ts, ext)
 	oldPath := s.outputsDir + "/" + filepath.Base(localURL)
 	newPath := s.outputsDir + "/" + newName
 
