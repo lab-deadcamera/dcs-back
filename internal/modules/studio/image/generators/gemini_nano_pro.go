@@ -94,25 +94,10 @@ func (g *GeminiNanoProGenerator) BuildPayload(req *studio.GeneratorRequest) map[
 	modalities := []string{"TEXT", "IMAGE"}
 	genConfig["responseModalities"] = modalities
 
-	imageSize := strings.ToUpper(req.Resolution)
-	if req.Resolution != "" {
-		if imageSize == "512PX" {
-			imageSize = "512"
-		} else if imageSize == "720PX" {
-			imageSize = "1K"
-		} else if imageSize == "1080P" {
-			imageSize = "1K"
-		}
-
-	}
-	if imageSize == "" {
-		imageSize = "1K"
-	}
-
 	genConfig["responseFormat"] = map[string]interface{}{
 		"image": map[string]interface{}{
-			"imageSize":   imageSize,
-			"aspectRatio": req.Ratio,
+			"imageSize":   geminiImageSize(req.Resolution),
+			"aspectRatio": geminiAspectRatio(req.Ratio),
 		},
 	}
 	payload["generationConfig"] = genConfig

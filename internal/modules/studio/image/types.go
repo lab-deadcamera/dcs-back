@@ -15,6 +15,7 @@ type GenerateRequest struct {
 	Model     string        `json:"model" binding:"required"`
 	Content   []ContentItem `json:"content" binding:"required"`
 	Ratio     string        `json:"ratio"`
+	Resolution string       `json:"resolution"`
 	Seed      string        `json:"seed"`
 	Quality   string        `json:"quality"`
 	Quantity  int           `json:"quantity"`

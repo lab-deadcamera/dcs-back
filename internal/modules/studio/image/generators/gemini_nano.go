@@ -94,33 +94,47 @@ func (g *GeminiNanoGenerator) BuildPayload(req *studio.GeneratorRequest) map[str
 	modalities := []string{"TEXT", "IMAGE"}
 	genConfig["responseModalities"] = modalities
 
-	imageSize := strings.ToUpper(req.Resolution)
-
-	if req.Resolution != "" {
-		if imageSize == "512PX" {
-			imageSize = "512"
-		} else if imageSize == "720PX" {
-			imageSize = "1K"
-		} else if imageSize == "1080P" {
-			imageSize = "1K"
-		} else if imageSize == "2K" {
-			imageSize = "2K"
-		} else if imageSize == "4K" {
-			imageSize = "2K"
-		}
-	}
-	if imageSize == "" {
-		imageSize = "1K"
-	}
 	genConfig["responseFormat"] = map[string]interface{}{
 		"image": map[string]interface{}{
-			"imageSize":   imageSize,
-			"aspectRatio": req.Ratio,
+			"imageSize":   geminiImageSize(req.Resolution),
+			"aspectRatio": geminiAspectRatio(req.Ratio),
 		},
 	}
 
 	payload["generationConfig"] = genConfig
 	return payload
+}
+
+// geminiImageSize maps human-friendly resolution strings to Gemini API enum values.
+func geminiImageSize(resolution string) string {
+	switch strings.ToUpper(resolution) {
+	case "720P", "720PX", "1080P", "1K":
+		return "IMAGE_SIZE_1K"
+	case "2K":
+		return "IMAGE_SIZE_2K"
+	case "4K":
+		return "IMAGE_SIZE_4K"
+	default:
+		return "IMAGE_SIZE_1K"
+	}
+}
+
+// geminiAspectRatio maps "W:H" strings to Gemini API enum values.
+func geminiAspectRatio(ratio string) string {
+	switch ratio {
+	case "1:1":
+		return "ASPECT_RATIO_1_1"
+	case "3:4":
+		return "ASPECT_RATIO_3_4"
+	case "4:3":
+		return "ASPECT_RATIO_4_3"
+	case "9:16":
+		return "ASPECT_RATIO_9_16"
+	case "16:9":
+		return "ASPECT_RATIO_16_9"
+	default:
+		return "ASPECT_RATIO_1_1"
+	}
 }
 
 // buildImagePart converts a DataURL to a Gemini API part.
