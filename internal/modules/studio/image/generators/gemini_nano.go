@@ -163,8 +163,8 @@ func (g *GeminiNanoGenerator) buildImagePart(dataURL string) map[string]interfac
 			mimeType = "image/gif"
 		}
 		return map[string]interface{}{
-			"file_data": map[string]interface{}{
-				"file_uri":  dataURL,
+			"inline_data": map[string]interface{}{
+				"data":      dataURL,
 				"mime_type": mimeType,
 			},
 		}
