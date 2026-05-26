@@ -328,8 +328,9 @@ func (s *Service) GetSceneWithTakes(id string) (*SceneWithTakes, error) {
 // SaveGenerationRequest is the payload for associating a generated
 // video URL with a take slot (scene+number).
 type SaveGenerationRequest struct {
-	Number   int    `json:"number"`
-	VideoURL string `json:"video_url"`
+	Number        int    `json:"number"`
+	VideoURL      string `json:"video_url"`
+	VideoLocalURL string `json:"video_local_url"`
 }
 
 // SaveGeneration saves a generated video URL to a take slot. If an
@@ -350,12 +351,13 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 	}
 
 	t := &Take{
-		ID:       uuid.New().String(),
-		SceneID:  sceneID,
-		Number:   req.Number,
-		VideoURL: req.VideoURL,
-		Status:   "completed",
-		Active:   true,
+		ID:            uuid.New().String(),
+		SceneID:       sceneID,
+		Number:        req.Number,
+		VideoURL:      req.VideoURL,
+		VideoLocalURL: req.VideoLocalURL,
+		Status:        "completed",
+		Active:        true,
 	}
 	if err := s.store.CreateTake(t); err != nil {
 		return nil, err
