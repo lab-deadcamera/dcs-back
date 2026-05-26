@@ -345,6 +345,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		ModelID:   m.ID,
 		ModelName: m.Name,
 		Status:    result.Status,
+			ProjectName: req.ProjectName,
 			SceneCode:  req.SceneCode,
 			TakeNumber: req.TakeNumber,
 			UserHandle: fmt.Sprint(uid),
@@ -1108,7 +1109,7 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 		}
 		// Rename local file to follow project/scene/take pattern
 		if result.Status == "succeeded" && statusResult.LocalURL != "" {
-			newPath := s.renameOutputFile(statusResult.LocalURL, record.SceneCode, record.TakeNumber, record.UserHandle)
+			newPath := s.renameOutputFile(statusResult.LocalURL, record.ProjectName, record.SceneCode, record.TakeNumber, record.UserHandle)
 			if newPath != "" {
 				statusResult.LocalURL = newPath
 				result.Outputs[0].LocalURL = newPath
@@ -1561,7 +1562,7 @@ func extractContentTypes(items []ContentItem) string {
 
 // renameOutputFile renames a locally-downloaded output file to follow the
 // pattern: {SceneCode}_T{take}_{user}_{datetime}.mp4
-func (s *Service) renameOutputFile(localURL, sceneCode string, takeNumber int, userHandle string) string {
+func (s *Service) renameOutputFile(localURL, projectName, sceneCode string, takeNumber int, userHandle string) string {
 	if localURL == "" || sceneCode == "" {
 		return ""
 	}
@@ -1582,8 +1583,12 @@ func (s *Service) renameOutputFile(localURL, sceneCode string, takeNumber int, u
 		userPart = "_" + userPart
 	}
 
-	newName := fmt.Sprintf("%s_T%d%s_%s%s",
-		safe(sceneCode), takeNumber, userPart, ts, ext)
+	prefix := safe(projectName)
+	if prefix != "" {
+		prefix += "_"
+	}
+	newName := fmt.Sprintf("%s%s_T%d%s_%s%s",
+		prefix, safe(sceneCode), takeNumber, userPart, ts, ext)
 	oldPath := s.outputsDir + "/" + filepath.Base(localURL)
 	newPath := s.outputsDir + "/" + newName
 

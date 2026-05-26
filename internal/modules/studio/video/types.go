@@ -24,6 +24,7 @@ type GenerateRequest struct {
 	Resolution    string        `json:"resolution"`
 	GenerateAudio *bool         `json:"generate_audio"`
 	// Session tracking
+	ProjectName string `json:"project_name"`
 	ProjectID  string `json:"project_id" binding:"required"`
 	SceneID    string `json:"scene_id" binding:"required"`
 	SceneCode  string `json:"scene_code" binding:"required"`

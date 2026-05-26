@@ -68,6 +68,7 @@ type StudioGenerateRequest struct {
 	GenerateAudio *bool         `json:"generate_audio"`
 	ImageMode     string        `json:"image_mode"`
 	// Session tracking — obligatorio para registrar en logs y recuperar estado.
+	ProjectName string `json:"project_name"`
 	ProjectID  string `json:"project_id" binding:"required"`
 	SceneID    string `json:"scene_id" binding:"required"`
 	SceneCode  string `json:"scene_code" binding:"required"`
@@ -217,6 +218,7 @@ type TaskRecord struct {
 	Status    string
 	Result    *StatusResult
 	// Naming info for local video filename
+	ProjectName string
 	SceneCode  string
 	TakeNumber int
 	UserHandle string
