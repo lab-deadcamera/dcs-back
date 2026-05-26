@@ -15,28 +15,28 @@ import (
 	"dcs-back-v0/internal/modules/studio"
 )
 
-type GeminiNanoGenerator struct {
+type GeminiNanoProGenerator struct {
 	httpClient *http.Client
 	outputsDir string
 }
 
-func NewGeminiNanoGenerator(outputsDir string) *GeminiNanoGenerator {
-	return &GeminiNanoGenerator{
+func NewGeminiNanoProGenerator(outputsDir string) *GeminiNanoProGenerator {
+	return &GeminiNanoProGenerator{
 		httpClient: &http.Client{Timeout: 120 * time.Second},
 		outputsDir: outputsDir,
 	}
 }
 
-func (g *GeminiNanoGenerator) Name() string { return "gemini-nano-banana" }
+func (g *GeminiNanoProGenerator) Name() string { return "gemini-3-pro-image-preview" }
 
-func (g *GeminiNanoGenerator) ContentType() string { return "image" }
+func (g *GeminiNanoProGenerator) ContentType() string { return "image" }
 
-func (g *GeminiNanoGenerator) Match(modelName string) bool {
+func (g *GeminiNanoProGenerator) Match(modelName string) bool {
 	lower := strings.ToLower(modelName)
 	return strings.Contains(lower, "gemini")
 }
 
-func (g *GeminiNanoGenerator) Validate(req *studio.GeneratorRequest) error {
+func (g *GeminiNanoProGenerator) Validate(req *studio.GeneratorRequest) error {
 	errs := studio.ValidateCommon(req)
 	if errs.HasErrors() {
 		return errs
@@ -61,7 +61,7 @@ func (g *GeminiNanoGenerator) Validate(req *studio.GeneratorRequest) error {
 	return nil
 }
 
-func (g *GeminiNanoGenerator) BuildPayload(req *studio.GeneratorRequest) map[string]interface{} {
+func (g *GeminiNanoProGenerator) BuildPayload(req *studio.GeneratorRequest) map[string]interface{} {
 	textPart := studio.CompileContentText(req.Content)
 
 	parts := []map[string]interface{}{
@@ -97,11 +97,8 @@ func (g *GeminiNanoGenerator) BuildPayload(req *studio.GeneratorRequest) map[str
 		imageSize := strings.ToUpper(req.Resolution)
 		if imageSize == "1080P" {
 			imageSize = "1K"
-		} else if imageSize == "2K" {
-			imageSize = "2K"
-		} else if imageSize == "4K" {
-			imageSize = "2K"
 		}
+
 		genConfig["responseFormat"] = map[string]interface{}{
 			"image": map[string]interface{}{
 				"imageSize": imageSize,
@@ -116,7 +113,7 @@ func (g *GeminiNanoGenerator) BuildPayload(req *studio.GeneratorRequest) map[str
 
 // buildImagePart converts a DataURL to a Gemini API part.
 // Supports both base64 data URLs and external HTTP(S) URLs.
-func (g *GeminiNanoGenerator) buildImagePart(dataURL string) map[string]interface{} {
+func (g *GeminiNanoProGenerator) buildImagePart(dataURL string) map[string]interface{} {
 	if strings.HasPrefix(dataURL, "data:") {
 		// data:{mimeType};base64,{data}
 		commaIdx := strings.Index(dataURL, ",")
@@ -165,7 +162,7 @@ func (g *GeminiNanoGenerator) buildImagePart(dataURL string) map[string]interfac
 	return nil
 }
 
-func (g *GeminiNanoGenerator) Generate(req *studio.GeneratorRequest) (*studio.GeneratorResult, error) {
+func (g *GeminiNanoProGenerator) Generate(req *studio.GeneratorRequest) (*studio.GeneratorResult, error) {
 	payload := g.BuildPayload(req)
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -271,7 +268,7 @@ func (g *GeminiNanoGenerator) Generate(req *studio.GeneratorRequest) (*studio.Ge
 	}, nil
 }
 
-func (g *GeminiNanoGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*studio.GeneratorResult, error) {
+func (g *GeminiNanoProGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*studio.GeneratorResult, error) {
 	return &studio.GeneratorResult{
 		TaskID:  taskID,
 		Status:  "succeeded",
@@ -279,6 +276,6 @@ func (g *GeminiNanoGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string
 	}, nil
 }
 
-func (g *GeminiNanoGenerator) CancelTask(taskID, apiKey, baseURL, endpoint string) error {
+func (g *GeminiNanoProGenerator) CancelTask(taskID, apiKey, baseURL, endpoint string) error {
 	return nil
 }

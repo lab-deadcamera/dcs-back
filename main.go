@@ -124,6 +124,7 @@ func main() {
 	studioSvc.RegisterGenerator(videogens.NewSeedanceGalleryGenerator(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(studioimagegens.NewSeedreamGenerator(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(studioimagegens.NewGeminiNanoGenerator(cfg.OutputsDir))
+	studioSvc.RegisterGenerator(studioimagegens.NewGeminiNanoProGenerator(cfg.OutputsDir))
 	studioSvc.SetGeneratedAssetStore(studio.NewGeneratedAssetStore(database, cfg.OutputsDir))
 	studioSvc.RegisterCalculator(calculators.NewSeedanceCalculator())
 	studioSvc.RegisterCalculator(calculators.NewSeedreamCalculator())
