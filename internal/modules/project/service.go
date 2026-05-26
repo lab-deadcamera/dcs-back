@@ -472,7 +472,7 @@ func (s *Service) RemoveSceneAsset(assignmentID string) error {
 }
 
 // DownloadTakeVideo downloads the external video for a take and saves it
-// locally under outputsDir/{ProjectName}/{SceneCode}/T{take}/{user}_{datetime}.mp4.
+// locally under outputsDir/{ProjectName}_{SceneCode}_T{take}_{user}_{datetime}.mp4.
 // Returns the updated take with video_local_url populated.
 func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 	t, err := s.store.GetTakeByID(takeID)
@@ -538,11 +538,13 @@ func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 	localURL := "/outputs/" + filename
 
 	if err := s.store.UpdateTake(takeID, map[string]interface{}{
+		"video_url":       localURL,
 		"video_local_url": localURL,
 	}); err != nil {
 		return nil, err
 	}
 
+	t.VideoURL = localURL
 	t.VideoLocalURL = localURL
 	return t, nil
 }
