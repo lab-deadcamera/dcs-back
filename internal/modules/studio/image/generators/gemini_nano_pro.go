@@ -95,7 +95,11 @@ func (g *GeminiNanoProGenerator) BuildPayload(req *studio.GeneratorRequest) map[
 
 	if req.Resolution != "" {
 		imageSize := strings.ToUpper(req.Resolution)
-		if imageSize == "1080P" {
+		if imageSize == "512PX" {
+			imageSize = "512"
+		} else if imageSize == "720PX" {
+			imageSize = "1K"
+		} else if imageSize == "1080P" {
 			imageSize = "1K"
 		}
 
