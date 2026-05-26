@@ -3,6 +3,7 @@
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"time"
 	"fmt"
 	"log"
@@ -1567,9 +1568,7 @@ func (s *Service) renameOutputFile(localURL, sceneCode string, takeNumber int, u
 
 	ext := ".mp4"
 	now := time.Now()
-	ts := fmt.Sprintf("%s%s%s_%s%s%s",
-		now.Format("20060102"),
-		now.Format("150405"))
+	ts := now.Format("20060102_150405")
 
 	safe := func(s string) string {
 		r := strings.NewReplacer("/", "_", " ", "_", ":", "_")
@@ -1585,9 +1584,10 @@ func (s *Service) renameOutputFile(localURL, sceneCode string, takeNumber int, u
 
 	newName := fmt.Sprintf("%s_T%d%s_%s%s",
 		safe(sceneCode), takeNumber, userPart, ts, ext)
+	oldPath := s.outputsDir + "/" + filepath.Base(localURL)
 	newPath := s.outputsDir + "/" + newName
 
-	if err := os.Rename(localURL, newPath); err != nil {
+	if err := os.Rename(oldPath, newPath); err != nil {
 		return ""
 	}
 
