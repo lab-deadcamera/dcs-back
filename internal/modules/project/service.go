@@ -2,6 +2,12 @@ package project
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -47,10 +53,16 @@ type projectStore interface {
 type Service struct {
 	store      projectStore
 	taskLookup TaskLookup
+	outputsDir string
 }
 
 func NewService(store projectStore) *Service {
 	return &Service{store: store}
+}
+
+// SetOutputsDir sets the filesystem path where generated videos are stored.
+func (s *Service) SetOutputsDir(dir string) {
+	s.outputsDir = dir
 }
 
 // SetTaskLookup injects an optional function to resolve local URLs
@@ -457,4 +469,88 @@ func (s *Service) RemoveSceneCharacter(assignmentID string) error {
 
 func (s *Service) RemoveSceneAsset(assignmentID string) error {
 	return s.store.RemoveSceneAsset(assignmentID)
+}
+
+// DownloadTakeVideo downloads the external video for a take and saves it
+// locally under outputsDir/{ProjectName}/{SceneCode}/T{take}/{user}_{datetime}.mp4.
+// Returns the updated take with video_local_url populated.
+func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
+	t, err := s.store.GetTakeByID(takeID)
+	if err != nil {
+		return nil, err
+	}
+	if t == nil {
+		return nil, fmt.Errorf("take not found")
+	}
+	if t.VideoURL == "" {
+		return nil, fmt.Errorf("take has no video URL")
+	}
+	if t.VideoLocalURL != "" {
+		return t, nil
+	}
+
+	sc, err := s.store.GetSceneByID(t.SceneID)
+	if err != nil {
+		return nil, err
+	}
+	if sc == nil {
+		return nil, fmt.Errorf("scene not found for take")
+	}
+
+	proj, err := s.store.GetByID(sc.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	if proj == nil {
+		return nil, fmt.Errorf("project not found for take")
+	}
+
+	now := time.Now()
+	safe := func(s string) string {
+		r := strings.NewReplacer("/", "_", "\\", "_", ":", "_", " ", "_")
+		return r.Replace(s)
+	}
+
+	sceneCode := fmt.Sprintf("SC%02d", sc.Number)
+	userPart := username
+	if userPart == "" {
+		userPart = "unknown"
+	}
+	ts := now.Format("20060102_150405")
+	dir := filepath.Join(s.outputsDir, safe(proj.Name), sceneCode, fmt.Sprintf("T%d", t.Number))
+	filename := fmt.Sprintf("%s_%s.mp4", safe(userPart), ts)
+	localPath := filepath.Join(dir, filename)
+
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	resp, err := http.Get(t.VideoURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download video: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read video: %w", err)
+	}
+
+	if err := os.WriteFile(localPath, body, 0644); err != nil {
+		return nil, fmt.Errorf("failed to write video: %w", err)
+	}
+
+	localURL := "/" + filepath.ToSlash(filepath.Join(
+		"outputs", safe(proj.Name), sceneCode,
+		fmt.Sprintf("T%d", t.Number), filename,
+	))
+
+	if err := s.store.UpdateTake(takeID, map[string]interface{}{
+		"video_local_url": localURL,
+	}); err != nil {
+		return nil, err
+	}
+
+	t.VideoLocalURL = localURL
+	return t, nil
 }

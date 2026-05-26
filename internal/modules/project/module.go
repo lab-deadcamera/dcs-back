@@ -39,6 +39,7 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 		g.DELETE("/:id/scenes/:sceneId/takes/:takeId", m.hdl.SoftDeleteTake)
 		g.POST("/:id/scenes/:sceneId/takes/save-generation", m.hdl.SaveGeneration)
 		g.POST("/:id/scenes/:sceneId/takes/:takeId/toggle-active", m.hdl.ToggleTakeActive)
+		g.POST("/:id/scenes/:sceneId/takes/:takeId/download", m.hdl.DownloadTake)
 
 		// Scene assignments (GET anyone auth'd, POST/DELETE admin+director)
 		g.GET("/:id/scenes/:sceneId/assignments", m.hdl.GetSceneAssignments)

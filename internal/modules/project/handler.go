@@ -366,6 +366,30 @@ func (h *Handler) SoftDeleteTake(c *gin.Context) {
 	utils.Message(c, "take deleted")
 }
 
+// DownloadTake triggers a local download of the take's external video.
+func (h *Handler) DownloadTake(c *gin.Context) {
+	takeID := c.Param("takeId")
+	if takeID == "" {
+		utils.BadRequest(c, "takeId is required")
+		return
+	}
+
+	username, _ := c.Get("username")
+	userStr, _ := username.(string)
+
+	result, err := h.svc.DownloadTakeVideo(takeID, userStr)
+	if err != nil {
+		if err.Error() == "take not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, result)
+}
+
 // ─── Scene Assignments ──────────────────────────────────────────
 
 func (h *Handler) GetSceneAssignments(c *gin.Context) {

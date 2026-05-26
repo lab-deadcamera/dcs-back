@@ -145,6 +145,7 @@ func main() {
 		}
 		return sr.LocalURL
 	})
+	projectSvc.SetOutputsDir(cfg.OutputsDir)
 	projectHdl := project.NewHandler(projectSvc)
 
 	// ─── Router ──────────────────────────────────────────────────
