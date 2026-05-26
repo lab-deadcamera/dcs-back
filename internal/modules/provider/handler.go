@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"net/http"
+
 	"dcs-back-v0/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -191,6 +193,35 @@ func (h *Handler) GetFavorite(c *gin.Context) {
 		return
 	}
 	utils.Success(c, m)
+}
+
+// ─── CSV Export / Import ────────────────────────────────────────
+
+func (h *Handler) ExportCSV(c *gin.Context) {
+	csvData, err := h.svc.ExportProvidersCSV()
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", `attachment; filename="providers.csv"`)
+	c.String(http.StatusOK, csvData)
+}
+
+func (h *Handler) ImportCSV(c *gin.Context) {
+	file, _, err := c.Request.FormFile("file")
+	if err != nil {
+		utils.BadRequest(c, "file is required")
+		return
+	}
+	defer file.Close()
+
+	result, err := h.svc.ImportProvidersCSV(file)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Success(c, result)
 }
 
 func (h *Handler) SetFavorite(c *gin.Context) {

@@ -1,7 +1,12 @@
 package provider
 
 import (
+	"bytes"
+	"database/sql"
+	"encoding/csv"
 	"fmt"
+	"io"
+	"slices"
 
 	"github.com/google/uuid"
 )
@@ -188,6 +193,219 @@ func (s *Service) SetFavorite(id string) (*Model, error) {
 		return nil, err
 	}
 	return s.store.GetModelByID(id)
+}
+
+// ─── CSV Export / Import ────────────────────────────────────────
+
+// csvHeader defines the column order for export and import CSVs.
+var csvHeader = []string{
+	"provider_name", "name", "model_type",
+	"api_key", "url", "endpoint",
+	"access_key_id", "secret_access_key", "default_asset_group_id",
+	"project_name", "project_number", "active",
+}
+
+// ExportProvidersCSV generates a CSV with all providers and their models.
+func (s *Service) ExportProvidersCSV() (string, error) {
+	providers, err := s.ListProvidersWithModels()
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	writer := csv.NewWriter(&buf)
+	writer.Write(csvHeader)
+
+	for _, pwm := range providers {
+		for _, m := range pwm.Models {
+			active := "false"
+			if m.Active {
+				active = "true"
+			}
+			writer.Write([]string{
+				pwm.Provider.Name,
+				m.Name,
+				m.ModelType,
+				m.APIKey,
+				m.URL,
+				m.Endpoint,
+				m.AccessKeyID,
+				m.SecretAccessKey,
+				m.DefaultAssetGroupID,
+				m.ProjectName,
+				m.ProjectNumber,
+				active,
+			})
+		}
+	}
+	writer.Flush()
+	return buf.String(), writer.Error()
+}
+
+// ImportProvidersCSV reads CSV rows and upserts providers + models inside a transaction.
+func (s *Service) ImportProvidersCSV(r io.Reader) (*ImportResult, error) {
+	reader := csv.NewReader(r)
+	// Allow variable number of fields per row (some older exports may lack columns).
+	reader.FieldsPerRecord = -1
+
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CSV: %w", err)
+	}
+	if len(records) < 2 {
+		return nil, fmt.Errorf("CSV must contain a header row and at least one data row")
+	}
+
+	// Locate column indices by header name so the CSV format is resilient to reordering.
+	header := records[0]
+	colIdx := func(name string) int {
+		return slices.Index(header, name)
+	}
+
+	// Must-have columns.
+	if idx := colIdx("provider_name"); idx < 0 {
+		return nil, fmt.Errorf("CSV missing required column: provider_name")
+	}
+	if idx := colIdx("name"); idx < 0 {
+		return nil, fmt.Errorf("CSV missing required column: name")
+	}
+
+	get := func(row []string, name string) string {
+		idx := colIdx(name)
+		if idx < 0 || idx >= len(row) {
+			return ""
+		}
+		return row[idx]
+	}
+
+	tx, err := s.store.DB().Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	result := &ImportResult{}
+
+	for i, row := range records[1:] {
+		lineNum := i + 2
+		providerName := row[colIdx("provider_name")]
+		modelName := row[colIdx("name")]
+
+		if providerName == "" || modelName == "" {
+			result.Errors = append(result.Errors, fmt.Sprintf("line %d: provider_name and name are required", lineNum))
+			continue
+		}
+
+		// ── Find or create provider ──
+		providerID, created, err := s.upsertProviderTx(tx, providerName)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("line %d: provider error: %v", lineNum, err))
+			continue
+		}
+		if created {
+			result.ProvidersCreated++
+		}
+
+		// ── Upsert model ──
+		modelType := get(row, "model_type")
+		apiKey := get(row, "api_key")
+		url := get(row, "url")
+		endpoint := get(row, "endpoint")
+
+		active := true
+		if a := get(row, "active"); a == "false" {
+			active = false
+		}
+
+		updated, err := s.upsertModelTx(tx, providerID, modelName, modelType, apiKey, url, endpoint, active,
+			get(row, "access_key_id"),
+			get(row, "secret_access_key"),
+			get(row, "default_asset_group_id"),
+			get(row, "project_name"),
+			get(row, "project_number"),
+		)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("line %d: model error: %v", lineNum, err))
+			continue
+		}
+		if updated {
+			result.ModelsUpdated++
+		} else {
+			result.ModelsCreated++
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return result, nil
+}
+
+// upsertProviderTx looks up provider by name; creates one if it doesn't exist.
+// Returns (providerID, created, error).
+func (s *Service) upsertProviderTx(tx *sql.Tx, name string) (string, bool, error) {
+	var id string
+	err := tx.QueryRow(`SELECT id FROM providers WHERE name = $1 AND deleted_at IS NULL`, name).Scan(&id)
+	if err == nil {
+		return id, false, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", false, err
+	}
+
+	id = uuid.New().String()
+	_, err = tx.Exec(`INSERT INTO providers (id, name) VALUES ($1, $2)`, id, name)
+	if err != nil {
+		return "", false, err
+	}
+	return id, true, nil
+}
+
+// upsertModelTx looks up model by provider_id + name; updates it if found, creates otherwise.
+// Returns (wasUpdated, error).
+func (s *Service) upsertModelTx(tx *sql.Tx, providerID, name, modelType, apiKey, url, endpoint string, active bool, accessKeyID, secretAccessKey, defaultAssetGroupID, projectName, projectNumber string) (bool, error) {
+	var existingID string
+	err := tx.QueryRow(`SELECT id FROM models WHERE provider_id = $1 AND name = $2 AND deleted_at IS NULL`, providerID, name).Scan(&existingID)
+	if err == nil {
+		// Update existing model — keep its api_key if the CSV value is empty (sensitive field).
+		if apiKey == "" {
+			apiKey = "pending"
+		}
+		_, err = tx.Exec(`
+			UPDATE models SET
+				model_type = $1, api_key = $2, url = $3, endpoint = $4,
+				access_key_id = $5, secret_access_key = $6,
+				default_asset_group_id = $7, project_name = $8, project_number = $9,
+				active = $10, updated_at = NOW()
+			WHERE id = $11`, modelType, apiKey, url, endpoint,
+			accessKeyID, secretAccessKey, defaultAssetGroupID, projectName, projectNumber,
+			active, existingID)
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	if err != sql.ErrNoRows {
+		return false, err
+	}
+
+	// Create new model.
+	if apiKey == "" {
+		apiKey = "pending"
+	}
+	id := uuid.New().String()
+	_, err = tx.Exec(`
+		INSERT INTO models (id, provider_id, name, model_type, api_key, url, endpoint,
+		                    access_key_id, secret_access_key, default_asset_group_id,
+		                    project_name, project_number, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		id, providerID, name, modelType, apiKey, url, endpoint,
+		accessKeyID, secretAccessKey, defaultAssetGroupID, projectName, projectNumber,
+		active)
+	if err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 // ─── Compound ───────────────────────────────────────────────────

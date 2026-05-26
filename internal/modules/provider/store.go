@@ -326,3 +326,21 @@ func (s *Store) CreateModelWithID(m *Model) error {
 	}
 	return s.CreateModel(m)
 }
+
+// DB exposes the underlying *sql.DB for transaction-based operations in the service layer.
+func (s *Store) DB() *sql.DB { return s.db }
+
+// GetProviderByName looks up a provider by name (excluding soft-deleted).
+func (s *Store) GetProviderByName(name string) (*Provider, error) {
+	p := &Provider{}
+	query := `SELECT id, name, active, created_at, updated_at, deleted_at
+		FROM providers WHERE name = $1 AND deleted_at IS NULL`
+	err := s.db.QueryRow(query, name).Scan(&p.ID, &p.Name, &p.Active, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return p, nil
+}

@@ -86,6 +86,13 @@ type CreateModelRequest struct {
 	Active              *bool  `json:"active"`
 }
 
+type ImportResult struct {
+	ProvidersCreated int      `json:"providers_created"`
+	ModelsCreated    int      `json:"models_created"`
+	ModelsUpdated    int      `json:"models_updated"`
+	Errors           []string `json:"errors"`
+}
+
 type UpdateModelRequest struct {
 	Name                *string `json:"name"`
 	ModelType           *string `json:"model_type"`

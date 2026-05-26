@@ -21,6 +21,8 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 	{
 		providers.POST("", m.hdl.CreateProvider)
 		providers.GET("", m.hdl.ListProviders)
+		providers.GET("/export", m.hdl.ExportCSV)
+		providers.POST("/import", m.hdl.ImportCSV)
 		providers.GET("/:id", m.hdl.GetProvider)
 		providers.PATCH("/:id", m.hdl.UpdateProvider)
 		providers.DELETE("/:id", m.hdl.SoftDeleteProvider)
