@@ -291,6 +291,12 @@ func (s *Service) UpdateTake(id string, req *UpdateTakeRequest) (*Take, error) {
 	if req.Active != nil {
 		updates["active"] = *req.Active
 	}
+	if req.Final != nil {
+		updates["final"] = *req.Final
+		if *req.Final {
+			updates["finalized_at"] = time.Now()
+		}
+	}
 
 	if err := s.store.UpdateTake(id, updates); err != nil {
 		return nil, err
