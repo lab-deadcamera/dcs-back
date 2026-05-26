@@ -108,6 +108,9 @@ func (g *GeminiNanoGenerator) BuildPayload(req *studio.GeneratorRequest) map[str
 			imageSize = "2K"
 		}
 	}
+	if imageSize == "" {
+		imageSize = "1K"
+	}
 	genConfig["responseFormat"] = map[string]interface{}{
 		"image": map[string]interface{}{
 			"imageSize":   imageSize,
