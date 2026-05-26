@@ -12,6 +12,37 @@ import (
 	"time"
 )
 
+var mimeTypes = map[string]string{
+	".mp4":  "video/mp4",
+	".avi":  "video/x-msvideo",
+	".mov":  "video/quicktime",
+	".mkv":  "video/x-matroska",
+	".webm": "video/webm",
+	".flv":  "video/x-flv",
+	".wmv":  "video/x-ms-wmv",
+	".m4v":  "video/mp4",
+	".3gp":  "video/3gpp",
+	".mp3":  "audio/mpeg",
+	".wav":  "audio/wav",
+	".ogg":  "audio/ogg",
+	".flac": "audio/flac",
+	".aac":  "audio/aac",
+	".m4a":  "audio/mp4",
+	".wma":  "audio/x-ms-wma",
+	".opus": "audio/opus",
+	".aiff": "audio/aiff",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".bmp":  "image/bmp",
+	".svg":  "image/svg+xml",
+	".tiff": "image/tiff",
+	".tif":  "image/tiff",
+	".ico":  "image/x-icon",
+}
+
 const (
 	ModeBinary = "binary"
 	ModeURL    = "url"
@@ -162,6 +193,34 @@ func SaveOutput(input interface{}, mode, filename, outputsDir string) (string, e
 		return "", fmt.Errorf("unsupported mode: %q (use %q, %q, or %q)",
 			mode, ModeBinary, ModeURL, ModeBase64)
 	}
+}
+
+// URLToBase64 downloads content from a URL and returns it as a base64 data URI.
+// Result format: "data:{mimeType};base64,{encoded}" — ready to use in HTML/img/audio/video tags.
+func URLToBase64(rawURL string) (string, error) {
+	data, err := DownloadFromURL(rawURL)
+	if err != nil {
+		return "", err
+	}
+
+	if len(data) == 0 {
+		return "", fmt.Errorf("downloaded content is empty")
+	}
+
+	mimeType := detectMimeFromURL([]byte(rawURL), data)
+	encoded := base64.StdEncoding.EncodeToString(data)
+
+	return fmt.Sprintf("data:%s;base64,%s", mimeType, encoded), nil
+}
+
+// detectMimeFromURL determines the MIME type, preferring the URL extension,
+// falling back to content sniffing.
+func detectMimeFromURL(rawURL, data []byte) string {
+	ext := strings.ToLower(filepath.Ext(strings.SplitN(string(rawURL), "?", 2)[0]))
+	if mime, ok := mimeTypes[ext]; ok {
+		return mime
+	}
+	return http.DetectContentType(data)
 }
 
 // sanitizeFilename removes path separators and known dangerous characters

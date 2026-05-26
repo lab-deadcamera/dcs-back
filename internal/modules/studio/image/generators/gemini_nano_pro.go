@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"dcs-back-v0/internal/modules/studio"
+	"dcs-back-v0/internal/utils"
 )
 
 type GeminiNanoProGenerator struct {
@@ -159,9 +160,10 @@ func (g *GeminiNanoProGenerator) buildImagePart(dataURL string) map[string]inter
 		case ".gif":
 			mimeType = "image/gif"
 		}
+		data, _ := utils.DownloadFromURL(dataURL)
 		return map[string]interface{}{
 			"inline_data": map[string]interface{}{
-				"data":      dataURL,
+				"data":      base64.StdEncoding.EncodeToString(data),
 				"mime_type": mimeType,
 			},
 		}
