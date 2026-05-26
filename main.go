@@ -5,24 +5,24 @@ import (
 	"os"
 
 	"dcs-back-v0/config"
-	"dcs-back-v0/internal/modules/auth"
-	"dcs-back-v0/internal/modules/character"
 	"dcs-back-v0/internal/db"
-	"dcs-back-v0/internal/modules/file"
-	"dcs-back-v0/internal/modules/image"
 	"dcs-back-v0/internal/middleware"
 	"dcs-back-v0/internal/modules"
+	"dcs-back-v0/internal/modules/auth"
+	"dcs-back-v0/internal/modules/character"
+	"dcs-back-v0/internal/modules/file"
+	"dcs-back-v0/internal/modules/image"
+	"dcs-back-v0/internal/modules/preset"
 	"dcs-back-v0/internal/modules/project"
 	"dcs-back-v0/internal/modules/provider"
-"dcs-back-v0/internal/modules/preset"
 	"dcs-back-v0/internal/modules/studio"
 	studioaudio "dcs-back-v0/internal/modules/studio/audio"
+	calculators "dcs-back-v0/internal/modules/studio/calculators"
 	studioimage "dcs-back-v0/internal/modules/studio/image"
 	studioimagegens "dcs-back-v0/internal/modules/studio/image/generators"
 	studiotext "dcs-back-v0/internal/modules/studio/text"
 	studiovideo "dcs-back-v0/internal/modules/studio/video"
 	videogens "dcs-back-v0/internal/modules/studio/video/generators"
-calculators "dcs-back-v0/internal/modules/studio/calculators"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -124,10 +124,10 @@ func main() {
 	studioSvc.RegisterGenerator(videogens.NewSeedanceGalleryGenerator(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(studioimagegens.NewSeedreamGenerator(cfg.OutputsDir))
 	studioSvc.RegisterGenerator(studioimagegens.NewGeminiNanoGenerator(cfg.OutputsDir))
-		studioSvc.SetGeneratedAssetStore(studio.NewGeneratedAssetStore(database, cfg.OutputsDir))
-		studioSvc.RegisterCalculator(calculators.NewSeedanceCalculator())
-		studioSvc.RegisterCalculator(calculators.NewSeedreamCalculator())
-		studioSvc.RegisterCalculator(calculators.NewGeminiCalculator())
+	studioSvc.SetGeneratedAssetStore(studio.NewGeneratedAssetStore(database, cfg.OutputsDir))
+	studioSvc.RegisterCalculator(calculators.NewSeedanceCalculator())
+	studioSvc.RegisterCalculator(calculators.NewSeedreamCalculator())
+	studioSvc.RegisterCalculator(calculators.NewGeminiCalculator())
 	studioHdl := studio.NewHandler(studioSvc)
 
 	vidSvc := studiovideo.NewService(studioSvc)
@@ -146,6 +146,14 @@ func main() {
 		return sr.LocalURL
 	})
 	projectSvc.SetOutputsDir(cfg.OutputsDir)
+	studioSvc.SetTakeSaver(func(sceneID string, takeNumber int, videoURL, videoLocalURL string) error {
+		_, err := projectSvc.SaveGeneration(sceneID, &project.SaveGenerationRequest{
+			Number:        takeNumber,
+			VideoURL:      videoURL,
+			VideoLocalURL: videoLocalURL,
+		})
+		return err
+	})
 	projectHdl := project.NewHandler(projectSvc)
 
 	// ─── Router ──────────────────────────────────────────────────
@@ -182,7 +190,7 @@ func main() {
 	registry.Register(file.NewModule(fileHdl))
 	registry.Register(character.NewModule(charHdl))
 	registry.Register(provider.NewModule(providerHdl))
-registry.Register(preset.NewModule(presetHdl))
+	registry.Register(preset.NewModule(presetHdl))
 	registry.Register(project.NewModule(projectHdl))
 	registry.Register(studio.NewModule(studioHdl, studioVideoHdl, studioImageHdl, studioAudioHdl, studioTextHdl))
 	registry.Setup(v1, authMw, adminMw)

@@ -1,15 +1,15 @@
-﻿package studio
+package studio
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
-	"time"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
-	"sort"
+	"time"
 
 	"dcs-back-v0/internal/modules/character"
 	"dcs-back-v0/internal/modules/file"
@@ -36,13 +36,14 @@ type Service struct {
 	outputsDir           string
 	handlers             []ModelHandler
 	pipelineGens         []PipelineRunner
-		costCalcs            []CostCalculator
+	costCalcs            []CostCalculator
 	tasks                map[string]*TaskRecord
 	assetSyncStore       *AssetSyncStore
 	baseURL              string
 	logStore             *GenerationLogStore
 	commStore            *ServerCommunicationStore
 	assetStore           *GeneratedAssetStore
+	takeSaver            TakeSaver
 	assetAccessKeyID     string
 	assetSecretAccessKey string
 	assetDefaultGroupID  string
@@ -57,7 +58,7 @@ func NewService(providerStore *provider.Store, fileService *file.Service, output
 		baseURL:       baseURL,
 		handlers:      []ModelHandler{},
 		pipelineGens:  []PipelineRunner{},
-			costCalcs:  []CostCalculator{},
+		costCalcs:     []CostCalculator{},
 		tasks:         make(map[string]*TaskRecord),
 	}
 }
@@ -101,6 +102,10 @@ func (s *Service) SetAssetCredentials(accessKeyID, secretAccessKey, defaultGroup
 	s.assetDefaultGroupID = defaultGroupID
 }
 
+func (s *Service) SetTakeSaver(saver TakeSaver) {
+	s.takeSaver = saver
+}
+
 // effectiveCredentials returns the AK/SK/groupID to use for asset operations.
 // Prefers per-model values from the DB, falls back to globally configured env vars.
 func (s *Service) effectiveCredentials(m *provider.Model) (accessKeyID, secretAccessKey, defaultGroupID string) {
@@ -136,6 +141,7 @@ func (s *Service) pickGenerator(modelName string) PipelineRunner {
 	}
 	return nil
 }
+
 // ─── Cost calculator registration ──────────────────────────────────
 
 func (s *Service) RegisterCalculator(calc CostCalculator) {
@@ -151,9 +157,6 @@ func (s *Service) pickCalculator(modelName string) CostCalculator {
 	return nil
 }
 
-
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Unified payload generation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-
 func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateResponse, error) {
 	// Validar que los campos de sesiÃƒÂ³n estÃƒÂ©n presentes (obligatorios para tracking).
 	if req.ProjectID == "" || req.SceneID == "" || req.SceneCode == "" || req.TakeNumber <= 0 {
@@ -161,14 +164,14 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 	}
 
 	var (
-		genReq    *GeneratorRequest
-		modelName string
-		taskID    string
-		status    = "failed"
-				outputs   string
-				errLog    string
+		genReq        *GeneratorRequest
+		modelName     string
+		taskID        string
+		status        = "failed"
+		outputs       string
+		errLog        string
 		estimatedCost float64
-			costSource    string
+		costSource    string
 	)
 
 	// Defer log save Ã¢â‚¬â€ runs on every return path (including early errors)
@@ -237,7 +240,6 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		}
 	}
 
-
 	// Convert to generator request
 	genReq = &GeneratorRequest{
 		Model:       m.Name,
@@ -275,7 +277,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 	// Build the actual API payload (for logging and server communications)
 	apiPayload := gen.BuildPayload(genReq)
 	apiPayloadBytes, _ := json.Marshal(apiPayload)
-	
+
 	genStart := time.Now()
 	result, err := gen.Generate(genReq)
 	genDur := time.Since(genStart).Milliseconds()
@@ -333,43 +335,40 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 			costSource = "pending"
 			// Background calculation handled separately
 		}
-		}
-		// Store naming info in task record for local filename
-		userName := req.UserName
-		if userName == "" {
-			userName = fmt.Sprintf("u%d", req.UserID)
-		}
+	}
+	// Store naming info in task record for local filename
+	userName := req.UserName
+	if userName == "" {
+		userName = fmt.Sprintf("u%d", req.UserID)
+	}
 
+	// Track the task for status polling
+	s.mu.Lock()
+	s.tasks[result.TaskID] = &TaskRecord{
+		TaskID:      result.TaskID,
+		ModelID:     m.ID,
+		ModelName:   m.Name,
+		Status:      result.Status,
+		ProjectName: req.ProjectName,
+		SceneCode:   req.SceneCode,
+		TakeNumber:  req.TakeNumber,
+		UserHandle:  userName,
+		Result: &StatusResult{
+			Status: result.Status,
+			Raw:    result.Raw,
+		},
+	}
+	s.mu.Unlock()
 
-		// Track the task for status polling
-		s.mu.Lock()
-		s.tasks[result.TaskID] = &TaskRecord{
-			TaskID:    result.TaskID,
-		ModelID:   m.ID,
-		ModelName: m.Name,
-		Status:    result.Status,
-			ProjectName: req.ProjectName,
-			SceneCode:  req.SceneCode,
-			TakeNumber: req.TakeNumber,
-			UserHandle: userName,
-			Result: &StatusResult{
-				Status: result.Status,
-				Raw:    result.Raw,
-			},
-		}
-		s.mu.Unlock()
+	out := convertOutputs(result.Outputs)
 
-		out := convertOutputs(result.Outputs)
-
-		return &StudioGenerateResponse{
-			TaskID:  result.TaskID,
-			Model:   result.Model,
-			Status:  result.Status,
-			Outputs: out,
-		}, nil
+	return &StudioGenerateResponse{
+		TaskID:  result.TaskID,
+		Model:   result.Model,
+		Status:  result.Status,
+		Outputs: out,
+	}, nil
 }
-
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Legacy generation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 func (s *Service) Generate(sel *Selection) (*GenerateResponse, error) {
 	m, err := s.providerStore.GetModelByID(sel.ModelID)
@@ -1039,6 +1038,24 @@ func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
 	return statusResult, nil
 }
 
+// saveToTakes persiste las URLs del output en la tabla takes cuando
+// una generaciÃ³n de video se completa exitosamente.
+func (s *Service) saveToTakes(taskID string, videoURL, localURL string) {
+	if s.takeSaver == nil || s.logStore == nil {
+		return
+	}
+	log, logErr := s.logStore.GetByTaskID(taskID)
+	if logErr != nil || log == nil {
+		return
+	}
+	if log.SceneID == "" || log.TakeNumber <= 0 {
+		return
+	}
+	if err := s.takeSaver(log.SceneID, log.TakeNumber, videoURL, localURL); err != nil {
+		fmt.Printf("failed to save take for task %s: %v\n", taskID, err)
+	}
+}
+
 func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	s.mu.RLock()
 	record, ok := s.tasks[taskID]
@@ -1060,6 +1077,7 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 			if newPath != "" {
 				resp.LocalURL = newPath
 			}
+			s.saveToTakes(taskID, resp.VideoURL, resp.LocalURL)
 		}
 		return resp, nil
 	}
@@ -1113,6 +1131,7 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 			Error:  result.Error,
 			Raw:    result.Raw,
 		}
+
 		if len(result.Outputs) > 0 {
 			statusResult.VideoURL = result.Outputs[0].URL
 			statusResult.LocalURL = result.Outputs[0].LocalURL
@@ -1134,6 +1153,7 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 			s.updateLogWithFinalStatus(taskID, result)
 			if result.Status == "succeeded" {
 				s.saveGeneratedAssets(taskID, result)
+				s.saveToTakes(taskID, statusResult.VideoURL, statusResult.LocalURL)
 			}
 		}
 		return statusResult, nil
@@ -1564,11 +1584,6 @@ func extractContentTypes(items []ContentItem) string {
 	}
 	return strings.Join(types, ",")
 }
-
-
-
-
-
 
 // renameOutputFile renames a locally-downloaded output file to follow the
 // pattern: {SceneCode}_T{take}_{user}_{datetime}.mp4

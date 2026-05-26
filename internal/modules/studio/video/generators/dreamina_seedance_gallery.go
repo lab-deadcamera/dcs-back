@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"dcs-back-v0/internal/modules/studio"
+	"dcs-back-v0/internal/utils"
 )
 
 var nameModeldreaminaGallery = "dreamina-seedance-2-0-gallery"
@@ -101,21 +100,14 @@ func (g *SeedanceGalleryGenerator) GetStatus(taskID, apiKey, baseURL, endpoint s
 		videoURL := g.findVideoURL(result, 0)
 		if videoURL != "" {
 			localName := fmt.Sprintf("seedance_gallery_%d_%s.mp4", time.Now().UnixMilli(), SafeSuffix(taskID))
-			localPath := filepath.Join(g.outputsDir, localName)
-
 			outputs := []studio.OutputResource{{
 				URL:  videoURL,
 				Type: "video",
 			}}
 
-			vidResp, vidErr := http.Get(videoURL)
-			if vidErr == nil {
-				defer vidResp.Body.Close()
-				vidBytes, readErr := io.ReadAll(vidResp.Body)
-				if readErr == nil {
-					os.WriteFile(localPath, vidBytes, 0644)
-					outputs[0].LocalURL = "/outputs/" + localName
-				}
+			localURL, err := utils.SaveURLOutput(videoURL, localName, g.outputsDir)
+			if err == nil {
+				outputs[0].LocalURL = localURL
 			}
 
 			return &studio.GeneratorResult{

@@ -397,7 +397,7 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 	}
 
 	videoURL := req.VideoURL
-	if localURL != "" {
+	if videoURL == "" && localURL != "" {
 		videoURL = localURL
 	}
 

@@ -71,10 +71,10 @@ type StudioGenerateRequest struct {
 	ProjectName string `json:"project_name"`
 	UserName    string `json:"user_name"`
 	ProjectID   string `json:"project_id" binding:"required"`
-	SceneID    string `json:"scene_id" binding:"required"`
-	SceneCode  string `json:"scene_code" binding:"required"`
-	TakeNumber int    `json:"take_number" binding:"required"`
-	UserID     int    `json:"user_id"`
+	SceneID     string `json:"scene_id" binding:"required"`
+	SceneCode   string `json:"scene_code" binding:"required"`
+	TakeNumber  int    `json:"take_number" binding:"required"`
+	UserID      int    `json:"user_id"`
 	// Resource type -- lo setea cada dominio (video/image/audio/text) automaticamente.
 	ResourceType string `json:"-"`
 }
@@ -220,37 +220,41 @@ type TaskRecord struct {
 	Result    *StatusResult
 	// Naming info for local video filename
 	ProjectName string
-	SceneCode  string
-	TakeNumber int
-	UserHandle string
+	SceneCode   string
+	TakeNumber  int
+	UserHandle  string
 }
+
+// TakeSaver is a callback to persist completed generation outputs
+// to the takes table (video_url and video_local_url).
+type TakeSaver func(sceneID string, takeNumber int, videoURL, videoLocalURL string) error
 
 // ─── Generation log types ───────────────────────────────────────
 
 // GenerationLog stores the complete log for a generation task,
 // linking the client payload with the AI response via task ID.
 type GenerationLog struct {
-	ID            string     `json:"id"`
-	TaskID        string     `json:"task_id"`
-	ModelName     string     `json:"model_name"`
-	UserID        *int       `json:"user_id,omitempty"`
-	ProjectID     string     `json:"project_id,omitempty"`
-	ProjectName   string     `json:"project_name,omitempty"`
-	SceneID       string     `json:"scene_id,omitempty"`
-	SceneCode     string     `json:"scene_code,omitempty"`
-	TakeNumber    int        `json:"take_number,omitempty"`
-	Request       string     `json:"request,omitempty"`       // original client payload (JSON)
-	Outputs       string     `json:"outputs,omitempty"`
-	Status        string     `json:"status"`
-	ErrorMessage  string     `json:"error_message,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at,omitempty"`
-	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
+	ID           string     `json:"id"`
+	TaskID       string     `json:"task_id"`
+	ModelName    string     `json:"model_name"`
+	UserID       *int       `json:"user_id,omitempty"`
+	ProjectID    string     `json:"project_id,omitempty"`
+	ProjectName  string     `json:"project_name,omitempty"`
+	SceneID      string     `json:"scene_id,omitempty"`
+	SceneCode    string     `json:"scene_code,omitempty"`
+	TakeNumber   int        `json:"take_number,omitempty"`
+	Request      string     `json:"request,omitempty"` // original client payload (JSON)
+	Outputs      string     `json:"outputs,omitempty"`
+	Status       string     `json:"status"`
+	ErrorMessage string     `json:"error_message,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at,omitempty"`
+	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
 	// Tipo de recurso de la generacion (video, image, audio, text).
 	ResourceType string `json:"resource_type"`
 	// Tipos de contenido enviados (ej. "text,image").
 	ContentTypes string `json:"content_types"`
-// Costo estimado de la generacion en USD.
+	// Costo estimado de la generacion en USD.
 	EstimatedCost float64 `json:"estimated_cost"`
 	// Fuente del costo: "api_response", "calculator", "pending".
 	CostSource string `json:"cost_source"`
@@ -263,15 +267,15 @@ type GenerationLog struct {
 
 // ListGenerationLogsRequest holds pagination and filter params for listing logs.
 type ListGenerationLogsRequest struct {
-	Page      int    `form:"page"`
-	Limit     int    `form:"limit"`
-	ProjectID string `form:"project_id"`
-	SceneID   string `form:"scene_id"`
-	Status    string `form:"status"`
-	ModelName string `form:"model_name"`
-	UserID    int    `form:"user_id"`
-	DateFrom  string `form:"date_from"`
-	DateTo    string `form:"date_to"`
+	Page         int    `form:"page"`
+	Limit        int    `form:"limit"`
+	ProjectID    string `form:"project_id"`
+	SceneID      string `form:"scene_id"`
+	Status       string `form:"status"`
+	ModelName    string `form:"model_name"`
+	UserID       int    `form:"user_id"`
+	DateFrom     string `form:"date_from"`
+	DateTo       string `form:"date_to"`
 	ResourceType string `form:"resource_type"`
 }
 
@@ -307,7 +311,7 @@ type GeneratorRequest struct {
 	Watermark     bool
 	Resolution    string
 	GenerateAudio bool
-InputDuration    float64
+	InputDuration float64
 	ImageMode     string
 	APIKey        string
 	BaseURL       string
