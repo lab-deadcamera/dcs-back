@@ -94,11 +94,51 @@ func (g *GeminiNanoGenerator) BuildPayload(req *studio.GeneratorRequest) map[str
 	modalities := []string{"TEXT", "IMAGE"}
 	genConfig["responseModalities"] = modalities
 
+	genConfig["responseFormat"] = map[string]interface{}{
+		"image": map[string]interface{}{
+			"aspectRatio": mapAspectRatio(req.Ratio),
+			"imageSize":   mapImageSize(req.Resolution),
+		},
+	}
 
 	payload["generationConfig"] = genConfig
 	return payload
 }
 
+
+// mapAspectRatio converts a ratio string (e.g. "1:1", "16:9") to a Gemini API enum.
+func mapAspectRatio(ratio string) string {
+	switch ratio {
+	case "2:3":
+		return "ASPECT_RATIO_TWO_BY_THREE"
+	case "3:2":
+		return "ASPECT_RATIO_THREE_BY_TWO"
+	case "3:4":
+		return "ASPECT_RATIO_THREE_BY_FOUR"
+	case "4:3":
+		return "ASPECT_RATIO_FOUR_BY_THREE"
+	case "4:5":
+		return "ASPECT_RATIO_FOUR_BY_FIVE"
+	case "5:4":
+		return "ASPECT_RATIO_FIVE_BY_FOUR"
+	default:
+		return "ASPECT_RATIO_ONE_BY_ONE"
+	}
+}
+
+// mapImageSize converts a resolution string to a Gemini image size enum.
+func mapImageSize(resolution string) string {
+	switch resolution {
+	case "512", "512px":
+		return "IMAGE_SIZE_FIVE_TWELVE"
+	case "2K":
+		return "IMAGE_SIZE_TWO_K"
+	case "4K":
+		return "IMAGE_SIZE_FOUR_K"
+	default:
+		return "IMAGE_SIZE_ONE_K"
+	}
+}
 
 // buildImagePart converts a DataURL to a Gemini API part.
 // Supports both base64 data URLs and external HTTP(S) URLs.
