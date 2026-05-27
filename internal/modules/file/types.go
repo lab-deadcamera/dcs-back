@@ -19,13 +19,14 @@ type File struct {
 }
 
 type UploadResult struct {
-	ID       string `json:"id"`
-	Filename string `json:"filename"`
-	URL      string `json:"url"`
-	Size     int64  `json:"size"`
-	MimeType string `json:"mime_type"`
-	Format   string `json:"format"`
-	Category string `json:"category"`
+	ID           string `json:"id"`
+	Filename     string `json:"filename"`
+	URL          string `json:"url"`
+	ThumbnailURL string `json:"thumbnail_url,omitempty"`
+	Size         int64  `json:"size"`
+	MimeType     string `json:"mime_type"`
+	Format       string `json:"format"`
+	Category     string `json:"category"`
 }
 
 type TrashItem struct {

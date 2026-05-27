@@ -60,19 +60,31 @@ func (s *Service) Upload(data []byte, filename, category, storage string) (*Uplo
 		return nil, fmt.Errorf("failed to create db record: %w", err)
 	}
 
+	// Generate thumbnail eagerly for image files (regardless of storage type).
+	var thumbnailURL string
+	if strings.HasPrefix(mimeType, "image/") {
+		if _, err := s.store.GenerateThumbnail(fullPath, 300, 300); err != nil {
+			// Non-fatal: thumbnail can be generated on-demand later if needed.
+			fmt.Printf("warning: failed to generate thumbnail for %s: %v\n", fullPath, err)
+		} else {
+			thumbnailURL = s.baseURL + "/api/v1/files/" + file.ID + "/thumbnail"
+		}
+	}
+
 	format := ext[1:]
 	if format == "jpeg" {
 		format = "jpg"
 	}
 
 	return &UploadResult{
-		ID:       file.ID,
-		Filename: filename,
-		URL:      s.baseURL + "/api/v1/files/" + file.ID,
-		Size:     file.Size,
-		MimeType: mimeType,
-		Format:   format,
-		Category: category,
+		ID:           file.ID,
+		Filename:     filename,
+		URL:          s.baseURL + "/api/v1/files/" + file.ID,
+		ThumbnailURL: thumbnailURL,
+		Size:         file.Size,
+		MimeType:     mimeType,
+		Format:       format,
+		Category:     category,
 	}, nil
 }
 
