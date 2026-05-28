@@ -1,4 +1,4 @@
-package studio
+﻿package studio
 
 import (
 	"encoding/json"
@@ -64,8 +64,6 @@ func NewService(providerStore *provider.Store, fileService *file.Service, output
 	}
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Legacy handler registration Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-
 func (s *Service) RegisterHandler(h ModelHandler) {
 	s.handlers = append(s.handlers, h)
 }
@@ -78,8 +76,6 @@ func (s *Service) pickHandler(modelName string) ModelHandler {
 	}
 	return nil
 }
-
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Asset sync store Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 func (s *Service) SetAssetSyncStore(store *AssetSyncStore) {
 	s.assetSyncStore = store
@@ -126,8 +122,6 @@ func (s *Service) effectiveCredentials(m *provider.Model) (accessKeyID, secretAc
 	return
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Generator registration Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-
 // RegisterGenerator registers a generator that satisfies the PipelineRunner interface.
 // Both video.VideoGenerator and image.ImageGenerator match structurally.
 func (s *Service) RegisterGenerator(gen PipelineRunner) {
@@ -143,8 +137,6 @@ func (s *Service) pickGenerator(modelName string) PipelineRunner {
 	return nil
 }
 
-// ─── Cost calculator registration ──────────────────────────────────
-
 func (s *Service) RegisterCalculator(calc CostCalculator) {
 	s.costCalcs = append(s.costCalcs, calc)
 }
@@ -159,7 +151,7 @@ func (s *Service) pickCalculator(modelName string) CostCalculator {
 }
 
 func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateResponse, error) {
-	// Validar que los campos de sesiÃƒÂ³n estÃƒÂ©n presentes (obligatorios para tracking).
+	// Validar que los campos de sesiÃƒÆ’Ã‚Â³n estÃƒÆ’Ã‚Â©n presentes (obligatorios para tracking).
 	if req.ProjectID == "" || req.SceneID == "" || req.SceneCode == "" || req.TakeNumber <= 0 {
 		return nil, fmt.Errorf("project_id, scene_id, scene_code and take_number are required for generation")
 	}
@@ -175,7 +167,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		costSource    string
 	)
 
-	// Defer log save Ã¢â‚¬â€ runs on every return path (including early errors)
+	// Defer log save ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â runs on every return path (including early errors)
 	defer func() {
 		if s.logStore == nil {
 			return
@@ -401,7 +393,7 @@ func (s *Service) Generate(sel *Selection) (*GenerateResponse, error) {
 	return resp, nil
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Asset sync Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Asset sync ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
 // SyncAsset uploads a local file to the model's asset library and stores the mapping.
 func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
@@ -508,7 +500,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 		time.Sleep(3 * time.Second)
 	}
 
-	// Construir la URI de referencia segÃºn el tipo de modelo
+	// Construir la URI de referencia segÃƒÂºn el tipo de modelo
 	referenceURI = BuildReferenceURI(m.Name, assetID, assetURL)
 
 	finalStatus := "active"
@@ -562,7 +554,7 @@ func (s *Service) GetSyncedAsset(modelID, fileID string) (*ModelAsset, error) {
 	return s.assetSyncStore.GetByModelAndFile(modelID, fileID)
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Enriched file listing Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Enriched file listing ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
 // resolveModelBriefs resolves a set of model IDs to ModelBrief objects.
 func (s *Service) resolveModelBriefs(modelIDs map[string]bool) []ModelBrief {
@@ -751,7 +743,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 		api.SetCommStore(s.commStore)
 	}
 
-	// Process each file Ã¢â‚¬â€ skip if already synced, upload if new or failed
+	// Process each file ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â skip if already synced, upload if new or failed
 	var results []SyncAssetResponse
 	for _, cf := range charFiles {
 		existing := syncMap[cf.FileID]
@@ -778,7 +770,7 @@ func (s *Service) SyncCharacterAssets(req *SyncCharacterRequest) (*SyncResultSum
 			continue
 		}
 
-		// Not synced or previously failed Ã¢â‚¬â€ upload
+		// Not synced or previously failed ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â upload
 		log.Printf("[sync-char] uploading file %q to group %s", cf.FileID, groupID)
 		r, err := s.uploadAndTrackAsset(req.ModelID, cf.FileID, groupID, m.Name, api)
 		if err != nil {
@@ -882,7 +874,7 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID, modelName string
 		time.Sleep(3 * time.Second)
 	}
 
-	// Construir la URI de referencia segÃºn el tipo de modelo
+	// Construir la URI de referencia segÃƒÂºn el tipo de modelo
 	referenceURI = BuildReferenceURI(modelName, assetID, assetURL)
 
 	finalStatus := "active"
@@ -914,8 +906,6 @@ func (s *Service) uploadAndTrackAsset(modelID, fileID, groupID, modelName string
 		ReferenceURI: referenceURI,
 	}, nil
 }
-
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 func (s *Service) modelAssetsToBriefs(assets []ModelAsset) []ModelBrief {
 	if len(assets) == 0 {
@@ -962,10 +952,10 @@ func charFileToCharFileWithSync(f character.CharacterFile, briefs []ModelBrief) 
 	}
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Status and cancellation (shared) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Status and cancellation (shared) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
 // statusFromLog recupera el estado de una tarea desde el log cuando
-// la tarea ya no estÃƒÂ¡ en memoria (ej. reinicio del servidor).
+// la tarea ya no estÃƒÆ’Ã‚Â¡ en memoria (ej. reinicio del servidor).
 func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
 	// Buscar el modelo por nombre
 	m, err := s.providerStore.GetModelByName(log.ModelName)
@@ -1039,7 +1029,7 @@ func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
 }
 
 // saveToTakes persiste las URLs del output en la tabla takes cuando
-// una generaciÃ³n de video se completa exitosamente.
+// una generaciÃƒÂ³n de video se completa exitosamente.
 func (s *Service) saveToTakes(taskID string, videoURL, localURL string) {
 	if s.takeSaver == nil || s.logStore == nil {
 		return
@@ -1062,7 +1052,7 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	s.mu.RUnlock()
 
 	if !ok {
-		// Task not in memory (e.g. after restart) Ã¢â‚¬â€ try to recover from log
+		// Task not in memory (e.g. after restart) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â try to recover from log
 		log, logErr := s.logStore.GetByTaskID(taskID)
 		if logErr != nil || log == nil {
 			return nil, fmt.Errorf("unknown task: %s", taskID)
@@ -1138,11 +1128,22 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 		}
 		// Rename local file to follow project/scene/take pattern
 		if result.Status == "succeeded" && statusResult.LocalURL != "" {
-			sceneName := record.SceneCode
-			if gl, glErr := s.logStore.GetByTaskID(taskID); glErr == nil && gl != nil && gl.SceneName != "" {
-				sceneName = gl.SceneName
+			projectName, sceneCode, takeNumber, userName := record.ProjectName, record.SceneCode, record.TakeNumber, record.UserHandle
+			if gl, glErr := s.logStore.GetByTaskID(taskID); glErr == nil && gl != nil {
+				if gl.ProjectName != "" {
+					projectName = gl.ProjectName
+				}
+				if gl.SceneCode != "" {
+					sceneCode = gl.SceneCode
+				}
+				if gl.TakeNumber > 0 {
+					takeNumber = gl.TakeNumber
+				}
+				if gl.UserName != "" {
+					userName = gl.UserName
+				}
 			}
-			newPath := s.renameOutputFile(statusResult.LocalURL, record.ProjectName, sceneName, record.TakeNumber, record.UserHandle)
+			newPath := s.renameOutputFile(statusResult.LocalURL, projectName, sceneCode, takeNumber, userName)
 			if newPath != "" {
 				statusResult.LocalURL = newPath
 				result.Outputs[0].LocalURL = newPath
@@ -1256,8 +1257,6 @@ func (s *Service) CancelTask(taskID string) error {
 	return handler.CancelTask(taskID, m.APIKey, m.URL, m.Endpoint)
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Log listing Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-
 // ListGenerationLogs returns paginated generation logs, optionally filtered.
 func (s *Service) ListGenerationLogs(page, limit int, projectID, sceneID, status, modelName string, userID int, dateFrom, dateTo, resourceType string) (*ListGenerationLogsResponse, error) {
 	if s.logStore == nil {
@@ -1317,8 +1316,6 @@ func intPtrOrNil(v int) *int {
 	return &v
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Preview (dry-run) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-
 // PreviewPayload builds the AI API payload without sending it or saving logs.
 func (s *Service) PreviewPayload(req *StudioGenerateRequest) (*PreviewPayloadResponse, error) {
 	m, err := s.providerStore.GetModelByName(req.Model)
@@ -1365,8 +1362,6 @@ func (s *Service) PreviewPayload(req *StudioGenerateRequest) (*PreviewPayloadRes
 	}, nil
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-
 // updateLogWithFinalStatus updates the generation log with the final AI response
 // when an async task completes (succeeded or failed).
 func (s *Service) updateLogWithFinalStatus(taskID string, result *GeneratorResult) {
@@ -1376,7 +1371,7 @@ func (s *Service) updateLogWithFinalStatus(taskID string, result *GeneratorResul
 
 	log, logErr := s.logStore.GetByTaskID(taskID)
 	if logErr != nil || log == nil {
-		// No log entry (e.g. legacy path) Ã¢â‚¬â€ skip
+		// No log entry (e.g. legacy path) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â skip
 		return
 	}
 
@@ -1402,7 +1397,7 @@ func (s *Service) resolveContent(items []ContentItem, modelID string) ([]Content
 			if modelID != "" && s.assetSyncStore != nil {
 				synced, err := s.assetSyncStore.GetByModelAndFile(modelID, item.ID)
 				if err == nil && synced != nil && synced.Status == "active" && synced.AssetID != "" {
-					// Usar la reference_uri especÃ­fica del modelo (asset:// para gallery, URL directa para otros)
+					// Usar la reference_uri especÃƒÂ­fica del modelo (asset:// para gallery, URL directa para otros)
 					ci.DataURL = synced.ReferenceURI
 					resolved[i] = ci
 					continue
@@ -1519,7 +1514,7 @@ func (s *Service) GallerySyncContent(items []ContentItem, modelName string) ([]C
 		}
 		log.Printf("[gallery-sync] item[%d] not synced yet, checking character linkage", i)
 
-		// Not synced Ã¢â‚¬â€ check if file belongs to a character
+		// Not synced ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â check if file belongs to a character
 		charIDs, cErr := s.charService.FindCharactersByFileID(item.ID)
 		charSynced := false
 		if cErr == nil && len(charIDs) > 0 {
