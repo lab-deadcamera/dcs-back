@@ -234,22 +234,22 @@ type TakeSaver func(sceneID string, takeNumber int, videoURL, videoLocalURL stri
 // GenerationLog stores the complete log for a generation task,
 // linking the client payload with the AI response via task ID.
 type GenerationLog struct {
-	ID           string     `json:"id"`
-	TaskID       string     `json:"task_id"`
-	ModelName    string     `json:"model_name"`
-	UserID       *int       `json:"user_id,omitempty"`
-	ProjectID    string     `json:"project_id,omitempty"`
-	ProjectName  string     `json:"project_name,omitempty"`
-	SceneID      string     `json:"scene_id,omitempty"`
-	SceneCode    string     `json:"scene_code,omitempty"`
-	TakeNumber   int        `json:"take_number,omitempty"`
-	Request      string     `json:"request,omitempty"` // original client payload (JSON)
-	Outputs      string     `json:"outputs,omitempty"`
-	Status       string     `json:"status"`
-	ErrorMessage string     `json:"error_message,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at,omitempty"`
-	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+	ID           string           `json:"id"`
+	TaskID       string           `json:"task_id"`
+	ModelName    string           `json:"model_name"`
+	UserID       *int             `json:"user_id"`
+	ProjectID    string           `json:"project_id"`
+	ProjectName  string           `json:"project_name"`
+	SceneID      string           `json:"scene_id"`
+	SceneCode    string           `json:"scene_code"`
+	TakeNumber   int              `json:"take_number"`
+	Request      string           `json:"request"` // original client payload (JSON)
+	Outputs      []OutputResource `json:"outputs"`
+	Status       string           `json:"status"`
+	ErrorMessage string           `json:"error_message"`
+	CreatedAt    time.Time        `json:"created_at"`
+	UpdatedAt    time.Time        `json:"updated_at,omitempty"`
+	DeletedAt    *time.Time       `json:"deleted_at,omitempty"`
 	// Tipo de recurso de la generacion (video, image, audio, text).
 	ResourceType string `json:"resource_type"`
 	// Tipos de contenido enviados (ej. "text,image").

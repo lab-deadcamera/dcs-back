@@ -2,6 +2,7 @@ package studio
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 )
 
@@ -22,6 +23,7 @@ const genLogListCols = `gl.id, gl.task_id, gl.model_name,
 		COALESCE(gl.scene_id, '') AS scene_id,
 		COALESCE(gl.scene_code, '') AS scene_code,
 		COALESCE(gl.take_number, 0) AS take_number,
+		COALESCE(gl.outputs, '') AS outputs,
 		gl.resource_type, gl.content_types,
 		gl.estimated_cost, gl.cost_source,
 		gl.created_at, gl.updated_at`
@@ -56,25 +58,35 @@ const genLogFromJoins = `FROM generation_logs gl
 func (s *GenerationLogStore) scanListRow(row *GenerationLog, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(
+	var outputsStr string
+	err := scanner.Scan(
 		&row.ID, &row.TaskID, &row.ModelName,
 		&row.Status, &row.ErrorMessage,
 		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
 		&row.TakeNumber,
+		&outputsStr,
 		&row.ResourceType, &row.ContentTypes,
 		&row.EstimatedCost, &row.CostSource,
 		&row.CreatedAt, &row.UpdatedAt,
 		&row.UserName, &row.UserDisplayName, &row.ProjectName, &row.SceneName, &row.SceneNumber,
 	)
+	if err != nil {
+		return err
+	}
+	if outputsStr != "" {
+		json.Unmarshal([]byte(outputsStr), &row.Outputs)
+	}
+	return nil
 }
 
 // scanDetailRow scans a detail query row (includes request payload and outputs).
 func (s *GenerationLogStore) scanDetailRow(row *GenerationLog, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(
+	var outputsStr string
+	err := scanner.Scan(
 		&row.ID, &row.TaskID, &row.ModelName,
-		&row.Request, &row.Outputs,
+		&row.Request, &outputsStr,
 		&row.Status, &row.ErrorMessage,
 		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
 		&row.TakeNumber,
@@ -83,6 +95,13 @@ func (s *GenerationLogStore) scanDetailRow(row *GenerationLog, scanner interface
 		&row.CreatedAt, &row.UpdatedAt, &row.DeletedAt,
 		&row.UserName, &row.UserDisplayName, &row.ProjectName, &row.SceneName, &row.SceneNumber,
 	)
+	if err != nil {
+		return err
+	}
+	if outputsStr != "" {
+		json.Unmarshal([]byte(outputsStr), &row.Outputs)
+	}
+	return nil
 }
 
 // Create inserts a new generation log entry.
@@ -91,11 +110,13 @@ func (s *GenerationLogStore) Create(log *GenerationLog) error {
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, created_at, updated_at`
 
+	outputsStr := marshalOutputs(log.Outputs)
+
 	return s.db.QueryRow(query,
 		log.TaskID,
 		log.ModelName,
 		nullIfEmpty(log.Request),
-		nullIfEmpty(log.Outputs),
+		nullIfEmpty(outputsStr),
 		log.Status,
 		nullIfEmpty(log.ErrorMessage),
 		log.UserID,
@@ -156,13 +177,15 @@ func (s *GenerationLogStore) GetByTaskID(taskID string) (*GenerationLog, error) 
 }
 
 // UpdateByTaskID updates a log entry by its task ID (used when async tasks complete).
-func (s *GenerationLogStore) UpdateByTaskID(taskID, outputs, status, errorMessage string) error {
+func (s *GenerationLogStore) UpdateByTaskID(taskID string, outputs []OutputResource, status, errorMessage string) error {
 	query := `UPDATE generation_logs
 		SET outputs = $1, status = $2, error_message = $3, updated_at = NOW()
 		WHERE task_id = $4 AND deleted_at IS NULL`
 
+	outputsStr := marshalOutputs(outputs)
+
 	result, err := s.db.Exec(query,
-		nullIfEmpty(outputs), status, nullIfEmpty(errorMessage), taskID,
+		nullIfEmpty(outputsStr), status, nullIfEmpty(errorMessage), taskID,
 	)
 	if err != nil {
 		return err
@@ -299,6 +322,19 @@ func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, s
 	}
 
 	return logs, total, nil
+}
+
+// marshalOutputs marshals a []OutputResource slice to a JSON string.
+// Returns an empty string if the slice is nil or empty.
+func marshalOutputs(outputs []OutputResource) string {
+	if len(outputs) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(outputs)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 // nullIfEmpty returns nil if s is empty, otherwise the string.

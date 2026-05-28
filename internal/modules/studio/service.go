@@ -168,7 +168,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		modelName     string
 		taskID        string
 		status        = "failed"
-		outputs       string
+		outputs       []OutputResource
 		errLog        string
 		estimatedCost float64
 		costSource    string
@@ -315,8 +315,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		taskID = result.TaskID
 		status = result.Status
 		if len(result.Outputs) > 0 {
-			outBytes, _ := json.Marshal(result.Outputs)
-			outputs = string(outBytes)
+			outputs = result.Outputs
 		}
 	}
 	if err != nil {
@@ -1380,15 +1379,9 @@ func (s *Service) updateLogWithFinalStatus(taskID string, result *GeneratorResul
 		return
 	}
 
-	outputs := ""
-	if len(result.Outputs) > 0 {
-		outBytes, _ := json.Marshal(result.Outputs)
-		outputs = string(outBytes)
-	}
-
 	errorMsg := result.Error
 
-	if saveErr := s.logStore.UpdateByTaskID(taskID, outputs, result.Status, errorMsg); saveErr != nil {
+	if saveErr := s.logStore.UpdateByTaskID(taskID, result.Outputs, result.Status, errorMsg); saveErr != nil {
 		fmt.Printf("failed to update generation log for task %s: %v\n", taskID, saveErr)
 	}
 }
