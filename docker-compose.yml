@@ -20,6 +20,8 @@ services:
       - ASSET_DEFAULT_GROUP_ID=${ASSET_DEFAULT_GROUP_ID}
     volumes:
       - uploads:/app/uploads
+      - outputs:/app/outputs
 
 volumes:
   uploads:
+  outputs:
