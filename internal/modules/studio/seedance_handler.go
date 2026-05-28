@@ -74,7 +74,7 @@ func (h *SeedanceHandler) GetStatus(taskID, apiKey, baseURL, endpoint string) (*
 			localName := fmt.Sprintf("seedance_%d_%s.mp4", time.Now().UnixMilli(), safeSuffix(taskID))
 			log, err := h.logStore.GetByTaskID(taskID)
 			if err == nil {
-				localName = fmt.Sprintf("%s_%s_T%d_%s.mp4", log.ProjectName, log.SceneName, log.TakeNumber, log.UserName, time.Now().UnixMilli())
+				localName = fmt.Sprintf("%s_%s_T%d_%s_%d.mp4", log.ProjectName, log.SceneName, log.TakeNumber, log.UserName, time.Now().UnixMilli())
 			}
 			localPath := filepath.Join(".", config.OutPutUrl(), localName)
 

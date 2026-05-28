@@ -28,6 +28,10 @@ func NewSeedanceGalleryGenerator() *SeedanceGalleryGenerator {
 	}
 }
 
+func (g *SeedanceGalleryGenerator) SetLogStore(store *studio.GenerationLogStore) {
+	g.logStore = store
+}
+
 func (g *SeedanceGalleryGenerator) Name() string { return nameModeldreaminaGallery }
 
 func (g *SeedanceGalleryGenerator) ContentType() string { return "video" }
@@ -99,9 +103,11 @@ func (g *SeedanceGalleryGenerator) GetStatus(taskID, apiKey, baseURL, endpoint s
 		videoURL := g.findVideoURL(result, 0)
 		if videoURL != "" {
 			localName := fmt.Sprintf("seedance_%d_%s.mp4", time.Now().UnixMilli(), taskID)
-			log, err := g.logStore.GetByTaskID(taskID)
-			if err == nil {
-				localName = fmt.Sprintf("%s_%s_T%d_%s.mp4", log.ProjectName, log.SceneName, log.TakeNumber, log.UserName, time.Now().UnixMilli())
+			if g.logStore != nil {
+				log, err := g.logStore.GetByTaskID(taskID)
+				if err == nil && log != nil {
+					localName = fmt.Sprintf("%s_%s_T%d_%s_%d.mp4", log.ProjectName, log.SceneName, log.TakeNumber, log.UserName, time.Now().UnixMilli())
+				}
 			}
 			outputs := []studio.OutputResource{{
 				URL:  videoURL,
