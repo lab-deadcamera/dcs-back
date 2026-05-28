@@ -19,6 +19,7 @@ var nameModeldreamina = "dreamina-seedance-2-0-260128"
 
 type SeedanceGenerator struct {
 	httpClient *http.Client
+	logStore   *studio.GenerationLogStore
 }
 
 func NewSeedanceGenerator() *SeedanceGenerator {
@@ -97,7 +98,11 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 	if status == "succeeded" {
 		videoURL := g.findVideoURL(result, 0)
 		if videoURL != "" {
-			localName := fmt.Sprintf("seedance_%d_%s.mp4", time.Now().UnixMilli(), SafeSuffix(taskID))
+			localName := fmt.Sprintf("seedance_%d_%s.mp4", time.Now().UnixMilli(), taskID)
+			log, err := g.logStore.GetByTaskID(taskID)
+			if err == nil {
+				localName = fmt.Sprintf("%s_%s_T%d_%s.mp4", log.ProjectName, log.SceneName, log.TakeNumber, log.UserName, time.Now().UnixMilli())
+			}
 			outputs := []studio.OutputResource{{
 				URL:  videoURL,
 				Type: "video",

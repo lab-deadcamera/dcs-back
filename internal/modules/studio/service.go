@@ -1052,7 +1052,6 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	s.mu.RUnlock()
 
 	if !ok {
-		// Task not in memory (e.g. after restart) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â try to recover from log
 		log, logErr := s.logStore.GetByTaskID(taskID)
 		if logErr != nil || log == nil {
 			return nil, fmt.Errorf("unknown task: %s", taskID)

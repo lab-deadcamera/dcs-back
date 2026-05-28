@@ -19,6 +19,7 @@ var videoURLPattern = regexp.MustCompile(`^https?://`)
 
 type SeedanceHandler struct {
 	httpClient *http.Client
+	logStore   *GenerationLogStore
 }
 
 func NewSeedanceHandler() *SeedanceHandler {
@@ -71,6 +72,10 @@ func (h *SeedanceHandler) GetStatus(taskID, apiKey, baseURL, endpoint string) (*
 		videoURL := h.findVideoURL(result, 0)
 		if videoURL != "" {
 			localName := fmt.Sprintf("seedance_%d_%s.mp4", time.Now().UnixMilli(), safeSuffix(taskID))
+			log, err := h.logStore.GetByTaskID(taskID)
+			if err == nil {
+				localName = fmt.Sprintf("%s_%s_T%d_%s.mp4", log.ProjectName, log.SceneName, log.TakeNumber, log.UserName, time.Now().UnixMilli())
+			}
 			localPath := filepath.Join(".", config.OutPutUrl(), localName)
 
 			vidResp, vidErr := http.Get(videoURL)
