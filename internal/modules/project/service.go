@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"dcs-back-v0/config"
+
 	"github.com/google/uuid"
 )
 
@@ -54,16 +56,10 @@ type projectStore interface {
 type Service struct {
 	store      projectStore
 	taskLookup TaskLookup
-	outputsDir string
 }
 
 func NewService(store projectStore) *Service {
 	return &Service{store: store}
-}
-
-// SetOutputsDir sets the filesystem path where generated videos are stored.
-func (s *Service) SetOutputsDir(dir string) {
-	s.outputsDir = dir
 }
 
 // SetTaskLookup injects an optional function to resolve local URLs
@@ -533,9 +529,10 @@ func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 	}
 	ts := now.Format("20060102_150405")
 	filename := fmt.Sprintf("%s_%s_T%d_%s_%s.mp4", safe(proj.Name), sceneCode, t.Number, safe(userPart), ts)
-	localPath := filepath.Join(s.outputsDir, filename)
+	outputsDir := filepath.Join(".", config.OutPutUrl())
+	localPath := filepath.Join(outputsDir, filename)
 
-	if err := os.MkdirAll(s.outputsDir, 0755); err != nil {
+	if err := os.MkdirAll(outputsDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create outputs dir: %w", err)
 	}
 
@@ -554,7 +551,7 @@ func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 		return nil, fmt.Errorf("failed to write video: %w", err)
 	}
 
-	localURL := "/outputs/" + filename
+	localURL := config.OutPutUrl() + "/" + filename
 
 	if err := s.store.UpdateTake(takeID, map[string]interface{}{
 		"video_url":       localURL,

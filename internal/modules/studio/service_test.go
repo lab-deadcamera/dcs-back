@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"dcs-back-v0/config"
 	"testing"
 	"time"
 )
@@ -48,24 +49,26 @@ func TestConvertOutputs_Empty(t *testing.T) {
 }
 
 func TestConvertOutputs_WithResources(t *testing.T) {
+	config.Load()
+	baseURL := config.OutPutUrl()
 	src := []OutputResource{
-		{URL: "https://example.com/vid.mp4", LocalURL: "/outputs/vid.mp4", Type: "video"},
-		{URL: "https://example.com/img.png", Type: "image"},
+		{URL: "https://file-examples.com/storage/feb5eb1bf76a17c3d9592fe/2017/04/file_example_MP4_480_1_5MG.mp4", LocalURL: baseURL + "vid.mp4", Type: "video"},
+		{URL: "https://file-examples.com/storage/feb5eb1bf76a17c3d9592fe/2017/10/file_example_PNG_500kB.png", Type: "image"},
 	}
 	result := convertOutputs(src)
 	if len(result) != 2 {
 		t.Fatalf("expected 2 outputs, got %d", len(result))
 	}
-	if result[0].URL != "https://example.com/vid.mp4" {
+	if result[0].URL != "https://file-examples.com/storage/feb5eb1bf76a17c3d9592fe/2017/04/file_example_MP4_480_1_5MG.mp4" {
 		t.Errorf("outputs[0].URL = %q", result[0].URL)
 	}
-	if result[0].LocalURL != "/outputs/vid.mp4" {
+	if result[0].LocalURL != baseURL+"vid.mp4" {
 		t.Errorf("outputs[0].LocalURL = %q", result[0].LocalURL)
 	}
 	if result[0].Type != "video" {
 		t.Errorf("outputs[0].Type = %q", result[0].Type)
 	}
-	if result[1].URL != "https://example.com/img.png" {
+	if result[1].URL != "https://file-examples.com/storage/feb5eb1bf76a17c3d9592fe/2017/10/file_example_PNG_500kB.png" {
 		t.Errorf("outputs[1].URL = %q", result[1].URL)
 	}
 	if result[1].LocalURL != "" {

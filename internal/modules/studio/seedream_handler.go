@@ -10,9 +10,9 @@ type SeedreamHandler struct {
 	seedance *SeedanceHandler
 }
 
-func NewSeedreamHandler(outputsDir string) *SeedreamHandler {
+func NewSeedreamHandler() *SeedreamHandler {
 	return &SeedreamHandler{
-		seedance: NewSeedanceHandler(outputsDir),
+		seedance: NewSeedanceHandler(),
 	}
 }
 

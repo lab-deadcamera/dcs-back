@@ -19,13 +19,11 @@ var nameModeldreaminaGallery = "dreamina-seedance-2-0-gallery"
 
 type SeedanceGalleryGenerator struct {
 	httpClient *http.Client
-	outputsDir string
 }
 
-func NewSeedanceGalleryGenerator(outputsDir string) *SeedanceGalleryGenerator {
+func NewSeedanceGalleryGenerator() *SeedanceGalleryGenerator {
 	return &SeedanceGalleryGenerator{
 		httpClient: &http.Client{Timeout: 120 * time.Second},
-		outputsDir: outputsDir,
 	}
 }
 
@@ -105,7 +103,7 @@ func (g *SeedanceGalleryGenerator) GetStatus(taskID, apiKey, baseURL, endpoint s
 				Type: "video",
 			}}
 
-			localURL, err := utils.SaveURLOutput(videoURL, localName, g.outputsDir)
+			localURL, err := utils.SaveURLOutput(videoURL, localName)
 			if err == nil {
 				outputs[0].LocalURL = localURL
 			}

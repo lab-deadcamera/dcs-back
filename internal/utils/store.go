@@ -1,6 +1,5 @@
 package utils
 
-
 import (
 	"encoding/base64"
 	"fmt"
@@ -10,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"dcs-back-v0/config"
 )
 
 var mimeTypes = map[string]string{
@@ -112,10 +113,10 @@ func DetectMediaType(filename string) string {
 }
 
 // SaveToOutput saves raw bytes to the outputs directory.
-// Uses DetectMediaType to place files in a subfolder: /outputs/{video,audio,image,other}/
-// Returns the public URL path (e.g. "/outputs/video/filename.mp4").
+// Uses DetectMediaType to place files in a subfolder: /{video,audio,image,other}/
+// Returns the public URL path (e.g. "/outputs/video/filename.mp4") using config.OutPutUrl.
 // Creates the directory tree if it does not exist.
-func SaveToOutput(data []byte, filename, outputsDir string) (string, error) {
+func SaveToOutput(data []byte, filename string) (string, error) {
 	if len(data) == 0 {
 		return "", fmt.Errorf("cannot save empty data")
 	}
@@ -126,7 +127,8 @@ func SaveToOutput(data []byte, filename, outputsDir string) (string, error) {
 	}
 
 	mediaType := DetectMediaType(filename)
-	subDir := filepath.Join(outputsDir, mediaType)
+	baseDir := filepath.Join(".", config.OutPutUrl())
+	subDir := filepath.Join(baseDir, mediaType)
 
 	fullPath := filepath.Join(subDir, filename)
 	if err := os.MkdirAll(subDir, 0755); err != nil {
@@ -137,57 +139,57 @@ func SaveToOutput(data []byte, filename, outputsDir string) (string, error) {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 
-	return "/outputs/" + mediaType + "/" + filename, nil
+	return config.OutPutUrl() + "/" + mediaType + "/" + filename, nil
 }
 
 // SaveBinaryOutput saves raw binary data to the outputs directory.
 // Shorthand for SaveToOutput with pre-validated []byte.
-func SaveBinaryOutput(data []byte, filename, outputsDir string) (string, error) {
-	return SaveToOutput(data, filename, outputsDir)
+func SaveBinaryOutput(data []byte, filename string) (string, error) {
+	return SaveToOutput(data, filename)
 }
 
 // SaveURLOutput downloads a URL and saves its content to the outputs directory.
-func SaveURLOutput(rawURL, filename, outputsDir string) (string, error) {
+func SaveURLOutput(rawURL, filename string) (string, error) {
 	data, err := DownloadFromURL(rawURL)
 	if err != nil {
 		return "", err
 	}
-	return SaveToOutput(data, filename, outputsDir)
+	return SaveToOutput(data, filename)
 }
 
 // SaveBase64Output decodes base64 data and saves it to the outputs directory.
-func SaveBase64Output(b64Data, filename, outputsDir string) (string, error) {
+func SaveBase64Output(b64Data, filename string) (string, error) {
 	data, err := DecodeBase64(b64Data)
 	if err != nil {
 		return "", err
 	}
-	return SaveToOutput(data, filename, outputsDir)
+	return SaveToOutput(data, filename)
 }
 
 // SaveOutput handles all three input modes in one call.
 // Supported modes: "binary" (input must be []byte), "url" (string), "base64" (string).
-func SaveOutput(input interface{}, mode, filename, outputsDir string) (string, error) {
+func SaveOutput(input interface{}, mode, filename string) (string, error) {
 	switch mode {
 	case ModeBinary:
 		data, ok := input.([]byte)
 		if !ok {
 			return "", fmt.Errorf("invalid input type for mode %q: expected []byte", mode)
 		}
-		return SaveBinaryOutput(data, filename, outputsDir)
+		return SaveBinaryOutput(data, filename)
 
 	case ModeURL:
 		s, ok := input.(string)
 		if !ok {
 			return "", fmt.Errorf("invalid input type for mode %q: expected string", mode)
 		}
-		return SaveURLOutput(s, filename, outputsDir)
+		return SaveURLOutput(s, filename)
 
 	case ModeBase64:
 		s, ok := input.(string)
 		if !ok {
 			return "", fmt.Errorf("invalid input type for mode %q: expected string", mode)
 		}
-		return SaveBase64Output(s, filename, outputsDir)
+		return SaveBase64Output(s, filename)
 
 	default:
 		return "", fmt.Errorf("unsupported mode: %q (use %q, %q, or %q)",

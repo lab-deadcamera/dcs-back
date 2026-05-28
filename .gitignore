@@ -23,6 +23,8 @@ vendor/
 screen/
 uploads/
 thumbnails/
+internal/utils/outputs/
+outputs/
 
 # OS
 .DS_Store

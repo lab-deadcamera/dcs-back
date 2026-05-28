@@ -32,6 +32,8 @@ type Config struct {
 	AssetDefaultGroupID  string
 }
 
+var AppConfig *Config
+
 func Load() *Config {
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -80,7 +82,7 @@ func Load() *Config {
 	log.Printf("[config] ASSET_SECRET_ACCESS_KEY=%s", tern(assetSecretAccessKey != "", "set", "EMPTY"))
 	log.Printf("[config] ASSET_DEFAULT_GROUP_ID=%s", tern(assetDefaultGroupID != "", "set", "EMPTY"))
 
-	return &Config{
+	AppConfig = &Config{
 		Port:            port,
 		UploadDir:       uploadDir,
 		ThumbnailDir:    uploadDir + "/thumbnails",
@@ -108,6 +110,12 @@ func Load() *Config {
 		AssetSecretAccessKey: assetSecretAccessKey,
 		AssetDefaultGroupID:  assetDefaultGroupID,
 	}
+	return AppConfig
+}
+
+// OutPutUrl returns the URL path prefix for serving output files.
+func OutPutUrl() string {
+	return "/outputs"
 }
 
 func tern(ok bool, a, b string) string {

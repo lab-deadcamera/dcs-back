@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"dcs-back-v0/config"
 	"dcs-back-v0/internal/modules/character"
 	"dcs-back-v0/internal/modules/file"
 	"dcs-back-v0/internal/modules/provider"
@@ -1616,5 +1617,5 @@ func (s *Service) renameOutputFile(localURL, projectName, sceneName string, take
 		return ""
 	}
 
-	return "/outputs/" + newName
+	return config.OutPutUrl() + "/" + newName
 }

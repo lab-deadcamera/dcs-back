@@ -11,19 +11,19 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"dcs-back-v0/config"
 )
 
 var videoURLPattern = regexp.MustCompile(`^https?://`)
 
 type SeedanceHandler struct {
 	httpClient *http.Client
-	outputsDir string
 }
 
-func NewSeedanceHandler(outputsDir string) *SeedanceHandler {
+func NewSeedanceHandler() *SeedanceHandler {
 	return &SeedanceHandler{
 		httpClient: &http.Client{Timeout: 60 * time.Second},
-		outputsDir: outputsDir,
 	}
 }
 
@@ -71,7 +71,7 @@ func (h *SeedanceHandler) GetStatus(taskID, apiKey, baseURL, endpoint string) (*
 		videoURL := h.findVideoURL(result, 0)
 		if videoURL != "" {
 			localName := fmt.Sprintf("seedance_%d_%s.mp4", time.Now().UnixMilli(), safeSuffix(taskID))
-			localPath := filepath.Join(h.outputsDir, localName)
+			localPath := filepath.Join(".", config.OutPutUrl(), localName)
 
 			vidResp, vidErr := http.Get(videoURL)
 			if vidErr == nil {
@@ -82,7 +82,7 @@ func (h *SeedanceHandler) GetStatus(taskID, apiKey, baseURL, endpoint string) (*
 					return &StatusResult{
 						Status:   status,
 						VideoURL: videoURL,
-						LocalURL: "/outputs/" + localName,
+						LocalURL: config.OutPutUrl() + "/" + localName,
 						Raw:      result,
 					}, nil
 				}

@@ -118,13 +118,13 @@ func main() {
 	studioSvc.SetAssetCredentials(cfg.AssetAccessKeyID, cfg.AssetSecretAccessKey, cfg.AssetDefaultGroupID)
 	studioSvc.SetLogStore(studio.NewGenerationLogStore(database))
 	studioSvc.SetCommStore(studio.NewServerCommunicationStore(database))
-	studioSvc.RegisterHandler(studio.NewSeedanceHandler(cfg.OutputsDir))
-	studioSvc.RegisterHandler(studio.NewSeedreamHandler(cfg.OutputsDir))
-	studioSvc.RegisterGenerator(videogens.NewSeedanceGenerator(cfg.OutputsDir))
-	studioSvc.RegisterGenerator(videogens.NewSeedanceGalleryGenerator(cfg.OutputsDir))
-	studioSvc.RegisterGenerator(studioimagegens.NewSeedreamGenerator(cfg.OutputsDir))
-	studioSvc.RegisterGenerator(studioimagegens.NewGeminiNanoGenerator(cfg.OutputsDir))
-	studioSvc.RegisterGenerator(studioimagegens.NewGeminiNanoProGenerator(cfg.OutputsDir))
+	studioSvc.RegisterHandler(studio.NewSeedanceHandler())
+	studioSvc.RegisterHandler(studio.NewSeedreamHandler())
+	studioSvc.RegisterGenerator(videogens.NewSeedanceGenerator())
+	studioSvc.RegisterGenerator(videogens.NewSeedanceGalleryGenerator())
+	studioSvc.RegisterGenerator(studioimagegens.NewSeedreamGenerator())
+	studioSvc.RegisterGenerator(studioimagegens.NewGeminiNanoGenerator())
+	studioSvc.RegisterGenerator(studioimagegens.NewGeminiNanoProGenerator())
 	studioSvc.SetGeneratedAssetStore(studio.NewGeneratedAssetStore(database, cfg.OutputsDir))
 	studioSvc.RegisterCalculator(calculators.NewSeedanceCalculator())
 	studioSvc.RegisterCalculator(calculators.NewSeedreamCalculator())
@@ -146,7 +146,6 @@ func main() {
 		}
 		return sr.LocalURL
 	})
-	projectSvc.SetOutputsDir(cfg.OutputsDir)
 	studioSvc.SetTakeSaver(func(sceneID string, takeNumber int, videoURL, videoLocalURL string) error {
 		_, err := projectSvc.SaveGeneration(sceneID, &project.SaveGenerationRequest{
 			Number:        takeNumber,

@@ -12,19 +12,18 @@ import (
 	"strings"
 	"time"
 
+	"dcs-back-v0/config"
 	"dcs-back-v0/internal/modules/studio"
 	"dcs-back-v0/internal/utils"
 )
 
 type GeminiNanoGenerator struct {
 	httpClient *http.Client
-	outputsDir string
 }
 
-func NewGeminiNanoGenerator(outputsDir string) *GeminiNanoGenerator {
+func NewGeminiNanoGenerator() *GeminiNanoGenerator {
 	return &GeminiNanoGenerator{
 		httpClient: &http.Client{Timeout: 120 * time.Second},
-		outputsDir: outputsDir,
 	}
 }
 
@@ -268,9 +267,10 @@ func (g *GeminiNanoGenerator) Generate(req *studio.GeneratorRequest) (*studio.Ge
 			}
 
 			outputFilename := fmt.Sprintf("gemini_%s_%d%s", taskID[7:], i, ext)
-			outputPath := filepath.Join(g.outputsDir, outputFilename)
+			outputsDir := filepath.Join(".", config.OutPutUrl())
+			outputPath := filepath.Join(outputsDir, outputFilename)
 
-			if err := os.MkdirAll(g.outputsDir, 0755); err != nil {
+			if err := os.MkdirAll(outputsDir, 0755); err != nil {
 				return nil, fmt.Errorf("failed to create outputs dir: %w", err)
 			}
 
@@ -279,7 +279,7 @@ func (g *GeminiNanoGenerator) Generate(req *studio.GeneratorRequest) (*studio.Ge
 			}
 
 			outputs = append(outputs, studio.OutputResource{
-				URL:  "/outputs/" + outputFilename,
+				URL:  config.OutPutUrl() + "/" + outputFilename,
 				Type: "image",
 			})
 		}

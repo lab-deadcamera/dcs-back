@@ -16,13 +16,11 @@ var nameModelSeedream = "dreamina-seedream-4-pro-251224"
 
 type SeedreamGenerator struct {
 	httpClient *http.Client
-	outputsDir string
 }
 
-func NewSeedreamGenerator(outputsDir string) *SeedreamGenerator {
+func NewSeedreamGenerator() *SeedreamGenerator {
 	return &SeedreamGenerator{
 		httpClient: &http.Client{Timeout: 120 * time.Second},
-		outputsDir: outputsDir,
 	}
 }
 
