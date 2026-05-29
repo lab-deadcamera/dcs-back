@@ -905,6 +905,19 @@ func charFileToCharFileWithSync(f character.CharacterFile, briefs []ModelBrief) 
 // statusFromLog recupera el estado de una tarea desde el log cuando
 // la tarea ya no estÃƒÆ’Ã‚Â¡ en memoria (ej. reinicio del servidor).
 func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
+	// Si el log ya tiene estado final, devolver lo que tiene sin llamar al generador
+	if log.Status == config.STATUS_SUCCESS || log.Status == config.STATUS_FAILED {
+		sr := &StatusResult{
+			Status: log.Status,
+			Error:  log.ErrorMessage,
+		}
+		if len(log.Outputs) > 0 {
+			sr.VideoURL = log.Outputs[0].URL
+			sr.LocalURL = log.Outputs[0].LocalURL
+		}
+		return sr, nil
+	}
+
 	// Buscar el modelo por nombre
 	m, err := s.providerStore.GetModelByName(log.ModelName)
 	if err != nil {
@@ -978,6 +991,8 @@ func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
 
 // saveToTakes persiste las URLs del output en la tabla takes cuando
 // una generaciÃƒÂ³n de video se completa exitosamente.
+// Luego actualiza el generation_log con los outputs para mantener
+// la consistencia entre el log y los takes.
 func (s *Service) saveToTakes(taskID string, videoURL, localURL string) {
 	if s.takeSaver == nil || s.logStore == nil {
 		return
@@ -992,6 +1007,13 @@ func (s *Service) saveToTakes(taskID string, videoURL, localURL string) {
 
 	if err := s.takeSaver(log.SceneID, log.TakeNumber, videoURL, localURL); err != nil {
 		fmt.Printf("failed to save take for task %s: %v\n", taskID, err)
+		return
+	}
+
+	// Actualizar el generation_log con los outputs (video URL/local URL)
+	outputs := []OutputResource{{URL: videoURL, LocalURL: localURL, Type: "video"}}
+	if err := s.logStore.UpdateByTaskID(taskID, outputs, log.Status, log.ErrorMessage); err != nil {
+		fmt.Printf("failed to update generation log outputs for task %s: %v\n", taskID, err)
 	}
 }
 
