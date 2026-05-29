@@ -51,7 +51,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 		return
 	}
 
-	result, err := h.svc.GetProjectWithScenes(id)
+	result, err := h.svc.GetProjectWithChapters(id)
 	if err != nil {
 		if err.Error() == "project not found" {
 			utils.NotFound(c, err.Error())
@@ -109,10 +109,119 @@ func (h *Handler) SoftDelete(c *gin.Context) {
 	utils.Message(c, "project deleted")
 }
 
+// ─── Chapters ───────────────────────────────────────────────────
+
+func (h *Handler) CreateChapter(c *gin.Context) {
+	projectID := c.Param("id")
+
+	var req CreateChapterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.svc.CreateChapter(projectID, &req)
+	if err != nil {
+		if err.Error() == "project not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			utils.BadRequest(c, "chapter number already exists for this project")
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Created(c, result)
+}
+
+func (h *Handler) ListChapters(c *gin.Context) {
+	projectID := c.Param("id")
+
+	chapters, err := h.svc.ListChapters(projectID)
+	if err != nil {
+		if err.Error() == "project not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, chapters)
+}
+
+func (h *Handler) GetChapterByID(c *gin.Context) {
+	chapterID := c.Param("chapterId")
+	if chapterID == "" {
+		utils.BadRequest(c, "chapterId is required")
+		return
+	}
+
+	chapter, err := h.svc.GetChapterByID(chapterID)
+	if err != nil {
+		if err.Error() == "chapter not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, chapter)
+}
+
+func (h *Handler) UpdateChapter(c *gin.Context) {
+	chapterID := c.Param("chapterId")
+	if chapterID == "" {
+		utils.BadRequest(c, "chapterId is required")
+		return
+	}
+
+	var req UpdateChapterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.svc.UpdateChapter(chapterID, &req)
+	if err != nil {
+		if err.Error() == "chapter not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, result)
+}
+
+func (h *Handler) SoftDeleteChapter(c *gin.Context) {
+	chapterID := c.Param("chapterId")
+	if chapterID == "" {
+		utils.BadRequest(c, "chapterId is required")
+		return
+	}
+
+	if err := h.svc.SoftDeleteChapter(chapterID); err != nil {
+		if err.Error() == "chapter not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Message(c, "chapter deleted")
+}
+
 // ─── Scenes ─────────────────────────────────────────────────────
 
 func (h *Handler) CreateScene(c *gin.Context) {
-	projectID := c.Param("id")
+	chapterID := c.Param("chapterId")
 
 	var req CreateSceneRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -120,15 +229,14 @@ func (h *Handler) CreateScene(c *gin.Context) {
 		return
 	}
 
-	result, err := h.svc.CreateScene(projectID, &req)
+	result, err := h.svc.CreateScene(chapterID, &req)
 	if err != nil {
-		if err.Error() == "project not found" {
+		if err.Error() == "chapter not found" {
 			utils.NotFound(c, err.Error())
 			return
 		}
-		// Check for unique constraint violation (duplicate scene number)
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
-			utils.BadRequest(c, "scene number already exists for this project")
+			utils.BadRequest(c, "scene number already exists for this chapter")
 			return
 		}
 		utils.InternalError(c, err.Error())
@@ -139,11 +247,11 @@ func (h *Handler) CreateScene(c *gin.Context) {
 }
 
 func (h *Handler) ListScenes(c *gin.Context) {
-	projectID := c.Param("id")
+	chapterID := c.Param("chapterId")
 
-	scenes, err := h.svc.ListScenes(projectID)
+	scenes, err := h.svc.ListScenes(chapterID)
 	if err != nil {
-		if err.Error() == "project not found" {
+		if err.Error() == "chapter not found" {
 			utils.NotFound(c, err.Error())
 			return
 		}
@@ -161,7 +269,7 @@ func (h *Handler) GetSceneByID(c *gin.Context) {
 		return
 	}
 
-	result, err := h.svc.GetSceneWithTakes(sceneID)
+	result, err := h.svc.GetSceneWithShots(sceneID)
 	if err != nil {
 		if err.Error() == "scene not found" {
 			utils.NotFound(c, err.Error())
@@ -219,10 +327,119 @@ func (h *Handler) SoftDeleteScene(c *gin.Context) {
 	utils.Message(c, "scene deleted")
 }
 
+// ─── Shots ──────────────────────────────────────────────────────
+
+func (h *Handler) CreateShot(c *gin.Context) {
+	sceneID := c.Param("sceneId")
+
+	var req CreateShotRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.svc.CreateShot(sceneID, &req)
+	if err != nil {
+		if err.Error() == "scene not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			utils.BadRequest(c, "shot number already exists for this scene")
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Created(c, result)
+}
+
+func (h *Handler) ListShots(c *gin.Context) {
+	sceneID := c.Param("sceneId")
+
+	shots, err := h.svc.ListShots(sceneID)
+	if err != nil {
+		if err.Error() == "scene not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, shots)
+}
+
+func (h *Handler) GetShotByID(c *gin.Context) {
+	shotID := c.Param("shotId")
+	if shotID == "" {
+		utils.BadRequest(c, "shotId is required")
+		return
+	}
+
+	result, err := h.svc.GetShotWithTakes(shotID)
+	if err != nil {
+		if err.Error() == "shot not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, result)
+}
+
+func (h *Handler) UpdateShot(c *gin.Context) {
+	shotID := c.Param("shotId")
+	if shotID == "" {
+		utils.BadRequest(c, "shotId is required")
+		return
+	}
+
+	var req UpdateShotRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.svc.UpdateShot(shotID, &req)
+	if err != nil {
+		if err.Error() == "shot not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, result)
+}
+
+func (h *Handler) SoftDeleteShot(c *gin.Context) {
+	shotID := c.Param("shotId")
+	if shotID == "" {
+		utils.BadRequest(c, "shotId is required")
+		return
+	}
+
+	if err := h.svc.SoftDeleteShot(shotID); err != nil {
+		if err.Error() == "shot not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Message(c, "shot deleted")
+}
+
 // ─── Takes ──────────────────────────────────────────────────────
 
 func (h *Handler) CreateTake(c *gin.Context) {
-	sceneID := c.Param("sceneId")
+	shotID := c.Param("shotId")
 
 	var req CreateTakeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -230,14 +447,14 @@ func (h *Handler) CreateTake(c *gin.Context) {
 		return
 	}
 
-	result, err := h.svc.CreateTake(sceneID, &req)
+	result, err := h.svc.CreateTake(shotID, &req)
 	if err != nil {
-		if err.Error() == "scene not found" {
+		if err.Error() == "shot not found" {
 			utils.NotFound(c, err.Error())
 			return
 		}
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
-			utils.BadRequest(c, "take number already exists for this scene")
+			utils.BadRequest(c, "take number already exists for this shot")
 			return
 		}
 		utils.InternalError(c, err.Error())
@@ -248,11 +465,11 @@ func (h *Handler) CreateTake(c *gin.Context) {
 }
 
 func (h *Handler) ListTakes(c *gin.Context) {
-	sceneID := c.Param("sceneId")
+	shotID := c.Param("shotId")
 
-	takes, err := h.svc.ListTakes(sceneID)
+	takes, err := h.svc.ListTakes(shotID)
 	if err != nil {
-		if err.Error() == "scene not found" {
+		if err.Error() == "shot not found" {
 			utils.NotFound(c, err.Error())
 			return
 		}
@@ -310,7 +527,7 @@ func (h *Handler) UpdateTake(c *gin.Context) {
 }
 
 func (h *Handler) SaveGeneration(c *gin.Context) {
-	sceneID := c.Param("sceneId")
+	shotID := c.Param("shotId")
 
 	var req SaveGenerationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -318,9 +535,9 @@ func (h *Handler) SaveGeneration(c *gin.Context) {
 		return
 	}
 
-	result, err := h.svc.SaveGeneration(sceneID, &req)
+	result, err := h.svc.SaveGeneration(shotID, &req)
 	if err != nil {
-		if err.Error() == "scene not found" {
+		if err.Error() == "shot not found" {
 			utils.NotFound(c, err.Error())
 			return
 		}

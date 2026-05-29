@@ -5,15 +5,15 @@ import "time"
 // ─── Project ────────────────────────────────────────────────────
 
 type Project struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	Metadata    string     `json:"metadata,omitempty"`
-	Active      bool       `json:"active"`
-	SceneCount  int        `json:"scene_count"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	Description   string     `json:"description"`
+	Metadata      string     `json:"metadata,omitempty"`
+	Active        bool       `json:"active"`
+	ChapterCount  int        `json:"chapter_count"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 }
 
 type CreateProjectRequest struct {
@@ -29,15 +29,45 @@ type UpdateProjectRequest struct {
 	Active      *bool   `json:"active"`
 }
 
-// ─── Scene ──────────────────────────────────────────────────────
+// ─── Chapter ────────────────────────────────────────────────────
 
-type Scene struct {
+type Chapter struct {
 	ID          string     `json:"id"`
 	ProjectID   string     `json:"project_id"`
 	Number      int        `json:"number"`
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
 	Active      bool       `json:"active"`
+	SceneCount  int        `json:"scene_count"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+}
+
+type CreateChapterRequest struct {
+	Number      int    `json:"number" binding:"required"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type UpdateChapterRequest struct {
+	Number      *int    `json:"number"`
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+	Active      *bool   `json:"active"`
+}
+
+// ─── Scene ──────────────────────────────────────────────────────
+
+type Scene struct {
+	ID          string     `json:"id"`
+	ProjectID   string     `json:"project_id"`
+	ChapterID   string     `json:"chapter_id"`
+	Number      int        `json:"number"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Active      bool       `json:"active"`
+	ShotCount   int        `json:"shot_count"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
@@ -56,11 +86,39 @@ type UpdateSceneRequest struct {
 	Active      *bool   `json:"active"`
 }
 
+// ─── Shot ───────────────────────────────────────────────────────
+
+type Shot struct {
+	ID          string     `json:"id"`
+	SceneID     string     `json:"scene_id"`
+	Number      int        `json:"number"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Active      bool       `json:"active"`
+	TakeCount   int        `json:"take_count"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+}
+
+type CreateShotRequest struct {
+	Number      int    `json:"number" binding:"required"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type UpdateShotRequest struct {
+	Number      *int    `json:"number"`
+	Name        *string `json:"name"`
+	Description *string `json:"description"`
+	Active      *bool   `json:"active"`
+}
+
 // ─── Take ───────────────────────────────────────────────────────
 
 type Take struct {
 	ID            string     `json:"id"`
-	SceneID       string     `json:"scene_id"`
+	ShotID        string     `json:"shot_id"`
 	Number        int        `json:"number"`
 	VideoURL      string     `json:"video_url"`
 	VideoLocalURL string     `json:"video_local_url"`
@@ -88,14 +146,36 @@ type UpdateTakeRequest struct {
 
 // ─── Combined responses ─────────────────────────────────────────
 
-type ProjectWithScenes struct {
-	Project Project `json:"project"`
-	Scenes  []Scene `json:"scenes"`
+type ProjectWithChapters struct {
+	Project  Project           `json:"project"`
+	Chapters []ChapterWithScenes `json:"chapters"`
 }
+
+type ChapterWithScenes struct {
+	Chapter Chapter        `json:"chapter"`
+	Scenes  []SceneWithShots `json:"scenes"`
+}
+
+type SceneWithShots struct {
+	Scene Scene         `json:"scene"`
+	Shots []ShotWithTakes `json:"shots"`
+}
+
+type ShotWithTakes struct {
+	Shot  Shot   `json:"shot"`
+	Takes []Take `json:"takes"`
+}
+
+// Legacy aliases for backward compatibility during migration
 
 type SceneWithTakes struct {
 	Scene Scene  `json:"scene"`
 	Takes []Take `json:"takes"`
+}
+
+type ProjectWithScenes struct {
+	Project Project `json:"project"`
+	Scenes  []Scene `json:"scenes"`
 }
 
 // ─── Scene Assignments ─────────────────────────────────────────

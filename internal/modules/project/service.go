@@ -26,21 +26,33 @@ type projectStore interface {
 	Update(id string, updates map[string]interface{}) error
 	SoftDelete(id string) error
 
+	CreateChapter(c *Chapter) error
+	GetChapterByID(id string) (*Chapter, error)
+	ListChapters(projectID string) ([]Chapter, error)
+	UpdateChapter(id string, updates map[string]interface{}) error
+	SoftDeleteChapter(id string) error
+
 	CreateScene(sc *Scene) error
 	GetSceneByID(id string) (*Scene, error)
-	ListScenes(projectID string) ([]Scene, error)
+	ListScenes(chapterID string) ([]Scene, error)
 	UpdateScene(id string, updates map[string]interface{}) error
 	SoftDeleteScene(id string) error
 
+	CreateShot(sh *Shot) error
+	GetShotByID(id string) (*Shot, error)
+	ListShots(sceneID string) ([]Shot, error)
+	UpdateShot(id string, updates map[string]interface{}) error
+	SoftDeleteShot(id string) error
+
 	CreateTake(t *Take) error
 	GetTakeByID(id string) (*Take, error)
-	ListTakes(sceneID string) ([]Take, error)
-	ListActiveTakes(sceneID string) ([]Take, error)
-	GetActiveTakeByNumber(sceneID string, number int) (*Take, error)
-	GetPendingTakeByNumber(sceneID string, number int) (*Take, error)
-	DeactivateTakesByNumber(sceneID string, number int) error
-	DeactivateFinalsByNumber(sceneID string, number int) error
-	GetTakeByVideoURL(sceneID string, videoURL string) (*Take, error)
+	ListTakes(shotID string) ([]Take, error)
+	ListActiveTakes(shotID string) ([]Take, error)
+	GetActiveTakeByNumber(shotID string, number int) (*Take, error)
+	GetPendingTakeByNumber(shotID string, number int) (*Take, error)
+	DeactivateTakesByNumber(shotID string, number int) error
+	DeactivateFinalsByNumber(shotID string, number int) error
+	GetTakeByVideoURL(shotID string, videoURL string) (*Take, error)
 	UpdateTake(id string, updates map[string]interface{}) error
 	SoftDeleteTake(id string) error
 
@@ -133,10 +145,9 @@ func (s *Service) SoftDelete(id string) error {
 	return s.store.SoftDelete(id)
 }
 
-// ─── Scenes ─────────────────────────────────────────────────────
+// ─── Chapters ───────────────────────────────────────────────────
 
-func (s *Service) CreateScene(projectID string, req *CreateSceneRequest) (*Scene, error) {
-	// Verify project exists
+func (s *Service) CreateChapter(projectID string, req *CreateChapterRequest) (*Chapter, error) {
 	p, err := s.store.GetByID(projectID)
 	if err != nil {
 		return nil, err
@@ -145,9 +156,91 @@ func (s *Service) CreateScene(projectID string, req *CreateSceneRequest) (*Scene
 		return nil, fmt.Errorf("project not found")
 	}
 
-	sc := &Scene{
+	c := &Chapter{
 		ID:          uuid.New().String(),
 		ProjectID:   projectID,
+		Number:      req.Number,
+		Name:        req.Name,
+		Description: req.Description,
+		Active:      true,
+	}
+	if err := s.store.CreateChapter(c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (s *Service) GetChapterByID(id string) (*Chapter, error) {
+	c, err := s.store.GetChapterByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil {
+		return nil, fmt.Errorf("chapter not found")
+	}
+	return c, nil
+}
+
+func (s *Service) ListChapters(projectID string) ([]Chapter, error) {
+	p, err := s.store.GetByID(projectID)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil {
+		return nil, fmt.Errorf("project not found")
+	}
+
+	chapters, err := s.store.ListChapters(projectID)
+	if err != nil {
+		return nil, err
+	}
+	if chapters == nil {
+		chapters = []Chapter{}
+	}
+	return chapters, nil
+}
+
+func (s *Service) UpdateChapter(id string, req *UpdateChapterRequest) (*Chapter, error) {
+	updates := make(map[string]interface{})
+	if req.Number != nil {
+		updates["number"] = *req.Number
+	}
+	if req.Name != nil {
+		updates["name"] = *req.Name
+	}
+	if req.Description != nil {
+		updates["description"] = *req.Description
+	}
+	if req.Active != nil {
+		updates["active"] = *req.Active
+	}
+
+	if err := s.store.UpdateChapter(id, updates); err != nil {
+		return nil, err
+	}
+	return s.store.GetChapterByID(id)
+}
+
+func (s *Service) SoftDeleteChapter(id string) error {
+	return s.store.SoftDeleteChapter(id)
+}
+
+// ─── Scenes ─────────────────────────────────────────────────────
+
+func (s *Service) CreateScene(chapterID string, req *CreateSceneRequest) (*Scene, error) {
+	// Verify chapter exists
+	c, err := s.store.GetChapterByID(chapterID)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil {
+		return nil, fmt.Errorf("chapter not found")
+	}
+
+	sc := &Scene{
+		ID:          uuid.New().String(),
+		ProjectID:   c.ProjectID,
+		ChapterID:   chapterID,
 		Number:      req.Number,
 		Name:        req.Name,
 		Description: req.Description,
@@ -170,17 +263,16 @@ func (s *Service) GetSceneByID(id string) (*Scene, error) {
 	return sc, nil
 }
 
-func (s *Service) ListScenes(projectID string) ([]Scene, error) {
-	// Verify project exists
-	p, err := s.store.GetByID(projectID)
+func (s *Service) ListScenes(chapterID string) ([]Scene, error) {
+	c, err := s.store.GetChapterByID(chapterID)
 	if err != nil {
 		return nil, err
 	}
-	if p == nil {
-		return nil, fmt.Errorf("project not found")
+	if c == nil {
+		return nil, fmt.Errorf("chapter not found")
 	}
 
-	scenes, err := s.store.ListScenes(projectID)
+	scenes, err := s.store.ListScenes(chapterID)
 	if err != nil {
 		return nil, err
 	}
@@ -215,9 +307,9 @@ func (s *Service) SoftDeleteScene(id string) error {
 	return s.store.SoftDeleteScene(id)
 }
 
-// ─── Takes ──────────────────────────────────────────────────────
+// ─── Shots ──────────────────────────────────────────────────────
 
-func (s *Service) CreateTake(sceneID string, req *CreateTakeRequest) (*Take, error) {
+func (s *Service) CreateShot(sceneID string, req *CreateShotRequest) (*Shot, error) {
 	// Verify scene exists
 	sc, err := s.store.GetSceneByID(sceneID)
 	if err != nil {
@@ -227,17 +319,98 @@ func (s *Service) CreateTake(sceneID string, req *CreateTakeRequest) (*Take, err
 		return nil, fmt.Errorf("scene not found")
 	}
 
+	sh := &Shot{
+		ID:          uuid.New().String(),
+		SceneID:     sceneID,
+		Number:      req.Number,
+		Name:        req.Name,
+		Description: req.Description,
+		Active:      true,
+	}
+	if err := s.store.CreateShot(sh); err != nil {
+		return nil, err
+	}
+	return sh, nil
+}
+
+func (s *Service) GetShotByID(id string) (*Shot, error) {
+	sh, err := s.store.GetShotByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if sh == nil {
+		return nil, fmt.Errorf("shot not found")
+	}
+	return sh, nil
+}
+
+func (s *Service) ListShots(sceneID string) ([]Shot, error) {
+	sc, err := s.store.GetSceneByID(sceneID)
+	if err != nil {
+		return nil, err
+	}
+	if sc == nil {
+		return nil, fmt.Errorf("scene not found")
+	}
+
+	shots, err := s.store.ListShots(sceneID)
+	if err != nil {
+		return nil, err
+	}
+	if shots == nil {
+		shots = []Shot{}
+	}
+	return shots, nil
+}
+
+func (s *Service) UpdateShot(id string, req *UpdateShotRequest) (*Shot, error) {
+	updates := make(map[string]interface{})
+	if req.Number != nil {
+		updates["number"] = *req.Number
+	}
+	if req.Name != nil {
+		updates["name"] = *req.Name
+	}
+	if req.Description != nil {
+		updates["description"] = *req.Description
+	}
+	if req.Active != nil {
+		updates["active"] = *req.Active
+	}
+
+	if err := s.store.UpdateShot(id, updates); err != nil {
+		return nil, err
+	}
+	return s.store.GetShotByID(id)
+}
+
+func (s *Service) SoftDeleteShot(id string) error {
+	return s.store.SoftDeleteShot(id)
+}
+
+// ─── Takes ──────────────────────────────────────────────────────
+
+func (s *Service) CreateTake(shotID string, req *CreateTakeRequest) (*Take, error) {
+	// Verify shot exists
+	sh, err := s.store.GetShotByID(shotID)
+	if err != nil {
+		return nil, err
+	}
+	if sh == nil {
+		return nil, fmt.Errorf("shot not found")
+	}
+
 	status := req.Status
 	if status == "" {
 		status = "pending"
 	}
 
 	t := &Take{
-		ID:      uuid.New().String(),
-		SceneID: sceneID,
-		Number:  req.Number,
-		Status:  status,
-		Active:  true,
+		ID:     uuid.New().String(),
+		ShotID: shotID,
+		Number: req.Number,
+		Status: status,
+		Active: true,
 	}
 	if err := s.store.CreateTake(t); err != nil {
 		return nil, err
@@ -256,17 +429,16 @@ func (s *Service) GetTakeByID(id string) (*Take, error) {
 	return t, nil
 }
 
-func (s *Service) ListTakes(sceneID string) ([]Take, error) {
-	// Verify scene exists
-	sc, err := s.store.GetSceneByID(sceneID)
+func (s *Service) ListTakes(shotID string) ([]Take, error) {
+	sh, err := s.store.GetShotByID(shotID)
 	if err != nil {
 		return nil, err
 	}
-	if sc == nil {
-		return nil, fmt.Errorf("scene not found")
+	if sh == nil {
+		return nil, fmt.Errorf("shot not found")
 	}
 
-	takes, err := s.store.ListTakes(sceneID)
+	takes, err := s.store.ListTakes(shotID)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +470,7 @@ func (s *Service) UpdateTake(id string, req *UpdateTakeRequest) (*Take, error) {
 		if t == nil {
 			return nil, fmt.Errorf("take not found")
 		}
-		if err := s.store.DeactivateFinalsByNumber(t.SceneID, t.Number); err != nil {
+		if err := s.store.DeactivateFinalsByNumber(t.ShotID, t.Number); err != nil {
 			return nil, err
 		}
 		updates["final"] = true
@@ -317,9 +489,30 @@ func (s *Service) SoftDeleteTake(id string) error {
 
 // ─── Combined ───────────────────────────────────────────────────
 
-// GetProjectWithScenes returns a project with its scenes.
-func (s *Service) GetProjectWithScenes(id string) (*ProjectWithScenes, error) {
+// GetProjectWithChapters returns a project with its chapters.
+func (s *Service) GetProjectWithChapters(id string) (*ProjectWithChapters, error) {
 	p, err := s.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	chapters, err := s.store.ListChapters(id)
+	if err != nil {
+		return nil, err
+	}
+	if chapters == nil {
+		chapters = []Chapter{}
+	}
+
+	return &ProjectWithChapters{
+		Project:  *p,
+		Chapters: make([]ChapterWithScenes, len(chapters)),
+	}, nil
+}
+
+// GetChapterWithScenes returns a chapter with its scenes.
+func (s *Service) GetChapterWithScenes(id string) (*ChapterWithScenes, error) {
+	c, err := s.GetChapterByID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -332,15 +525,52 @@ func (s *Service) GetProjectWithScenes(id string) (*ProjectWithScenes, error) {
 		scenes = []Scene{}
 	}
 
-	return &ProjectWithScenes{
-		Project: *p,
-		Scenes:  scenes,
+	sceneWithShots := make([]SceneWithShots, len(scenes))
+	for i, sc := range scenes {
+		sceneWithShots[i] = SceneWithShots{
+			Scene: sc,
+			Shots: []ShotWithTakes{},
+		}
+	}
+
+	return &ChapterWithScenes{
+		Chapter: *c,
+		Scenes:  sceneWithShots,
 	}, nil
 }
 
-// GetSceneWithTakes returns a scene with its takes.
-func (s *Service) GetSceneWithTakes(id string) (*SceneWithTakes, error) {
+// GetSceneWithShots returns a scene with its shots.
+func (s *Service) GetSceneWithShots(id string) (*SceneWithShots, error) {
 	sc, err := s.GetSceneByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	shots, err := s.store.ListShots(id)
+	if err != nil {
+		return nil, err
+	}
+	if shots == nil {
+		shots = []Shot{}
+	}
+
+	shotWithTakes := make([]ShotWithTakes, len(shots))
+	for i, sh := range shots {
+		shotWithTakes[i] = ShotWithTakes{
+			Shot:  sh,
+			Takes: []Take{},
+		}
+	}
+
+	return &SceneWithShots{
+		Scene: *sc,
+		Shots: shotWithTakes,
+	}, nil
+}
+
+// GetShotWithTakes returns a shot with its takes.
+func (s *Service) GetShotWithTakes(id string) (*ShotWithTakes, error) {
+	sh, err := s.GetShotByID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -353,16 +583,79 @@ func (s *Service) GetSceneWithTakes(id string) (*SceneWithTakes, error) {
 		takes = []Take{}
 	}
 
+	return &ShotWithTakes{
+		Shot:  *sh,
+		Takes: takes,
+	}, nil
+}
+
+// Legacy GetProjectWithScenes for backward compatibility — returns project with
+// flat scenes list (no chapters, no shots nesting).
+func (s *Service) GetProjectWithScenes(id string) (*ProjectWithScenes, error) {
+	p, err := s.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// We need to flatten all scenes across all chapters
+	chapters, err := s.store.ListChapters(id)
+	if err != nil {
+		return nil, err
+	}
+
+	var allScenes []Scene
+	for _, c := range chapters {
+		scenes, err := s.store.ListScenes(c.ID)
+		if err != nil {
+			return nil, err
+		}
+		allScenes = append(allScenes, scenes...)
+	}
+	if allScenes == nil {
+		allScenes = []Scene{}
+	}
+
+	return &ProjectWithScenes{
+		Project: *p,
+		Scenes:  allScenes,
+	}, nil
+}
+
+// Legacy GetSceneWithTakes for backward compatibility.
+func (s *Service) GetSceneWithTakes(id string) (*SceneWithTakes, error) {
+	sc, err := s.GetSceneByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Flatten all takes across all shots in this scene
+	shots, err := s.store.ListShots(id)
+	if err != nil {
+		return nil, err
+	}
+
+	var allTakes []Take
+	for _, sh := range shots {
+		takes, err := s.store.ListTakes(sh.ID)
+		if err != nil {
+			return nil, err
+		}
+		allTakes = append(allTakes, takes...)
+	}
+	if allTakes == nil {
+		allTakes = []Take{}
+	}
+
 	return &SceneWithTakes{
 		Scene: *sc,
-		Takes: takes,
+		Takes: allTakes,
 	}, nil
 }
 
 // ─── Take: discard / re-generation ─────────────────────────────
 
 // SaveGenerationRequest is the payload for associating a generated
-// video URL with a take slot (scene+number).
+// video URL with a take slot (shot+number).
 type SaveGenerationRequest struct {
 	Number        int    `json:"number"`
 	VideoURL      string `json:"video_url"`
@@ -372,22 +665,20 @@ type SaveGenerationRequest struct {
 
 // SaveGeneration saves a generated video URL to a take.
 // Rules:
-//  1. If a take with the same video_url already exists in this scene,
-//     its status, urls, and timestamps are updated (no duplicate video_url).
-//  2. If a pending take exists for this scene+number, it is updated with
+//  1. If a pending take exists for this shot+number, it is updated with
 //     the completed video URLs and status.
-//  3. Otherwise, a new take is created. Multiple completed takes with
-//     the same scene+number are allowed (each with a different video_url).
+//  2. Otherwise, a new take is created. Multiple completed takes with
+//     the same shot+number are allowed (each with a different video_url).
 //
 // If task_id is provided and a TaskLookup is configured, the local
 // video URL is resolved automatically from the completed task.
-func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*Take, error) {
-	sc, err := s.store.GetSceneByID(sceneID)
+func (s *Service) SaveGeneration(shotID string, req *SaveGenerationRequest) (*Take, error) {
+	sh, err := s.store.GetShotByID(shotID)
 	if err != nil {
 		return nil, err
 	}
-	if sc == nil {
-		return nil, fmt.Errorf("scene not found")
+	if sh == nil {
+		return nil, fmt.Errorf("shot not found")
 	}
 
 	localURL := req.VideoLocalURL
@@ -400,9 +691,8 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 		videoURL = localURL
 	}
 
-	// Rule 1: If a pending take exists for this scene+number, update it
-	// (regardless of active flag — it may have been deactivated externally)
-	take, err := s.store.GetPendingTakeByNumber(sceneID, req.Number)
+	// Rule 1: If a pending take exists for this shot+number, update it
+	take, err := s.store.GetPendingTakeByNumber(shotID, req.Number)
 	if err == nil && take != nil && take.Status == "pending" {
 		if err := s.store.UpdateTake(take.ID, map[string]interface{}{
 			"video_url":       videoURL,
@@ -414,10 +704,10 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 		return s.store.GetTakeByID(take.ID)
 	}
 
-	// Rule 2: Create a new take (duplicate scene+number is allowed)
+	// Rule 2: Create a new take (duplicate shot+number is allowed)
 	t := &Take{
 		ID:            uuid.New().String(),
-		SceneID:       sceneID,
+		ShotID:        shotID,
 		Number:        req.Number,
 		VideoURL:      videoURL,
 		VideoLocalURL: localURL,
@@ -432,7 +722,7 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 }
 
 // ToggleTakeActive sets the specified take as the active one and
-// deactivates all other takes with the same scene+number.
+// deactivates all other takes with the same shot+number.
 func (s *Service) ToggleTakeActive(id string) (*Take, error) {
 	t, err := s.store.GetTakeByID(id)
 	if err != nil {
@@ -442,8 +732,8 @@ func (s *Service) ToggleTakeActive(id string) (*Take, error) {
 		return nil, fmt.Errorf("take not found")
 	}
 
-	// Deactivate any active take with the same scene+number
-	if err := s.store.DeactivateTakesByNumber(t.SceneID, t.Number); err != nil {
+	// Deactivate any active take with the same shot+number
+	if err := s.store.DeactivateTakesByNumber(t.ShotID, t.Number); err != nil {
 		return nil, err
 	}
 
@@ -502,7 +792,7 @@ func (s *Service) RemoveSceneAsset(assignmentID string) error {
 }
 
 // DownloadTakeVideo downloads the external video for a take and saves it
-// locally under outputsDir/{ProjectName}_{SceneCode}_T{take}_{user}_{datetime}.mp4.
+// locally under outputsDir/{ProjectName}_{SceneCode}_S{shot}_T{take}_{user}_{datetime}.mp4.
 // Returns the updated take with video_local_url populated.
 func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 	t, err := s.store.GetTakeByID(takeID)
@@ -519,7 +809,16 @@ func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 		return t, nil
 	}
 
-	sc, err := s.store.GetSceneByID(t.SceneID)
+	// Resolve shot -> scene -> project for naming
+	sh, err := s.store.GetShotByID(t.ShotID)
+	if err != nil {
+		return nil, err
+	}
+	if sh == nil {
+		return nil, fmt.Errorf("shot not found for take")
+	}
+
+	sc, err := s.store.GetSceneByID(sh.SceneID)
 	if err != nil {
 		return nil, err
 	}
@@ -542,12 +841,13 @@ func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 	}
 
 	sceneCode := fmt.Sprintf("SC%02d", sc.Number)
+	shotCode := fmt.Sprintf("S%02d", sh.Number)
 	userPart := username
 	if userPart == "" {
 		userPart = "unknown"
 	}
 	ts := now.Format("20060102_150405")
-	filename := fmt.Sprintf("%s_%s_T%d_%s_%s.mp4", safe(proj.Name), sceneCode, t.Number, safe(userPart), ts)
+	filename := fmt.Sprintf("%s_%s_%s_T%d_%s_%s.mp4", safe(proj.Name), sceneCode, shotCode, t.Number, safe(userPart), ts)
 	outputsDir := filepath.Join(".", config.OutPutUrl())
 	localPath := filepath.Join(outputsDir, filename)
 

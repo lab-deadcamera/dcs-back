@@ -1,4 +1,4 @@
-﻿package project
+package project
 
 import (
 	"database/sql"
@@ -17,13 +17,13 @@ func NewStore(db *sql.DB) *ProjectStore {
 
 const projectCols = `id, name, COALESCE(description, '') AS description,
 	COALESCE(metadata, '') AS metadata, active,
-		(SELECT COUNT(*) FROM scenes WHERE project_id = projects.id AND deleted_at IS NULL) AS scene_count,
+		(SELECT COUNT(*) FROM chapters WHERE project_id = projects.id AND deleted_at IS NULL) AS chapter_count,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanProject(p *Project, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(&p.ID, &p.Name, &p.Description, &p.Metadata, &p.Active, &p.SceneCount, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt)
+	return scanner.Scan(&p.ID, &p.Name, &p.Description, &p.Metadata, &p.Active, &p.ChapterCount, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt)
 }
 
 func (s *ProjectStore) Create(p *Project) error {
@@ -102,23 +102,113 @@ func (s *ProjectStore) SoftDelete(id string) error {
 	return nil
 }
 
+// ─── Chapter Store ──────────────────────────────────────────────
+
+const chapterCols = `id, project_id, number, COALESCE(name, '') AS name,
+	COALESCE(description, '') AS description, active,
+		(SELECT COUNT(*) FROM scenes WHERE chapter_id = chapters.id AND deleted_at IS NULL) AS scene_count,
+	created_at, updated_at, deleted_at`
+
+func (s *ProjectStore) scanChapter(c *Chapter, scanner interface {
+	Scan(dest ...interface{}) error
+}) error {
+	return scanner.Scan(&c.ID, &c.ProjectID, &c.Number, &c.Name, &c.Description, &c.Active, &c.SceneCount, &c.CreatedAt, &c.UpdatedAt, &c.DeletedAt)
+}
+
+func (s *ProjectStore) CreateChapter(c *Chapter) error {
+	query := `INSERT INTO chapters (id, project_id, number, name, description, active)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING created_at, updated_at`
+	return s.db.QueryRow(query, c.ID, c.ProjectID, c.Number, c.Name, c.Description, c.Active).
+		Scan(&c.CreatedAt, &c.UpdatedAt)
+}
+
+func (s *ProjectStore) GetChapterByID(id string) (*Chapter, error) {
+	c := &Chapter{}
+	query := `SELECT ` + chapterCols + ` FROM chapters WHERE id = $1 AND deleted_at IS NULL`
+	if err := s.scanChapter(c, s.db.QueryRow(query, id)); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return c, nil
+}
+
+func (s *ProjectStore) ListChapters(projectID string) ([]Chapter, error) {
+	query := `SELECT ` + chapterCols + ` FROM chapters WHERE project_id = $1 AND deleted_at IS NULL ORDER BY number ASC`
+	rows, err := s.db.Query(query, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var chapters []Chapter
+	for rows.Next() {
+		var c Chapter
+		if err := s.scanChapter(&c, rows); err != nil {
+			return nil, err
+		}
+		chapters = append(chapters, c)
+	}
+	return chapters, rows.Err()
+}
+
+func (s *ProjectStore) UpdateChapter(id string, updates map[string]interface{}) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	query := "UPDATE chapters SET updated_at = NOW()"
+	args := []interface{}{}
+	argIdx := 1
+
+	for col, val := range updates {
+		query += fmt.Sprintf(", %s = $%d", col, argIdx)
+		args = append(args, val)
+		argIdx++
+	}
+	query += fmt.Sprintf(" WHERE id = $%d AND deleted_at IS NULL", argIdx)
+	args = append(args, id)
+
+	result, err := s.db.Exec(query, args...)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("chapter not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) SoftDeleteChapter(id string) error {
+	result, err := s.db.Exec(`UPDATE chapters SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`, id)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("chapter not found")
+	}
+	return nil
+}
+
 // ─── Scene Store ────────────────────────────────────────────────
 
-const sceneCols = `id, project_id, number, COALESCE(name, '') AS name,
-	COALESCE(description, '') AS description, active,
+const sceneCols = `id, project_id, COALESCE(chapter_id, '') AS chapter_id, number,
+	COALESCE(name, '') AS name, COALESCE(description, '') AS description, active,
+		(SELECT COUNT(*) FROM shots WHERE scene_id = scenes.id AND deleted_at IS NULL) AS shot_count,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanScene(sc *Scene, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(&sc.ID, &sc.ProjectID, &sc.Number, &sc.Name, &sc.Description, &sc.Active, &sc.CreatedAt, &sc.UpdatedAt, &sc.DeletedAt)
+	return scanner.Scan(&sc.ID, &sc.ProjectID, &sc.ChapterID, &sc.Number, &sc.Name, &sc.Description, &sc.Active, &sc.ShotCount, &sc.CreatedAt, &sc.UpdatedAt, &sc.DeletedAt)
 }
 
 func (s *ProjectStore) CreateScene(sc *Scene) error {
-	query := `INSERT INTO scenes (id, project_id, number, name, description, active)
-		VALUES ($1, $2, $3, $4, $5, $6)
+	query := `INSERT INTO scenes (id, project_id, chapter_id, number, name, description, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, sc.ID, sc.ProjectID, sc.Number, sc.Name, sc.Description, sc.Active).
+	return s.db.QueryRow(query, sc.ID, sc.ProjectID, sc.ChapterID, sc.Number, sc.Name, sc.Description, sc.Active).
 		Scan(&sc.CreatedAt, &sc.UpdatedAt)
 }
 
@@ -134,9 +224,9 @@ func (s *ProjectStore) GetSceneByID(id string) (*Scene, error) {
 	return sc, nil
 }
 
-func (s *ProjectStore) ListScenes(projectID string) ([]Scene, error) {
-	query := `SELECT ` + sceneCols + ` FROM scenes WHERE project_id = $1 AND deleted_at IS NULL ORDER BY number ASC`
-	rows, err := s.db.Query(query, projectID)
+func (s *ProjectStore) ListScenes(chapterID string) ([]Scene, error) {
+	query := `SELECT ` + sceneCols + ` FROM scenes WHERE chapter_id = $1 AND deleted_at IS NULL ORDER BY number ASC`
+	rows, err := s.db.Query(query, chapterID)
 	if err != nil {
 		return nil, err
 	}
@@ -190,9 +280,98 @@ func (s *ProjectStore) SoftDeleteScene(id string) error {
 	return nil
 }
 
+// ─── Shot Store ─────────────────────────────────────────────────
+
+const shotCols = `id, scene_id, number, COALESCE(name, '') AS name,
+	COALESCE(description, '') AS description, active,
+		(SELECT COUNT(*) FROM takes WHERE shot_id = shots.id AND deleted_at IS NULL) AS take_count,
+	created_at, updated_at, deleted_at`
+
+func (s *ProjectStore) scanShot(sh *Shot, scanner interface {
+	Scan(dest ...interface{}) error
+}) error {
+	return scanner.Scan(&sh.ID, &sh.SceneID, &sh.Number, &sh.Name, &sh.Description, &sh.Active, &sh.TakeCount, &sh.CreatedAt, &sh.UpdatedAt, &sh.DeletedAt)
+}
+
+func (s *ProjectStore) CreateShot(sh *Shot) error {
+	query := `INSERT INTO shots (id, scene_id, number, name, description, active)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING created_at, updated_at`
+	return s.db.QueryRow(query, sh.ID, sh.SceneID, sh.Number, sh.Name, sh.Description, sh.Active).
+		Scan(&sh.CreatedAt, &sh.UpdatedAt)
+}
+
+func (s *ProjectStore) GetShotByID(id string) (*Shot, error) {
+	sh := &Shot{}
+	query := `SELECT ` + shotCols + ` FROM shots WHERE id = $1 AND deleted_at IS NULL`
+	if err := s.scanShot(sh, s.db.QueryRow(query, id)); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return sh, nil
+}
+
+func (s *ProjectStore) ListShots(sceneID string) ([]Shot, error) {
+	query := `SELECT ` + shotCols + ` FROM shots WHERE scene_id = $1 AND deleted_at IS NULL ORDER BY number ASC`
+	rows, err := s.db.Query(query, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var shots []Shot
+	for rows.Next() {
+		var sh Shot
+		if err := s.scanShot(&sh, rows); err != nil {
+			return nil, err
+		}
+		shots = append(shots, sh)
+	}
+	return shots, rows.Err()
+}
+
+func (s *ProjectStore) UpdateShot(id string, updates map[string]interface{}) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	query := "UPDATE shots SET updated_at = NOW()"
+	args := []interface{}{}
+	argIdx := 1
+
+	for col, val := range updates {
+		query += fmt.Sprintf(", %s = $%d", col, argIdx)
+		args = append(args, val)
+		argIdx++
+	}
+	query += fmt.Sprintf(" WHERE id = $%d AND deleted_at IS NULL", argIdx)
+	args = append(args, id)
+
+	result, err := s.db.Exec(query, args...)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("shot not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) SoftDeleteShot(id string) error {
+	result, err := s.db.Exec(`UPDATE shots SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`, id)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("shot not found")
+	}
+	return nil
+}
+
 // ─── Take Store ─────────────────────────────────────────────────
 
-const takeCols = `id, scene_id, number, COALESCE(video_url, '') AS video_url,
+const takeCols = `id, COALESCE(shot_id, '') AS shot_id, number, COALESCE(video_url, '') AS video_url,
 	COALESCE(video_local_url, '') AS video_local_url,
 	COALESCE(status, 'pending') AS status, active, final,
 	created_at, updated_at, deleted_at`
@@ -200,14 +379,14 @@ const takeCols = `id, scene_id, number, COALESCE(video_url, '') AS video_url,
 func (s *ProjectStore) scanTake(t *Take, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-return scanner.Scan(&t.ID, &t.SceneID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.Final, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
+	return scanner.Scan(&t.ID, &t.ShotID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.Final, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
 }
 
 func (s *ProjectStore) CreateTake(t *Take) error {
-	query := `INSERT INTO takes (id, scene_id, number, video_url, video_local_url, status, active)
+	query := `INSERT INTO takes (id, shot_id, number, video_url, video_local_url, status, active)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, t.ID, t.SceneID, t.Number, t.VideoURL, t.VideoLocalURL, t.Status, t.Active).
+	return s.db.QueryRow(query, t.ID, t.ShotID, t.Number, t.VideoURL, t.VideoLocalURL, t.Status, t.Active).
 		Scan(&t.CreatedAt, &t.UpdatedAt)
 }
 
@@ -223,9 +402,9 @@ func (s *ProjectStore) GetTakeByID(id string) (*Take, error) {
 	return t, nil
 }
 
-func (s *ProjectStore) ListTakes(sceneID string) ([]Take, error) {
-	query := `SELECT ` + takeCols + ` FROM takes WHERE scene_id = $1 AND deleted_at IS NULL ORDER BY number ASC, created_at DESC`
-	rows, err := s.db.Query(query, sceneID)
+func (s *ProjectStore) ListTakes(shotID string) ([]Take, error) {
+	query := `SELECT ` + takeCols + ` FROM takes WHERE shot_id = $1 AND deleted_at IS NULL ORDER BY number ASC, created_at DESC`
+	rows, err := s.db.Query(query, shotID)
 	if err != nil {
 		return nil, err
 	}
@@ -242,11 +421,11 @@ func (s *ProjectStore) ListTakes(sceneID string) ([]Take, error) {
 	return takes, rows.Err()
 }
 
-// ListActiveTakes returns only active (non-discarded) takes for a scene,
+// ListActiveTakes returns only active (non-discarded) takes for a shot,
 // at most one per number due to the partial unique index.
-func (s *ProjectStore) ListActiveTakes(sceneID string) ([]Take, error) {
-	query := `SELECT ` + takeCols + ` FROM takes WHERE scene_id = $1 AND deleted_at IS NULL AND active = true ORDER BY number ASC`
-	rows, err := s.db.Query(query, sceneID)
+func (s *ProjectStore) ListActiveTakes(shotID string) ([]Take, error) {
+	query := `SELECT ` + takeCols + ` FROM takes WHERE shot_id = $1 AND deleted_at IS NULL AND active = true ORDER BY number ASC`
+	rows, err := s.db.Query(query, shotID)
 	if err != nil {
 		return nil, err
 	}
@@ -263,12 +442,12 @@ func (s *ProjectStore) ListActiveTakes(sceneID string) ([]Take, error) {
 	return takes, rows.Err()
 }
 
-// GetActiveTakeByNumber returns the active take for a scene+number pair,
+// GetActiveTakeByNumber returns the active take for a shot+number pair,
 // or nil if none exists.
-func (s *ProjectStore) GetActiveTakeByNumber(sceneID string, number int) (*Take, error) {
+func (s *ProjectStore) GetActiveTakeByNumber(shotID string, number int) (*Take, error) {
 	t := &Take{}
-	query := `SELECT ` + takeCols + ` FROM takes WHERE scene_id = $1 AND number = $2 AND deleted_at IS NULL AND active = true`
-	if err := s.scanTake(t, s.db.QueryRow(query, sceneID, number)); err != nil {
+	query := `SELECT ` + takeCols + ` FROM takes WHERE shot_id = $1 AND number = $2 AND deleted_at IS NULL AND active = true`
+	if err := s.scanTake(t, s.db.QueryRow(query, shotID, number)); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -278,19 +457,19 @@ func (s *ProjectStore) GetActiveTakeByNumber(sceneID string, number int) (*Take,
 }
 
 // DeactivateTakesByNumber sets active=false on all active takes matching
-// scene+number. Used before inserting a new generation for the same take slot.
-func (s *ProjectStore) DeactivateTakesByNumber(sceneID string, number int) error {
+// shot+number. Used before inserting a new generation for the same take slot.
+func (s *ProjectStore) DeactivateTakesByNumber(shotID string, number int) error {
 	_, err := s.db.Exec(
-		`UPDATE takes SET active = false, updated_at = NOW() WHERE scene_id = $1 AND number = $2 AND deleted_at IS NULL AND active = true`,
-		sceneID, number,
+		`UPDATE takes SET active = false, updated_at = NOW() WHERE shot_id = $1 AND number = $2 AND deleted_at IS NULL AND active = true`,
+		shotID, number,
 	)
 	return err
 }
 
-func (s *ProjectStore) DeactivateFinalsByNumber(sceneID string, number int) error {
+func (s *ProjectStore) DeactivateFinalsByNumber(shotID string, number int) error {
 	_, err := s.db.Exec(
-		`UPDATE takes SET final = false, finalized_at = NULL, updated_at = NOW() WHERE scene_id = $1 AND number = $2 AND deleted_at IS NULL AND final = true`,
-		sceneID, number,
+		`UPDATE takes SET final = false, finalized_at = NULL, updated_at = NOW() WHERE shot_id = $1 AND number = $2 AND deleted_at IS NULL AND final = true`,
+		shotID, number,
 	)
 	return err
 }
@@ -321,11 +500,11 @@ func (s *ProjectStore) UpdateTake(id string, updates map[string]interface{}) err
 	return nil
 }
 
-// GetTakeByVideoURL returns a take by scene_id and video_url, or nil if not found.
-func (s *ProjectStore) GetTakeByVideoURL(sceneID string, videoURL string) (*Take, error) {
+// GetTakeByVideoURL returns a take by shot_id and video_url, or nil if not found.
+func (s *ProjectStore) GetTakeByVideoURL(shotID string, videoURL string) (*Take, error) {
 	t := &Take{}
-	query := `SELECT ` + takeCols + ` FROM takes WHERE scene_id = $1 AND video_url = $2 AND deleted_at IS NULL`
-	if err := s.scanTake(t, s.db.QueryRow(query, sceneID, videoURL)); err != nil {
+	query := `SELECT ` + takeCols + ` FROM takes WHERE shot_id = $1 AND video_url = $2 AND deleted_at IS NULL`
+	if err := s.scanTake(t, s.db.QueryRow(query, shotID, videoURL)); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -335,13 +514,13 @@ func (s *ProjectStore) GetTakeByVideoURL(sceneID string, videoURL string) (*Take
 }
 
 // GetPendingTakeByNumber returns the most recent pending take for a
-// scene+number pair, or nil if none exists. Unlike GetActiveTakeByNumber
+// shot+number pair, or nil if none exists. Unlike GetActiveTakeByNumber
 // it does NOT filter by active — it finds the pending take regardless of
 // whether something else already deactivated it.
-func (s *ProjectStore) GetPendingTakeByNumber(sceneID string, number int) (*Take, error) {
+func (s *ProjectStore) GetPendingTakeByNumber(shotID string, number int) (*Take, error) {
 	t := &Take{}
-	query := `SELECT ` + takeCols + ` FROM takes WHERE scene_id = $1 AND number = $2 AND deleted_at IS NULL AND status = 'pending' ORDER BY created_at DESC LIMIT 1`
-	if err := s.scanTake(t, s.db.QueryRow(query, sceneID, number)); err != nil {
+	query := `SELECT ` + takeCols + ` FROM takes WHERE shot_id = $1 AND number = $2 AND deleted_at IS NULL AND status = 'pending' ORDER BY created_at DESC LIMIT 1`
+	if err := s.scanTake(t, s.db.QueryRow(query, shotID, number)); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
