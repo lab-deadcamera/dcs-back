@@ -81,5 +81,17 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 			assignments.DELETE("/characters/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveSceneCharacter)
 			assignments.DELETE("/assets/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveSceneAsset)
 		}
+
+		// ── Scene Assignments (ruta plana sin chapterId) ──
+		assignmentsFlat := g.Group("/:id/scenes/:sceneId/assignments")
+		{
+			assignmentsFlat.GET("", m.hdl.GetSceneAssignments)
+			assignmentsFlat.POST("/presets", middleware.RequireRole(2), m.hdl.AssignPresetToScene)
+			assignmentsFlat.POST("/characters", middleware.RequireRole(2), m.hdl.AssignCharacterToScene)
+			assignmentsFlat.POST("/assets", middleware.RequireRole(2), m.hdl.AssignAssetToScene)
+			assignmentsFlat.DELETE("/presets/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveScenePreset)
+			assignmentsFlat.DELETE("/characters/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveSceneCharacter)
+			assignmentsFlat.DELETE("/assets/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveSceneAsset)
+		}
 	}
 }
