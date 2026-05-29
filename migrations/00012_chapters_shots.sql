@@ -131,4 +131,8 @@ DROP TABLE IF EXISTS chapters CASCADE;
 CREATE UNIQUE INDEX idx_takes_active_unique ON takes(scene_id, number)
     WHERE deleted_at IS NULL AND active = true;
 
+-- Restore original scenes unique constraint on (project_id, number)
+DROP INDEX IF EXISTS idx_scenes_chapter_number;
+ALTER TABLE scenes ADD CONSTRAINT scenes_project_id_number_key UNIQUE (project_id, number);
+
 -- +goose StatementEnd

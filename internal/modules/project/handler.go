@@ -113,6 +113,10 @@ func (h *Handler) SoftDelete(c *gin.Context) {
 
 func (h *Handler) CreateChapter(c *gin.Context) {
 	projectID := c.Param("id")
+	if projectID == "" {
+		utils.BadRequest(c, "id is required")
+		return
+	}
 
 	var req CreateChapterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -139,6 +143,10 @@ func (h *Handler) CreateChapter(c *gin.Context) {
 
 func (h *Handler) ListChapters(c *gin.Context) {
 	projectID := c.Param("id")
+	if projectID == "" {
+		utils.BadRequest(c, "id is required")
+		return
+	}
 
 	chapters, err := h.svc.ListChapters(projectID)
 	if err != nil {
@@ -222,6 +230,10 @@ func (h *Handler) SoftDeleteChapter(c *gin.Context) {
 
 func (h *Handler) CreateScene(c *gin.Context) {
 	chapterID := c.Param("chapterId")
+	if chapterID == "" {
+		utils.BadRequest(c, "chapterId is required")
+		return
+	}
 
 	var req CreateSceneRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -248,6 +260,10 @@ func (h *Handler) CreateScene(c *gin.Context) {
 
 func (h *Handler) ListScenes(c *gin.Context) {
 	chapterID := c.Param("chapterId")
+	if chapterID == "" {
+		utils.BadRequest(c, "chapterId is required")
+		return
+	}
 
 	scenes, err := h.svc.ListScenes(chapterID)
 	if err != nil {
@@ -331,6 +347,10 @@ func (h *Handler) SoftDeleteScene(c *gin.Context) {
 
 func (h *Handler) CreateShot(c *gin.Context) {
 	sceneID := c.Param("sceneId")
+	if sceneID == "" {
+		utils.BadRequest(c, "sceneId is required")
+		return
+	}
 
 	var req CreateShotRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -357,6 +377,10 @@ func (h *Handler) CreateShot(c *gin.Context) {
 
 func (h *Handler) ListShots(c *gin.Context) {
 	sceneID := c.Param("sceneId")
+	if sceneID == "" {
+		utils.BadRequest(c, "sceneId is required")
+		return
+	}
 
 	shots, err := h.svc.ListShots(sceneID)
 	if err != nil {
@@ -440,6 +464,10 @@ func (h *Handler) SoftDeleteShot(c *gin.Context) {
 
 func (h *Handler) CreateTake(c *gin.Context) {
 	shotID := c.Param("shotId")
+	if shotID == "" {
+		utils.BadRequest(c, "shotId is required")
+		return
+	}
 
 	var req CreateTakeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -466,6 +494,10 @@ func (h *Handler) CreateTake(c *gin.Context) {
 
 func (h *Handler) ListTakes(c *gin.Context) {
 	shotID := c.Param("shotId")
+	if shotID == "" {
+		utils.BadRequest(c, "shotId is required")
+		return
+	}
 
 	takes, err := h.svc.ListTakes(shotID)
 	if err != nil {
@@ -528,6 +560,10 @@ func (h *Handler) UpdateTake(c *gin.Context) {
 
 func (h *Handler) SaveGeneration(c *gin.Context) {
 	shotID := c.Param("shotId")
+	if shotID == "" {
+		utils.BadRequest(c, "shotId is required")
+		return
+	}
 
 	var req SaveGenerationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
