@@ -401,7 +401,7 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 	// si la escena esta pendiente se actualiza el take, si no se crea uno nuevo
 	take, err := s.store.GetActiveTakeByNumber(sceneID, req.Number)
 
-	if err == nil && take != nil && take.Status != "pending" {
+	if err == nil && take != nil && take.Status == "pending" {
 		if err := s.store.UpdateTake(take.ID, map[string]interface{}{
 			"video_url":       videoURL,
 			"video_local_url": localURL,
