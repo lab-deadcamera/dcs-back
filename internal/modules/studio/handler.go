@@ -17,43 +17,6 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// ─── Legacy endpoint (Selection-based) ─────────────────────────
-
-func (h *Handler) Generate(c *gin.Context) {
-	var req Selection
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequest(c, err.Error())
-		return
-	}
-
-	result, err := h.svc.Generate(&req)
-	if err != nil {
-		if err.Error() == "model not found" {
-			utils.NotFound(c, err.Error())
-			return
-		}
-		utils.BadRequest(c, err.Error())
-		return
-	}
-
-	utils.Created(c, result)
-}
-
-func (h *Handler) GetStatusLegacy(c *gin.Context) {
-	taskID := c.Param("taskId")
-	if taskID == "" {
-		utils.BadRequest(c, "taskId is required")
-		return
-	}
-
-	result, err := h.svc.GetStatus(taskID)
-	if err != nil {
-		utils.InternalError(c, err.Error())
-		return
-	}
-
-	utils.Success(c, result)
-}
 
 // ─── Asset sync ─────────────────────────────────────────────────
 

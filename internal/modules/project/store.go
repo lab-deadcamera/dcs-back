@@ -334,6 +334,22 @@ func (s *ProjectStore) GetTakeByVideoURL(sceneID string, videoURL string) (*Take
 	return t, nil
 }
 
+// GetPendingTakeByNumber returns the most recent pending take for a
+// scene+number pair, or nil if none exists. Unlike GetActiveTakeByNumber
+// it does NOT filter by active — it finds the pending take regardless of
+// whether something else already deactivated it.
+func (s *ProjectStore) GetPendingTakeByNumber(sceneID string, number int) (*Take, error) {
+	t := &Take{}
+	query := `SELECT ` + takeCols + ` FROM takes WHERE scene_id = $1 AND number = $2 AND deleted_at IS NULL AND status = 'pending' ORDER BY created_at DESC LIMIT 1`
+	if err := s.scanTake(t, s.db.QueryRow(query, sceneID, number)); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return t, nil
+}
+
 func (s *ProjectStore) SoftDeleteTake(id string) error {
 	result, err := s.db.Exec(`UPDATE takes SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`, id)
 	if err != nil {

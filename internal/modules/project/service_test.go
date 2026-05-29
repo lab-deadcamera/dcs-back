@@ -218,6 +218,18 @@ func (m *mockStore) GetTakeByVideoURL(sceneID string, videoURL string) (*Take, e
 	return nil, nil
 }
 
+func (m *mockStore) GetPendingTakeByNumber(sceneID string, number int) (*Take, error) {
+	var pending *Take
+	for _, t := range m.takes {
+		if t.SceneID == sceneID && t.Number == number && t.Status == "pending" {
+			if pending == nil || t.CreatedAt.After(pending.CreatedAt) {
+				pending = t
+			}
+		}
+	}
+	return pending, nil
+}
+
 func (m *mockStore) SoftDeleteTake(id string) error {
 	if _, ok := m.takes[id]; !ok {
 		return errors.New("take not found")

@@ -119,8 +119,6 @@ func main() {
 	genLogStore := studio.NewGenerationLogStore(database)
 	studioSvc.SetLogStore(genLogStore)
 	studioSvc.SetCommStore(studio.NewServerCommunicationStore(database))
-	studioSvc.RegisterHandler(studio.NewSeedanceHandler())
-	studioSvc.RegisterHandler(studio.NewSeedreamHandler())
 	seedanceGen := videogens.NewSeedanceGenerator()
 	seedanceGen.SetLogStore(genLogStore)
 	studioSvc.RegisterGenerator(seedanceGen)

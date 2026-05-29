@@ -37,6 +37,7 @@ type projectStore interface {
 	ListTakes(sceneID string) ([]Take, error)
 	ListActiveTakes(sceneID string) ([]Take, error)
 	GetActiveTakeByNumber(sceneID string, number int) (*Take, error)
+	GetPendingTakeByNumber(sceneID string, number int) (*Take, error)
 	DeactivateTakesByNumber(sceneID string, number int) error
 	DeactivateFinalsByNumber(sceneID string, number int) error
 	GetTakeByVideoURL(sceneID string, videoURL string) (*Take, error)
@@ -389,11 +390,6 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 		return nil, fmt.Errorf("scene not found")
 	}
 
-	// Deactivate any existing active take for this scene+number
-	if err := s.store.DeactivateTakesByNumber(sceneID, req.Number); err != nil {
-		return nil, err
-	}
-
 	localURL := req.VideoLocalURL
 	if localURL == "" && req.TaskID != "" && s.taskLookup != nil {
 		localURL = s.taskLookup(req.TaskID)
@@ -424,7 +420,8 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 	}
 
 	// Rule 2: If a pending take exists for this scene+number, update it
-	take, err := s.store.GetActiveTakeByNumber(sceneID, req.Number)
+	// (regardless of active flag — it may have been deactivated externally)
+	take, err := s.store.GetPendingTakeByNumber(sceneID, req.Number)
 	if err == nil && take != nil && take.Status == "pending" {
 		if err := s.store.UpdateTake(take.ID, map[string]interface{}{
 			"video_url":       videoURL,

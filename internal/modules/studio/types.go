@@ -127,14 +127,6 @@ type TaskCancelResult struct {
 	Message string `json:"message"`
 }
 
-// ─── Model Handler Interface (legacy) ───────────────────────────
-
-type ModelHandler interface {
-	Matches(modelName string) bool
-	Generate(sel *Selection, apiKey, baseURL, endpoint string) (*GenerateResponse, error)
-	GetStatus(taskID string, apiKey, baseURL, endpoint string) (*StatusResult, error)
-	CancelTask(taskID string, apiKey, baseURL, endpoint string) error
-}
 
 // ─── Enriched file listing with sync info ───────────────────────
 

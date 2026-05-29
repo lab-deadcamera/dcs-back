@@ -56,10 +56,6 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 	g := rg.Group("/studio")
 	g.Use(authMw)
 	{
-		// Legacy
-		g.POST("/generate-legacy", m.hdl.Generate)
-		g.GET("/status-legacy/:taskId", m.hdl.GetStatusLegacy)
-
 		// Asset sync
 		g.POST("/sync-asset", m.hdl.SyncAsset)
 		g.GET("/synced-assets", m.hdl.ListSyncedAssets)
