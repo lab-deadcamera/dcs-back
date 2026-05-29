@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"dcs-back-v0/config"
 	"dcs-back-v0/internal/modules/studio"
 )
 
@@ -188,7 +189,7 @@ func (g *SeedreamGenerator) Generate(req *studio.GeneratorRequest) (*studio.Gene
 	return &studio.GeneratorResult{
 		TaskID:  taskID,
 		Model:   req.Model,
-		Status:  "succeeded",
+		Status:  config.STATUS_SUCCESS,
 		Outputs: outputs,
 		Raw:     result,
 	}, nil
@@ -202,7 +203,7 @@ func (g *SeedreamGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 
 	status, _ := result["status"].(string)
 
-	if status == "succeeded" {
+	if status == config.STATUS_SUCCESS {
 		imageURL := g.findImageURL(result)
 		if imageURL != "" {
 			outputs := []studio.OutputResource{{

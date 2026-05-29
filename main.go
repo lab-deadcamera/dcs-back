@@ -144,7 +144,7 @@ func main() {
 	projectSvc := project.NewService(projectStore)
 	projectSvc.SetTaskLookup(func(taskID string) string {
 		sr, err := studioSvc.GetStatus(taskID)
-		if err != nil || sr.Status != "succeeded" {
+		if err != nil || sr.Status != config.STATUS_SUCCESS {
 			return ""
 		}
 		return sr.LocalURL

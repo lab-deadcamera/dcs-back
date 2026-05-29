@@ -506,8 +506,6 @@ func (s *Service) GetSyncedAsset(modelID, fileID string) (*ModelAsset, error) {
 	return s.assetSyncStore.GetByModelAndFile(modelID, fileID)
 }
 
-// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Enriched file listing ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
-
 // resolveModelBriefs resolves a set of model IDs to ModelBrief objects.
 func (s *Service) resolveModelBriefs(modelIDs map[string]bool) []ModelBrief {
 	var briefs []ModelBrief
@@ -904,8 +902,6 @@ func charFileToCharFileWithSync(f character.CharacterFile, briefs []ModelBrief) 
 	}
 }
 
-// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Status and cancellation (shared) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
-
 // statusFromLog recupera el estado de una tarea desde el log cuando
 // la tarea ya no estÃƒÆ’Ã‚Â¡ en memoria (ej. reinicio del servidor).
 func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
@@ -970,9 +966,9 @@ func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
 		statusResult.LocalURL = result.Outputs[0].LocalURL
 	}
 
-	if result.Status == "succeeded" || result.Status == "failed" {
+	if result.Status == config.STATUS_SUCCESS || result.Status == config.STATUS_FAILED {
 		s.updateLogWithFinalStatus(log.TaskID, result)
-		if result.Status == "succeeded" {
+		if result.Status == config.STATUS_SUCCESS {
 			s.saveGeneratedAssets(log.TaskID, result)
 		}
 	}
@@ -999,6 +995,8 @@ func (s *Service) saveToTakes(taskID string, videoURL, localURL string) {
 	}
 }
 
+// El generador de los modelos tiene la responsabilidad de guardar el video en los assets carpeta outputs/.
+// Cuando se completa el proceso de generación.
 func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	s.mu.RLock()
 	record, ok := s.tasks[taskID]
@@ -1013,12 +1011,9 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		// Rename local file if the generator downloaded it
-		if resp.Status == "succeeded" && resp.LocalURL != "" {
-			newPath := s.renameOutputFile(resp.LocalURL, log.ProjectName, log.SceneName, log.TakeNumber, log.UserName)
-			if newPath != "" {
-				resp.LocalURL = newPath
-			}
+		if resp.Status == config.STATUS_SUCCESS && resp.LocalURL != "" {
 			s.saveToTakes(taskID, resp.VideoURL, resp.LocalURL)
 		}
 		return resp, nil
@@ -1078,37 +1073,15 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 			statusResult.VideoURL = result.Outputs[0].URL
 			statusResult.LocalURL = result.Outputs[0].LocalURL
 		}
-		// Rename local file to follow project/scene/take pattern
-		if result.Status == "succeeded" && statusResult.LocalURL != "" {
-			projectName, sceneCode, takeNumber, userName := record.ProjectName, record.SceneCode, record.TakeNumber, record.UserHandle
-			if gl, glErr := s.logStore.GetByTaskID(taskID); glErr == nil && gl != nil {
-				if gl.ProjectName != "" {
-					projectName = gl.ProjectName
-				}
-				if gl.SceneCode != "" {
-					sceneCode = gl.SceneCode
-				}
-				if gl.TakeNumber > 0 {
-					takeNumber = gl.TakeNumber
-				}
-				if gl.UserName != "" {
-					userName = gl.UserName
-				}
-			}
-			newPath := s.renameOutputFile(statusResult.LocalURL, projectName, sceneCode, takeNumber, userName)
-			if newPath != "" {
-				statusResult.LocalURL = newPath
-				result.Outputs[0].LocalURL = newPath
-			}
-		}
-		if result.Status == "succeeded" || result.Status == "failed" {
+
+		if result.Status == config.STATUS_SUCCESS || result.Status == config.STATUS_FAILED {
 			s.mu.Lock()
 			record.Status = result.Status
 			record.Result = statusResult
 			s.mu.Unlock()
 			// Update generation log with final AI response
 			s.updateLogWithFinalStatus(taskID, result)
-			if result.Status == "succeeded" {
+			if result.Status == config.STATUS_SUCCESS {
 				s.saveGeneratedAssets(taskID, result)
 				s.saveToTakes(taskID, statusResult.VideoURL, statusResult.LocalURL)
 			}
@@ -1182,7 +1155,7 @@ func (s *Service) CancelTask(taskID string) error {
 		return gen.CancelTask(taskID, m.APIKey, m.URL, m.Endpoint)
 	}
 
-		return fmt.Errorf("no generator available for model: %s", m.Name)
+	return fmt.Errorf("no generator available for model: %s", m.Name)
 }
 
 // ListGenerationLogs returns paginated generation logs, optionally filtered.

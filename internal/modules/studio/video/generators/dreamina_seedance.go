@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"dcs-back-v0/config"
 	"dcs-back-v0/internal/modules/studio"
 	"dcs-back-v0/internal/utils"
 )
@@ -99,7 +100,7 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 
 	status, _ := result["status"].(string)
 
-	if status == "succeeded" {
+	if status == config.STATUS_SUCCESS {
 		videoURL := g.findVideoURL(result, 0)
 		if videoURL != "" {
 			localName := fmt.Sprintf("seedance_%d_%s.mp4", time.Now().UnixMilli(), taskID)
@@ -138,7 +139,7 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 		}, nil
 	}
 
-	if status == "failed" {
+	if status == config.STATUS_FAILED {
 		errorMsg, _ := result["error"].(string)
 		if errorMsg == "" {
 			if e, ok := result["error"].(map[string]interface{}); ok {

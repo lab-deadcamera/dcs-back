@@ -258,7 +258,7 @@ func (g *GeminiNanoProGenerator) Generate(req *studio.GeneratorRequest) (*studio
 	return &studio.GeneratorResult{
 		TaskID:  taskID,
 		Model:   req.Model,
-		Status:  "succeeded",
+		Status:  config.STATUS_SUCCESS,
 		Outputs: outputs,
 		Raw:     result,
 	}, nil
@@ -267,7 +267,7 @@ func (g *GeminiNanoProGenerator) Generate(req *studio.GeneratorRequest) (*studio
 func (g *GeminiNanoProGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*studio.GeneratorResult, error) {
 	return &studio.GeneratorResult{
 		TaskID:  taskID,
-		Status:  "succeeded",
+		Status:  config.STATUS_SUCCESS,
 		Outputs: []studio.OutputResource{},
 	}, nil
 }

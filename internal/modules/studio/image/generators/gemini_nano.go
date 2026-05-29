@@ -104,7 +104,6 @@ func (g *GeminiNanoGenerator) BuildPayload(req *studio.GeneratorRequest) map[str
 	return payload
 }
 
-
 // mapAspectRatio converts a ratio string (e.g. "1:1", "16:9") to a Gemini API enum.
 func mapAspectRatio(ratio string) string {
 	switch ratio {
@@ -292,7 +291,7 @@ func (g *GeminiNanoGenerator) Generate(req *studio.GeneratorRequest) (*studio.Ge
 	return &studio.GeneratorResult{
 		TaskID:  taskID,
 		Model:   req.Model,
-		Status:  "succeeded",
+		Status:  config.STATUS_SUCCESS,
 		Outputs: outputs,
 		Raw:     result,
 	}, nil
@@ -301,7 +300,7 @@ func (g *GeminiNanoGenerator) Generate(req *studio.GeneratorRequest) (*studio.Ge
 func (g *GeminiNanoGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*studio.GeneratorResult, error) {
 	return &studio.GeneratorResult{
 		TaskID:  taskID,
-		Status:  "succeeded",
+		Status:  config.STATUS_SUCCESS,
 		Outputs: []studio.OutputResource{},
 	}, nil
 }
