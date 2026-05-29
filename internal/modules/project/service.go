@@ -397,19 +397,37 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 		videoURL = localURL
 	}
 
-	t := &Take{
-		ID:            uuid.New().String(),
-		SceneID:       sceneID,
-		Number:        req.Number,
-		VideoURL:      videoURL,
-		VideoLocalURL: localURL,
-		Status:        "completed",
-		Active:        true,
+	// Obtener take previo por número
+	// si la escena esta pendiente se actualiza el take, si no se crea uno nuevo
+	take, err := s.store.GetActiveTakeByNumber(sceneID, req.Number)
+
+	if err == nil && take != nil && take.Status != "pending" {
+		if err := s.store.UpdateTake(take.ID, map[string]interface{}{
+			"video_url":       videoURL,
+			"video_local_url": localURL,
+			"status":          "completed",
+			"updated_at":      time.Now(),
+		}); err != nil {
+			fmt.Printf("failed to update take for task %s: %v\n", take.ID, err)
+		}
+	} else {
+		t := &Take{
+			ID:            uuid.New().String(),
+			SceneID:       sceneID,
+			Number:        req.Number,
+			VideoURL:      videoURL,
+			VideoLocalURL: localURL,
+			Status:        "completed",
+			Active:        true,
+		}
+
+		if err := s.store.CreateTake(t); err != nil {
+			return nil, err
+		}
+		return t, nil
 	}
-	if err := s.store.CreateTake(t); err != nil {
-		return nil, err
-	}
-	return t, nil
+
+	return take, nil
 }
 
 // ToggleTakeActive sets the specified take as the active one and

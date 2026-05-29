@@ -1041,6 +1041,7 @@ func (s *Service) saveToTakes(taskID string, videoURL, localURL string) {
 	if log.SceneID == "" || log.TakeNumber <= 0 {
 		return
 	}
+
 	if err := s.takeSaver(log.SceneID, log.TakeNumber, videoURL, localURL); err != nil {
 		fmt.Printf("failed to save take for task %s: %v\n", taskID, err)
 	}
@@ -1370,7 +1371,6 @@ func (s *Service) updateLogWithFinalStatus(taskID string, result *GeneratorResul
 
 	log, logErr := s.logStore.GetByTaskID(taskID)
 	if logErr != nil || log == nil {
-		// No log entry (e.g. legacy path) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â skip
 		return
 	}
 
