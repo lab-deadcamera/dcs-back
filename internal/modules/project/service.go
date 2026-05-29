@@ -410,6 +410,7 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 		}); err != nil {
 			fmt.Printf("failed to update take for task %s: %v\n", take.ID, err)
 		}
+		return take, nil
 	} else {
 		t := &Take{
 			ID:            uuid.New().String(),
@@ -426,8 +427,6 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 		}
 		return t, nil
 	}
-
-	return take, nil
 }
 
 // ToggleTakeActive sets the specified take as the active one and
