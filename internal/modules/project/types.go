@@ -5,15 +5,15 @@ import "time"
 // ─── Project ────────────────────────────────────────────────────
 
 type Project struct {
-	ID            string     `json:"id"`
-	Name          string     `json:"name"`
-	Description   string     `json:"description"`
-	Metadata      string     `json:"metadata,omitempty"`
-	Active        bool       `json:"active"`
-	ChapterCount  int        `json:"chapter_count"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	Description  string     `json:"description"`
+	Metadata     string     `json:"metadata"`
+	Active       bool       `json:"active"`
+	ChapterCount int        `json:"chapter_count"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
 }
 
 type CreateProjectRequest struct {
@@ -147,17 +147,17 @@ type UpdateTakeRequest struct {
 // ─── Combined responses ─────────────────────────────────────────
 
 type ProjectWithChapters struct {
-	Project  Project           `json:"project"`
+	Project  Project             `json:"project"`
 	Chapters []ChapterWithScenes `json:"chapters"`
 }
 
 type ChapterWithScenes struct {
-	Chapter Chapter        `json:"chapter"`
+	Chapter Chapter          `json:"chapter"`
 	Scenes  []SceneWithShots `json:"scenes"`
 }
 
 type SceneWithShots struct {
-	Scene Scene         `json:"scene"`
+	Scene Scene           `json:"scene"`
 	Shots []ShotWithTakes `json:"shots"`
 }
 
