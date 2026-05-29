@@ -118,6 +118,7 @@ type UpdateShotRequest struct {
 
 type Take struct {
 	ID            string     `json:"id"`
+	SceneID       string     `json:"scene_id"`
 	ShotID        string     `json:"shot_id"`
 	Number        int        `json:"number"`
 	VideoURL      string     `json:"video_url"`

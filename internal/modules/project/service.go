@@ -406,11 +406,12 @@ func (s *Service) CreateTake(shotID string, req *CreateTakeRequest) (*Take, erro
 	}
 
 	t := &Take{
-		ID:     uuid.New().String(),
-		ShotID: shotID,
-		Number: req.Number,
-		Status: status,
-		Active: true,
+		ID:      uuid.New().String(),
+		SceneID: sh.SceneID,
+		ShotID:  shotID,
+		Number:  req.Number,
+		Status:  status,
+		Active:  true,
 	}
 	if err := s.store.CreateTake(t); err != nil {
 		return nil, err
@@ -707,6 +708,7 @@ func (s *Service) SaveGeneration(shotID string, req *SaveGenerationRequest) (*Ta
 	// Rule 2: Create a new take (duplicate shot+number is allowed)
 	t := &Take{
 		ID:            uuid.New().String(),
+		SceneID:       sh.SceneID,
 		ShotID:        shotID,
 		Number:        req.Number,
 		VideoURL:      videoURL,

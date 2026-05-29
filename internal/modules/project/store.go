@@ -106,7 +106,7 @@ func (s *ProjectStore) SoftDelete(id string) error {
 
 const chapterCols = `id, project_id, number, COALESCE(name, '') AS name,
 	COALESCE(description, '') AS description, active,
-		(SELECT COUNT(*) FROM scenes WHERE chapter_id = chapters.id AND deleted_at IS NULL) AS scene_count,
+		(SELECT COUNT(*) FROM scenes WHERE chapter_id IS NOT NULL AND chapter_id = chapters.id AND deleted_at IS NULL) AS scene_count,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanChapter(c *Chapter, scanner interface {
@@ -193,9 +193,9 @@ func (s *ProjectStore) SoftDeleteChapter(id string) error {
 
 // ─── Scene Store ────────────────────────────────────────────────
 
-const sceneCols = `id, project_id, COALESCE(chapter_id, '') AS chapter_id, number,
+const sceneCols = `id, project_id, COALESCE(chapter_id::text, '') AS chapter_id, number,
 	COALESCE(name, '') AS name, COALESCE(description, '') AS description, active,
-		(SELECT COUNT(*) FROM shots WHERE scene_id = scenes.id AND deleted_at IS NULL) AS shot_count,
+		(SELECT COUNT(*) FROM shots WHERE scene_id IS NOT NULL AND scene_id = scenes.id AND deleted_at IS NULL) AS shot_count,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanScene(sc *Scene, scanner interface {
@@ -284,7 +284,7 @@ func (s *ProjectStore) SoftDeleteScene(id string) error {
 
 const shotCols = `id, scene_id, number, COALESCE(name, '') AS name,
 	COALESCE(description, '') AS description, active,
-		(SELECT COUNT(*) FROM takes WHERE shot_id = shots.id AND deleted_at IS NULL) AS take_count,
+		(SELECT COUNT(*) FROM takes WHERE shot_id IS NOT NULL AND shot_id = shots.id AND deleted_at IS NULL) AS take_count,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanShot(sh *Shot, scanner interface {
@@ -371,7 +371,7 @@ func (s *ProjectStore) SoftDeleteShot(id string) error {
 
 // ─── Take Store ─────────────────────────────────────────────────
 
-const takeCols = `id, COALESCE(shot_id, '') AS shot_id, number, COALESCE(video_url, '') AS video_url,
+const takeCols = `id, scene_id, COALESCE(shot_id::text, '') AS shot_id, number, COALESCE(video_url, '') AS video_url,
 	COALESCE(video_local_url, '') AS video_local_url,
 	COALESCE(status, 'pending') AS status, active, final,
 	created_at, updated_at, deleted_at`
@@ -379,14 +379,14 @@ const takeCols = `id, COALESCE(shot_id, '') AS shot_id, number, COALESCE(video_u
 func (s *ProjectStore) scanTake(t *Take, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(&t.ID, &t.ShotID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.Final, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
+	return scanner.Scan(&t.ID, &t.SceneID, &t.ShotID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.Final, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
 }
 
 func (s *ProjectStore) CreateTake(t *Take) error {
-	query := `INSERT INTO takes (id, shot_id, number, video_url, video_local_url, status, active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	query := `INSERT INTO takes (id, scene_id, shot_id, number, video_url, video_local_url, status, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, t.ID, t.ShotID, t.Number, t.VideoURL, t.VideoLocalURL, t.Status, t.Active).
+	return s.db.QueryRow(query, t.ID, t.SceneID, t.ShotID, t.Number, t.VideoURL, t.VideoLocalURL, t.Status, t.Active).
 		Scan(&t.CreatedAt, &t.UpdatedAt)
 }
 
