@@ -39,6 +39,7 @@ type projectStore interface {
 	GetActiveTakeByNumber(sceneID string, number int) (*Take, error)
 	DeactivateTakesByNumber(sceneID string, number int) error
 	DeactivateFinalsByNumber(sceneID string, number int) error
+	GetTakeByVideoURL(sceneID string, videoURL string) (*Take, error)
 	UpdateTake(id string, updates map[string]interface{}) error
 	SoftDeleteTake(id string) error
 
@@ -368,9 +369,15 @@ type SaveGenerationRequest struct {
 	TaskID        string `json:"task_id"`
 }
 
-// SaveGeneration saves a generated video URL to a take slot. If an
-// active take already exists for this scene+number, it is marked as
-// inactive (discarded) and a new take is created.
+// SaveGeneration saves a generated video URL to a take.
+// Rules:
+//  1. If a take with the same video_url already exists in this scene,
+//     its status, urls, and timestamps are updated (no duplicate video_url).
+//  2. If a pending take exists for this scene+number, it is updated with
+//     the completed video URLs and status.
+//  3. Otherwise, a new take is created. Multiple completed takes with
+//     the same scene+number are allowed (each with a different video_url).
+//
 // If task_id is provided and a TaskLookup is configured, the local
 // video URL is resolved automatically from the completed task.
 func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*Take, error) {
@@ -397,10 +404,27 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 		videoURL = localURL
 	}
 
-	// Obtener take previo por número
-	// si la escena esta pendiente se actualiza el take, si no se crea uno nuevo
-	take, err := s.store.GetActiveTakeByNumber(sceneID, req.Number)
+	// Rule 1: If a take with this video_url already exists, update it
+	if videoURL != "" {
+		existing, err := s.store.GetTakeByVideoURL(sceneID, videoURL)
+		if err == nil && existing != nil {
+			updates := map[string]interface{}{
+				"video_url":       videoURL,
+				"video_local_url": localURL,
+				"updated_at":      time.Now(),
+			}
+			if existing.Status == "pending" {
+				updates["status"] = "completed"
+			}
+			if err := s.store.UpdateTake(existing.ID, updates); err != nil {
+				return nil, fmt.Errorf("failed to update existing take: %w", err)
+			}
+			return s.store.GetTakeByID(existing.ID)
+		}
+	}
 
+	// Rule 2: If a pending take exists for this scene+number, update it
+	take, err := s.store.GetActiveTakeByNumber(sceneID, req.Number)
 	if err == nil && take != nil && take.Status == "pending" {
 		if err := s.store.UpdateTake(take.ID, map[string]interface{}{
 			"video_url":       videoURL,
@@ -408,25 +432,26 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 			"status":          "completed",
 			"updated_at":      time.Now(),
 		}); err != nil {
-			fmt.Printf("failed to update take for task %s: %v\n", take.ID, err)
+			return nil, fmt.Errorf("failed to update pending take: %w", err)
 		}
-		return take, nil
-	} else {
-		t := &Take{
-			ID:            uuid.New().String(),
-			SceneID:       sceneID,
-			Number:        req.Number,
-			VideoURL:      videoURL,
-			VideoLocalURL: localURL,
-			Status:        "completed",
-			Active:        true,
-		}
-
-		if err := s.store.CreateTake(t); err != nil {
-			return nil, err
-		}
-		return t, nil
+		return s.store.GetTakeByID(take.ID)
 	}
+
+	// Rule 3: Create a new take (duplicate scene+number is allowed)
+	t := &Take{
+		ID:            uuid.New().String(),
+		SceneID:       sceneID,
+		Number:        req.Number,
+		VideoURL:      videoURL,
+		VideoLocalURL: localURL,
+		Status:        "completed",
+		Active:        true,
+	}
+
+	if err := s.store.CreateTake(t); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 // ToggleTakeActive sets the specified take as the active one and

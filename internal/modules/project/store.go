@@ -321,6 +321,19 @@ func (s *ProjectStore) UpdateTake(id string, updates map[string]interface{}) err
 	return nil
 }
 
+// GetTakeByVideoURL returns a take by scene_id and video_url, or nil if not found.
+func (s *ProjectStore) GetTakeByVideoURL(sceneID string, videoURL string) (*Take, error) {
+	t := &Take{}
+	query := `SELECT ` + takeCols + ` FROM takes WHERE scene_id = $1 AND video_url = $2 AND deleted_at IS NULL`
+	if err := s.scanTake(t, s.db.QueryRow(query, sceneID, videoURL)); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return t, nil
+}
+
 func (s *ProjectStore) SoftDeleteTake(id string) error {
 	result, err := s.db.Exec(`UPDATE takes SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`, id)
 	if err != nil {

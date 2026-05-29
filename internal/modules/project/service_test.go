@@ -209,6 +209,15 @@ func (m *mockStore) DeactivateTakesByNumber(sceneID string, number int) error {
 	return nil
 }
 
+func (m *mockStore) GetTakeByVideoURL(sceneID string, videoURL string) (*Take, error) {
+	for _, t := range m.takes {
+		if t.SceneID == sceneID && t.VideoURL == videoURL {
+			return t, nil
+		}
+	}
+	return nil, nil
+}
+
 func (m *mockStore) SoftDeleteTake(id string) error {
 	if _, ok := m.takes[id]; !ok {
 		return errors.New("take not found")
