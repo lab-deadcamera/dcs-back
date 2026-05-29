@@ -407,7 +407,6 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 			updates := map[string]interface{}{
 				"video_url":       videoURL,
 				"video_local_url": localURL,
-				"updated_at":      time.Now(),
 			}
 			if existing.Status == "pending" {
 				updates["status"] = "completed"
@@ -427,7 +426,6 @@ func (s *Service) SaveGeneration(sceneID string, req *SaveGenerationRequest) (*T
 			"video_url":       videoURL,
 			"video_local_url": localURL,
 			"status":          "completed",
-			"updated_at":      time.Now(),
 		}); err != nil {
 			return nil, fmt.Errorf("failed to update pending take: %w", err)
 		}
