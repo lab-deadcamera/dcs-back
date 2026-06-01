@@ -32,6 +32,11 @@ func NewStore(db *sql.DB, uploadDir string) (*Store, error) {
 		uploadDir + "/trash/videos",
 		uploadDir + "/trash/audio",
 		uploadDir + "/trash/temp",
+		uploadDir + "/trash/thumbnails",
+		uploadDir + "/thumbnails/images",
+		uploadDir + "/thumbnails/videos",
+		uploadDir + "/thumbnails/audio",
+		uploadDir + "/thumbnails/temp",
 	} {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return nil, fmt.Errorf("failed to create dir %s: %w", dir, err)

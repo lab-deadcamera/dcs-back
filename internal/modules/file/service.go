@@ -108,6 +108,12 @@ func (s *Service) SoftDelete(id string) error {
 		return fmt.Errorf("failed to move to trash: %w", err)
 	}
 
+	// Also move the associated thumbnail, if any.
+	thumbSubpath := "thumbnails/" + f.Path
+	if s.store.FileExists(thumbSubpath) {
+		_ = s.store.MoveFile(thumbSubpath, "trash/thumbnails/"+f.Path)
+	}
+
 	return s.store.SoftDeleteFile(id)
 }
 
@@ -127,6 +133,12 @@ func (s *Service) Restore(id string) error {
 		return fmt.Errorf("failed to restore from trash: %w", err)
 	}
 
+	// Also restore the associated thumbnail, if any.
+	thumbTrashPath := "trash/thumbnails/" + f.Path
+	if s.store.FileExists(thumbTrashPath) {
+		_ = s.store.MoveFile(thumbTrashPath, "thumbnails/"+f.Path)
+	}
+
 	return s.store.RestoreFile(id)
 }
 
@@ -141,6 +153,13 @@ func (s *Service) RecoverTemp(id string) error {
 
 	if err := s.store.MoveFile("trash/"+f.Path, "temp/"+filepath.Base(f.Path)); err != nil {
 		return fmt.Errorf("failed to move temp: %w", err)
+	}
+
+	// Also move the associated thumbnail, if any.
+	thumbTrashPath := "trash/thumbnails/" + f.Path
+	if s.store.FileExists(thumbTrashPath) {
+		newThumbPath := "thumbnails/temp/" + filepath.Base(f.Path)
+		_ = s.store.MoveFile(thumbTrashPath, newThumbPath)
 	}
 
 	newPath := "temp/" + filepath.Base(f.Path)
@@ -166,6 +185,12 @@ func (s *Service) HardDelete(id string) error {
 		if err := s.store.DeleteFile(subpath); err != nil {
 			return fmt.Errorf("failed to delete file: %w", err)
 		}
+	}
+
+	// Also delete the associated thumbnail, if any.
+	thumbSubpath := "thumbnails/" + f.Path
+	if s.store.FileExists(thumbSubpath) {
+		_ = s.store.DeleteFile(thumbSubpath)
 	}
 
 	return s.store.HardDeleteFile(id)
@@ -214,6 +239,11 @@ func (s *Service) PurgeExpiredTemp() error {
 	}
 	for _, f := range files {
 		s.store.DeleteFile(f.Path)
+		// Also delete the associated thumbnail, if any.
+		thumbSubpath := "thumbnails/" + f.Path
+		if s.store.FileExists(thumbSubpath) {
+			_ = s.store.DeleteFile(thumbSubpath)
+		}
 		s.store.HardDeleteFile(f.ID)
 	}
 	return nil
