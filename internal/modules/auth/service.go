@@ -10,10 +10,12 @@ import (
 )
 
 var (
-	ErrUserExists        = errors.New("username already exists")
-	ErrInvalidCreds      = errors.New("invalid username or password")
-	ErrInsufficientRole  = errors.New("insufficient role level")
-	ErrCannotCreateAdmin = errors.New("only super admin can create admins")
+	ErrUserExists           = errors.New("username already exists")
+	ErrInvalidCreds         = errors.New("invalid username or password")
+	ErrInsufficientRole     = errors.New("insufficient role level")
+	ErrCannotCreateAdmin    = errors.New("only super admin can create admins")
+	ErrCannotDeactivateSelf = errors.New("cannot deactivate your own account")
+	ErrCannotDeactivateSA   = errors.New("cannot deactivate a super admin")
 )
 
 type Service struct {
@@ -238,6 +240,24 @@ func (s *Service) CreateUser(callerLevel int, req *CreateUserRequest) (*UserResp
 	}
 
 	return s.userToResponse(user)
+}
+
+func (s *Service) UpdateUserActive(callerID int64, callerLevel int, targetID int64, active bool) error {
+	// Cannot deactivate yourself
+	if callerID == targetID {
+		return ErrCannotDeactivateSelf
+	}
+
+	// Cannot deactivate a super admin (role level 0)
+	targetLevel, err := s.store.GetUserRoleLevel(targetID)
+	if err != nil {
+		return err
+	}
+	if targetLevel == 0 {
+		return ErrCannotDeactivateSA
+	}
+
+	return s.store.UpdateUserActive(targetID, active)
 }
 
 func (s *Service) ListUsers() ([]UserResponse, error) {

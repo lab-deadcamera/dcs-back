@@ -35,6 +35,7 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, adminMw gin.HandlerFunc) 
 	{
 		adm.POST("/users", m.hdl.CreateUser)
 		adm.GET("/users", m.hdl.ListUsers)
+		adm.PATCH("/users/:id/active", m.hdl.UpdateUserActive)
 		adm.GET("/roles", m.hdl.ListRoles)
 	}
 }

@@ -157,6 +157,29 @@ func (s *Store) ListUsers() ([]User, error) {
 	return users, nil
 }
 
+func (s *Store) UpdateUserActive(id int64, active bool) error {
+	result, err := s.db.Exec(`UPDATE users SET active = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL`, active, id)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return errors.New("user not found")
+	}
+	return nil
+}
+
+func (s *Store) GetUserRoleLevel(id int64) (int, error) {
+	var level int
+	err := s.db.QueryRow(`SELECT r.level FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = $1 AND u.deleted_at IS NULL`, id).Scan(&level)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, errors.New("user not found")
+		}
+		return 0, err
+	}
+	return level, nil
+}
+
 func (s *Store) UpdateUserRole(id int64, roleID int) error {
 	result, err := s.db.Exec(`UPDATE users SET role_id = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL`, roleID, id)
 	if err != nil {

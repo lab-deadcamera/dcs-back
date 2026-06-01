@@ -131,6 +131,50 @@ func (h *Handler) ListRoles(c *gin.Context) {
 	utils.Success(c, roles)
 }
 
+func (h *Handler) UpdateUserActive(c *gin.Context) {
+	callerIDRaw, _ := c.Get("userID")
+	callerID, ok := callerIDRaw.(int64)
+	if !ok {
+		utils.Unauthorized(c, "invalid token")
+		return
+	}
+
+	callerLevelRaw, _ := c.Get("role_level")
+	callerLevel, ok2 := callerLevelRaw.(float64)
+	if !ok2 {
+		utils.Unauthorized(c, "invalid token")
+		return
+	}
+
+	targetID, err := ParseUserID(c)
+	if err != nil {
+		utils.BadRequest(c, "invalid user id")
+		return
+	}
+
+	var req struct {
+		Active bool `json:"active"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	if err := h.service.UpdateUserActive(callerID, int(callerLevel), targetID, req.Active); err != nil {
+		switch {
+		case errors.Is(err, ErrCannotDeactivateSelf):
+			utils.BadRequest(c, err.Error())
+		case errors.Is(err, ErrCannotDeactivateSA):
+			utils.BadRequest(c, err.Error())
+		default:
+			utils.InternalError(c, err.Error())
+		}
+		return
+	}
+
+	utils.Success(c, gin.H{"active": req.Active})
+}
+
 // ─── Auth helpers exposed for middleware ───────────────────────────
 
 // GetCallerLevel extracts the role level from a JWT-authenticated request.
