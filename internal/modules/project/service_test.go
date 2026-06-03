@@ -50,6 +50,14 @@ func (m *mockStore) List() ([]Project, error) {
 	return list, nil
 }
 
+func (m *mockStore) ListAll() ([]Project, error) {
+	var list []Project
+	for _, p := range m.projects {
+		list = append(list, *p)
+	}
+	return list, nil
+}
+
 func (m *mockStore) Update(id string, updates map[string]interface{}) error {
 	p, ok := m.projects[id]
 	if !ok {

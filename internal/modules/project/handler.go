@@ -18,6 +18,16 @@ func NewHandler(svc *Service) *Handler {
 
 // ─── Projects ───────────────────────────────────────────────────
 
+func (h *Handler) ListAll(c *gin.Context) {
+	projects, err := h.svc.ListAll()
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	utils.Success(c, projects)
+}
+
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateProjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

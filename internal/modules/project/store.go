@@ -47,6 +47,27 @@ func (s *ProjectStore) GetByID(id string) (*Project, error) {
 }
 
 func (s *ProjectStore) List() ([]Project, error) {
+	query := `SELECT ` + projectCols + ` FROM projects WHERE deleted_at IS NULL AND active = true ORDER BY created_at DESC`
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var projects []Project
+	for rows.Next() {
+		var p Project
+		if err := s.scanProject(&p, rows); err != nil {
+			return nil, err
+		}
+		projects = append(projects, p)
+	}
+	return projects, rows.Err()
+}
+
+// ListAll returns all non-deleted projects regardless of active status.
+// Used by admin endpoints that need to see inactive projects too.
+func (s *ProjectStore) ListAll() ([]Project, error) {
 	query := `SELECT ` + projectCols + ` FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC`
 	rows, err := s.db.Query(query)
 	if err != nil {
