@@ -23,6 +23,7 @@ type projectStore interface {
 	Create(p *Project) error
 	GetByID(id string) (*Project, error)
 	List() ([]Project, error)
+	ListAll() ([]Project, error)
 	Update(id string, updates map[string]interface{}) error
 	SoftDelete(id string) error
 
@@ -111,6 +112,17 @@ func (s *Service) GetByID(id string) (*Project, error) {
 
 func (s *Service) List() ([]Project, error) {
 	projects, err := s.store.List()
+	if err != nil {
+		return nil, err
+	}
+	if projects == nil {
+		projects = []Project{}
+	}
+	return projects, nil
+}
+
+func (s *Service) ListAll() ([]Project, error) {
+	projects, err := s.store.ListAll()
 	if err != nil {
 		return nil, err
 	}
