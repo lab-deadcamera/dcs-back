@@ -121,6 +121,22 @@ func (h *Handler) ListGenerationLogs(c *gin.Context) {
 	utils.Success(c, result)
 }
 
+// GetGenerationLogsCostSummary returns the total cost for filtered generation logs.
+func (h *Handler) GetGenerationLogsCostSummary(c *gin.Context) {
+	var req ListGenerationLogsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.svc.SumGenerationLogsCost(req.ProjectID, req.SceneID, req.Status, req.ModelName, req.UserID, req.DateFrom, req.DateTo, req.ResourceType)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Success(c, result)
+}
+
 // GetGenerationLog returns a single generation log by its ID.
 func (h *Handler) GetGenerationLog(c *gin.Context) {
 	id := c.Param("id")

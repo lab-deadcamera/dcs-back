@@ -324,6 +324,61 @@ func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, s
 	return logs, total, nil
 }
 
+// SumCostByFilter returns the total estimated_cost matching the given filters (no pagination).
+func (s *GenerationLogStore) SumCostByFilter(projectID, sceneID, status, modelName string, userID int, dateFrom, dateTo, resourceType string) (float64, error) {
+	where := "WHERE gl.deleted_at IS NULL"
+	args := []interface{}{}
+	argIdx := 1
+
+	if projectID != "" {
+		where += fmt.Sprintf(" AND gl.project_id = $%d", argIdx)
+		args = append(args, projectID)
+		argIdx++
+	}
+	if sceneID != "" {
+		where += fmt.Sprintf(" AND gl.scene_id = $%d", argIdx)
+		args = append(args, sceneID)
+		argIdx++
+	}
+	if status != "" {
+		where += fmt.Sprintf(" AND gl.status = $%d", argIdx)
+		args = append(args, status)
+		argIdx++
+	}
+	if modelName != "" {
+		where += fmt.Sprintf(" AND gl.model_name ILIKE $%d", argIdx)
+		args = append(args, "%"+modelName+"%")
+		argIdx++
+	}
+	if userID > 0 {
+		where += fmt.Sprintf(" AND gl.user_id = $%d", argIdx)
+		args = append(args, userID)
+		argIdx++
+	}
+	if dateFrom != "" {
+		where += fmt.Sprintf(" AND gl.created_at >= $%d", argIdx)
+		args = append(args, dateFrom)
+		argIdx++
+	}
+	if dateTo != "" {
+		where += fmt.Sprintf(" AND gl.created_at <= $%d", argIdx)
+		args = append(args, dateTo+"T23:59:59Z")
+		argIdx++
+	}
+	if resourceType != "" {
+		where += fmt.Sprintf(" AND gl.resource_type = $%d", argIdx)
+		args = append(args, resourceType)
+		argIdx++
+	}
+
+	query := "SELECT COALESCE(SUM(gl.estimated_cost), 0) FROM generation_logs gl " + where
+	var total float64
+	if err := s.db.QueryRow(query, args...).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 // marshalOutputs marshals a []OutputResource slice to a JSON string.
 // Returns an empty string if the slice is nil or empty.
 func marshalOutputs(outputs []OutputResource) string {
