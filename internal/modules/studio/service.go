@@ -1214,6 +1214,18 @@ func (s *Service) ListGenerationLogs(page, limit int, projectID, sceneID, status
 	}, nil
 }
 
+// SumGenerationLogsCost returns the total estimated_cost matching the given filters (no pagination).
+func (s *Service) SumGenerationLogsCost(projectID, sceneID, status, modelName string, userID int, dateFrom, dateTo, resourceType string) (*CostSummaryResponse, error) {
+	if s.logStore == nil {
+		return nil, fmt.Errorf("log store not available")
+	}
+	total, err := s.logStore.SumCostByFilter(projectID, sceneID, status, modelName, userID, dateFrom, dateTo, resourceType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sum generation logs cost: %w", err)
+	}
+	return &CostSummaryResponse{TotalCost: total}, nil
+}
+
 // GetGenerationLog returns a single generation log by ID.
 func (s *Service) GetGenerationLog(id string) (*GenerationLog, error) {
 	if s.logStore == nil {

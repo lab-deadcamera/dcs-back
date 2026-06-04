@@ -65,6 +65,7 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 
 		// Logs
 		g.GET("/logs/generation", m.hdl.ListGenerationLogs)
+		g.GET("/logs/generation/cost-summary", m.hdl.GetGenerationLogsCostSummary)
 		g.GET("/logs/generation/:id", m.hdl.GetGenerationLog)
 		g.GET("/logs/server-communications", m.hdl.ListServerCommunications)
 		g.GET("/logs/server-communications/:id", m.hdl.GetServerCommunication)

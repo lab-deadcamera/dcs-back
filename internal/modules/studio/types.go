@@ -280,6 +280,11 @@ type ListGenerationLogsResponse struct {
 	TotalPages int             `json:"total_pages"`
 }
 
+// CostSummaryResponse holds the total cost for filtered generation logs.
+type CostSummaryResponse struct {
+	TotalCost float64 `json:"total_cost"`
+}
+
 // PreviewPayloadResponse returns the AI API payload without sending it.
 type PreviewPayloadResponse struct {
 	Model       string                 `json:"model"`
