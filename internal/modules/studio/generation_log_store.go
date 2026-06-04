@@ -284,7 +284,7 @@ func (s *GenerationLogStore) ListByFilter(page, limit int, projectID, sceneID, s
 		argIdx++
 	}
 	if dateTo != "" {
-		where += fmt.Sprintf(" AND created_at <= $%d", argIdx)
+		where += fmt.Sprintf(" AND gl.created_at <= $%d", argIdx)
 		args = append(args, dateTo+"T23:59:59Z")
 		argIdx++
 	}
