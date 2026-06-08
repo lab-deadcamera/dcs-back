@@ -172,8 +172,12 @@ func (s *Store) GetFileByID(id string) (*File, error) {
 }
 
 func (s *Store) ListFiles(category, storage string, trashed bool) ([]File, error) {
+	deletedClause := "deleted_at IS NULL"
+	if trashed {
+		deletedClause = "deleted_at IS NOT NULL"
+	}
 	query := `SELECT id, filename, path, size, mime_type, category, format, storage, duration, trashed, created_at, updated_at, deleted_at
-		FROM files WHERE trashed = $1 AND deleted_at IS NULL`
+		FROM files WHERE trashed = $1 AND ` + deletedClause
 	args := []interface{}{trashed}
 	argIdx := 2
 
