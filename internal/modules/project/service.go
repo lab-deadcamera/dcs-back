@@ -489,6 +489,9 @@ func (s *Service) UpdateTake(id string, req *UpdateTakeRequest) (*Take, error) {
 		updates["final"] = true
 		updates["finalized_at"] = time.Now()
 	}
+	if req.TaskID != nil {
+		updates["task_id"] = *req.TaskID
+	}
 
 	if err := s.store.UpdateTake(id, updates); err != nil {
 		return nil, err
@@ -707,11 +710,15 @@ func (s *Service) SaveGeneration(shotID string, req *SaveGenerationRequest) (*Ta
 	// Rule 1: If a pending take exists for this shot+number, update it
 	take, err := s.store.GetPendingTakeByNumber(shotID, req.Number)
 	if err == nil && take != nil && take.Status == "pending" {
-		if err := s.store.UpdateTake(take.ID, map[string]interface{}{
+		updates := map[string]interface{}{
 			"video_url":       videoURL,
 			"video_local_url": localURL,
 			"status":          "completed",
-		}); err != nil {
+		}
+		if req.TaskID != "" {
+			updates["task_id"] = req.TaskID
+		}
+		if err := s.store.UpdateTake(take.ID, updates); err != nil {
 			return nil, fmt.Errorf("failed to update pending take: %w", err)
 		}
 		return s.store.GetTakeByID(take.ID)
@@ -727,6 +734,7 @@ func (s *Service) SaveGeneration(shotID string, req *SaveGenerationRequest) (*Ta
 		VideoLocalURL: localURL,
 		Status:        "completed",
 		Active:        true,
+		TaskID:        req.TaskID,
 	}
 
 	if err := s.store.CreateTake(t); err != nil {

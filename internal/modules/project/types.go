@@ -117,19 +117,21 @@ type UpdateShotRequest struct {
 // ─── Take ───────────────────────────────────────────────────────
 
 type Take struct {
-	ID            string     `json:"id"`
-	SceneID       string     `json:"scene_id"`
-	ShotID        string     `json:"shot_id"`
-	Number        int        `json:"number"`
-	VideoURL      string     `json:"video_url"`
-	VideoLocalURL string     `json:"video_local_url"`
-	Status        string     `json:"status"`
-	Active        bool       `json:"active"`
-	Final         bool       `json:"final"`
-	FinalizedAt   *time.Time `json:"finalized_at"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
+	ID             string     `json:"id"`
+	SceneID        string     `json:"scene_id"`
+	ShotID         string     `json:"shot_id"`
+	Number         int        `json:"number"`
+	VideoURL       string     `json:"video_url"`
+	VideoLocalURL  string     `json:"video_local_url"`
+	Status         string     `json:"status"`
+	Active         bool       `json:"active"`
+	Final          bool       `json:"final"`
+	FinalizedAt    *time.Time `json:"finalized_at"`
+	TaskID         string     `json:"task_id"`
+	RequestPayload string     `json:"request_payload"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
 }
 
 type CreateTakeRequest struct {
@@ -143,6 +145,7 @@ type UpdateTakeRequest struct {
 	Status        *string `json:"status"`
 	Active        *bool   `json:"active"`
 	Final         *bool   `json:"final"`
+	TaskID        *string `json:"task_id"`
 }
 
 // ─── Combined responses ─────────────────────────────────────────
