@@ -27,10 +27,11 @@ type GenerateRequest struct {
 	ProjectName string `json:"project_name"`
 	UserName    string `json:"user_name"`
 	ProjectID   string `json:"project_id" binding:"required"`
-	SceneID    string `json:"scene_id" binding:"required"`
-	SceneCode  string `json:"scene_code" binding:"required"`
-	TakeNumber int    `json:"take_number" binding:"required"`
-	UserID     int    `json:"user_id"`
+	SceneID     string `json:"scene_id" binding:"required"`
+	ShotID      string `json:"shot_id"`
+	SceneCode   string `json:"scene_code" binding:"required"`
+	TakeNumber  int    `json:"take_number" binding:"required"`
+	UserID      int    `json:"user_id"`
 }
 
 // OutputResource represents a single generated video output.

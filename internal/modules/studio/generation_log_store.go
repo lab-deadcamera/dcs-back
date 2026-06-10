@@ -62,7 +62,7 @@ func (s *GenerationLogStore) scanListRow(row *GenerationLog, scanner interface {
 	err := scanner.Scan(
 		&row.ID, &row.TaskID, &row.ModelName,
 		&row.Status, &row.ErrorMessage,
-		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
+		&row.UserID, &row.ProjectID, &row.SceneID, &row.ShotID, &row.SceneCode,
 		&row.TakeNumber,
 		&outputsStr,
 		&row.ResourceType, &row.ContentTypes,
@@ -88,7 +88,7 @@ func (s *GenerationLogStore) scanDetailRow(row *GenerationLog, scanner interface
 		&row.ID, &row.TaskID, &row.ModelName,
 		&row.Request, &outputsStr,
 		&row.Status, &row.ErrorMessage,
-		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
+		&row.UserID, &row.ProjectID, &row.SceneID, &row.ShotID, &row.SceneCode,
 		&row.TakeNumber,
 		&row.ResourceType, &row.ContentTypes,
 		&row.EstimatedCost, &row.CostSource,
@@ -106,7 +106,7 @@ func (s *GenerationLogStore) scanDetailRow(row *GenerationLog, scanner interface
 
 // Create inserts a new generation log entry.
 func (s *GenerationLogStore) Create(log *GenerationLog) error {
-	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, outputs, status, error_message, user_id, project_id, scene_id, scene_code, take_number, resource_type, content_types, estimated_cost, cost_source)
+	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, outputs, status, error_message, user_id, project_id, scene_id, shot_id, scene_code, take_number, resource_type, content_types, estimated_cost, cost_source)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, created_at, updated_at`
 
@@ -122,6 +122,7 @@ func (s *GenerationLogStore) Create(log *GenerationLog) error {
 		log.UserID,
 		nullIfEmpty(log.ProjectID),
 		nullIfEmpty(log.SceneID),
+		nullIfEmpty(log.ShotID),
 		nullIfEmpty(log.SceneCode),
 		log.TakeNumber,
 		log.ResourceType,

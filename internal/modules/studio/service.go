@@ -44,6 +44,7 @@ type Service struct {
 	commStore            *ServerCommunicationStore
 	assetStore           *GeneratedAssetStore
 	takeSaver            TakeSaver
+	shotLookup           ShotLookup
 	assetAccessKeyID     string
 	assetSecretAccessKey string
 	assetDefaultGroupID  string
@@ -86,6 +87,14 @@ func (s *Service) SetAssetCredentials(accessKeyID, secretAccessKey, defaultGroup
 
 func (s *Service) SetTakeSaver(saver TakeSaver) {
 	s.takeSaver = saver
+}
+
+// SetShotLookup sets the callback used by saveToTakes to resolve a shot ID
+// from a scene ID when the generation_log doesn't have shot_id (legacy records).
+type ShotLookup func(sceneID string) string
+
+func (s *Service) SetShotLookup(lookup ShotLookup) {
+	s.shotLookup = lookup
 }
 
 // effectiveCredentials returns the AK/SK/groupID to use for asset operations.
@@ -174,6 +183,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 			ProjectID:     req.ProjectID,
 			ProjectName:   req.ProjectName,
 			SceneID:       req.SceneID,
+			ShotID:        req.ShotID,
 			SceneCode:     req.SceneCode,
 			TakeNumber:    req.TakeNumber,
 			Request:       string(reqBytes),
@@ -1005,7 +1015,15 @@ func (s *Service) saveToTakes(taskID string, videoURL, localURL string) {
 		return
 	}
 
-	if err := s.takeSaver(log.SceneID, log.TakeNumber, videoURL, localURL); err != nil {
+	shotID := log.ShotID
+	if shotID == "" && s.shotLookup != nil {
+		shotID = s.shotLookup(log.SceneID)
+	}
+	if shotID == "" {
+		return
+	}
+
+	if err := s.takeSaver(shotID, log.TakeNumber, videoURL, localURL); err != nil {
 		fmt.Printf("failed to save take for task %s: %v\n", taskID, err)
 		return
 	}

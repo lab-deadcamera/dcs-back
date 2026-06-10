@@ -72,6 +72,7 @@ type StudioGenerateRequest struct {
 	UserName    string `json:"user_name"`
 	ProjectID   string `json:"project_id" binding:"required"`
 	SceneID     string `json:"scene_id" binding:"required"`
+	ShotID      string `json:"shot_id"`
 	SceneCode   string `json:"scene_code" binding:"required"`
 	TakeNumber  int    `json:"take_number" binding:"required"`
 	UserID      int    `json:"user_id"`
@@ -233,6 +234,7 @@ type GenerationLog struct {
 	ProjectID    string           `json:"project_id"`
 	ProjectName  string           `json:"project_name"`
 	SceneID      string           `json:"scene_id"`
+	ShotID       string           `json:"shot_id"`
 	SceneCode    string           `json:"scene_code"`
 	TakeNumber   int              `json:"take_number"`
 	Request      string           `json:"request"` // original client payload (JSON)
