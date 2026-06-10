@@ -707,9 +707,10 @@ func (s *Service) SaveGeneration(shotID string, req *SaveGenerationRequest) (*Ta
 		videoURL = localURL
 	}
 
-	// Rule 1: If a pending take exists for this shot+number, update it
-	take, err := s.store.GetPendingTakeByNumber(shotID, req.Number)
-	if err == nil && take != nil && take.Status == "pending" {
+	// Rule 1: If an active take exists for this shot+number, update it
+	// (covers both pending and completed takes created by the frontend).
+	take, err := s.store.GetActiveTakeByNumber(shotID, req.Number)
+	if err == nil && take != nil {
 		updates := map[string]interface{}{
 			"video_url":       videoURL,
 			"video_local_url": localURL,
@@ -719,7 +720,7 @@ func (s *Service) SaveGeneration(shotID string, req *SaveGenerationRequest) (*Ta
 			updates["task_id"] = req.TaskID
 		}
 		if err := s.store.UpdateTake(take.ID, updates); err != nil {
-			return nil, fmt.Errorf("failed to update pending take: %w", err)
+			return nil, fmt.Errorf("failed to update take %s: %w", take.ID, err)
 		}
 		return s.store.GetTakeByID(take.ID)
 	}
