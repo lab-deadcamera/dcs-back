@@ -392,15 +392,28 @@ func (s *ProjectStore) SoftDeleteShot(id string) error {
 
 // ─── Take Store ─────────────────────────────────────────────────
 
-const takeCols = `id, scene_id, COALESCE(shot_id::text, '') AS shot_id, number, COALESCE(video_url, '') AS video_url,
-	COALESCE(video_local_url, '') AS video_local_url,
-	COALESCE(status, 'pending') AS status, active, final,
-	created_at, updated_at, deleted_at`
+const takeCols = `t.id, t.scene_id, COALESCE(t.shot_id::text, '') AS shot_id, t.number, COALESCE(t.video_url, '') AS video_url,
+	COALESCE(t.video_local_url, '') AS video_local_url,
+	COALESCE(t.status, 'pending') AS status, t.active, t.final,
+	COALESCE(t.task_id, '') AS task_id,
+	t.created_at, t.updated_at, t.deleted_at`
+
+const takeListCols = takeCols + `,
+	COALESCE(gl.request_payload, '') AS request_payload`
+
+const takeListFrom = `FROM takes t
+	LEFT JOIN generation_logs gl ON gl.task_id = t.task_id AND gl.deleted_at IS NULL`
 
 func (s *ProjectStore) scanTake(t *Take, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(&t.ID, &t.SceneID, &t.ShotID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.Final, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
+	return scanner.Scan(&t.ID, &t.SceneID, &t.ShotID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.Final, &t.TaskID, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
+}
+
+func (s *ProjectStore) scanTakeWithPayload(t *Take, scanner interface {
+	Scan(dest ...interface{}) error
+}) error {
+	return scanner.Scan(&t.ID, &t.SceneID, &t.ShotID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.Final, &t.TaskID, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt, &t.RequestPayload)
 }
 
 func (s *ProjectStore) CreateTake(t *Take) error {
@@ -413,8 +426,8 @@ func (s *ProjectStore) CreateTake(t *Take) error {
 
 func (s *ProjectStore) GetTakeByID(id string) (*Take, error) {
 	t := &Take{}
-	query := `SELECT ` + takeCols + ` FROM takes WHERE id = $1 AND deleted_at IS NULL`
-	if err := s.scanTake(t, s.db.QueryRow(query, id)); err != nil {
+	query := `SELECT ` + takeListCols + ` ` + takeListFrom + ` AND t.id = $1`
+	if err := s.scanTakeWithPayload(t, s.db.QueryRow(query, id)); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -424,7 +437,7 @@ func (s *ProjectStore) GetTakeByID(id string) (*Take, error) {
 }
 
 func (s *ProjectStore) ListTakes(shotID string) ([]Take, error) {
-	query := `SELECT ` + takeCols + ` FROM takes WHERE shot_id = $1 AND deleted_at IS NULL ORDER BY number ASC, created_at DESC`
+	query := `SELECT ` + takeListCols + ` ` + takeListFrom + ` WHERE t.shot_id = $1 AND t.deleted_at IS NULL ORDER BY t.number ASC, t.created_at DESC`
 	rows, err := s.db.Query(query, shotID)
 	if err != nil {
 		return nil, err
@@ -434,7 +447,7 @@ func (s *ProjectStore) ListTakes(shotID string) ([]Take, error) {
 	var takes []Take
 	for rows.Next() {
 		var t Take
-		if err := s.scanTake(&t, rows); err != nil {
+		if err := s.scanTakeWithPayload(&t, rows); err != nil {
 			return nil, err
 		}
 		takes = append(takes, t)
@@ -445,7 +458,7 @@ func (s *ProjectStore) ListTakes(shotID string) ([]Take, error) {
 // ListActiveTakes returns only active (non-discarded) takes for a shot,
 // at most one per number due to the partial unique index.
 func (s *ProjectStore) ListActiveTakes(shotID string) ([]Take, error) {
-	query := `SELECT ` + takeCols + ` FROM takes WHERE shot_id = $1 AND deleted_at IS NULL AND active = true ORDER BY number ASC`
+	query := `SELECT ` + takeListCols + ` ` + takeListFrom + ` WHERE t.shot_id = $1 AND t.deleted_at IS NULL AND t.active = true ORDER BY t.number ASC`
 	rows, err := s.db.Query(query, shotID)
 	if err != nil {
 		return nil, err
@@ -455,7 +468,7 @@ func (s *ProjectStore) ListActiveTakes(shotID string) ([]Take, error) {
 	var takes []Take
 	for rows.Next() {
 		var t Take
-		if err := s.scanTake(&t, rows); err != nil {
+		if err := s.scanTakeWithPayload(&t, rows); err != nil {
 			return nil, err
 		}
 		takes = append(takes, t)
@@ -467,8 +480,8 @@ func (s *ProjectStore) ListActiveTakes(shotID string) ([]Take, error) {
 // or nil if none exists.
 func (s *ProjectStore) GetActiveTakeByNumber(shotID string, number int) (*Take, error) {
 	t := &Take{}
-	query := `SELECT ` + takeCols + ` FROM takes WHERE shot_id = $1 AND number = $2 AND deleted_at IS NULL AND active = true`
-	if err := s.scanTake(t, s.db.QueryRow(query, shotID, number)); err != nil {
+	query := `SELECT ` + takeListCols + ` ` + takeListFrom + ` WHERE t.shot_id = $1 AND t.number = $2 AND t.deleted_at IS NULL AND t.active = true`
+	if err := s.scanTakeWithPayload(t, s.db.QueryRow(query, shotID, number)); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -524,8 +537,8 @@ func (s *ProjectStore) UpdateTake(id string, updates map[string]interface{}) err
 // GetTakeByVideoURL returns a take by shot_id and video_url, or nil if not found.
 func (s *ProjectStore) GetTakeByVideoURL(shotID string, videoURL string) (*Take, error) {
 	t := &Take{}
-	query := `SELECT ` + takeCols + ` FROM takes WHERE shot_id = $1 AND video_url = $2 AND deleted_at IS NULL`
-	if err := s.scanTake(t, s.db.QueryRow(query, shotID, videoURL)); err != nil {
+	query := `SELECT ` + takeListCols + ` ` + takeListFrom + ` AND t.shot_id = $1 AND t.video_url = $2 AND t.deleted_at IS NULL`
+	if err := s.scanTakeWithPayload(t, s.db.QueryRow(query, shotID, videoURL)); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -540,8 +553,8 @@ func (s *ProjectStore) GetTakeByVideoURL(shotID string, videoURL string) (*Take,
 // whether something else already deactivated it.
 func (s *ProjectStore) GetPendingTakeByNumber(shotID string, number int) (*Take, error) {
 	t := &Take{}
-	query := `SELECT ` + takeCols + ` FROM takes WHERE shot_id = $1 AND number = $2 AND deleted_at IS NULL AND status = 'pending' ORDER BY created_at DESC LIMIT 1`
-	if err := s.scanTake(t, s.db.QueryRow(query, shotID, number)); err != nil {
+	query := `SELECT ` + takeListCols + ` ` + takeListFrom + ` AND t.shot_id = $1 AND t.number = $2 AND t.deleted_at IS NULL AND t.status = 'pending' ORDER BY t.created_at DESC LIMIT 1`
+	if err := s.scanTakeWithPayload(t, s.db.QueryRow(query, shotID, number)); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -574,11 +587,11 @@ func nullIfEmpty(s string) interface{} {
 
 func (s *ProjectStore) GetScenePresets(sceneID string) ([]ScenePresetAssignment, error) {
 	query := `SELECT sp.id, sp.scene_id, sp.preset_id, p.code, p.label, pg.slug AS group_slug, sp.created_at
-		FROM scene_presets sp
-		JOIN presets p ON p.id = sp.preset_id
-		JOIN preset_groups pg ON pg.id = p.group_id
-		WHERE sp.scene_id = $1
-		ORDER BY pg.slug, p.code`
+			FROM scene_presets sp
+			JOIN presets p ON p.id = sp.preset_id
+			JOIN preset_groups pg ON pg.id = p.group_id
+			WHERE sp.scene_id = $1
+			ORDER BY pg.slug, p.code`
 	rows, err := s.db.Query(query, sceneID)
 	if err != nil {
 		return nil, err
@@ -598,10 +611,10 @@ func (s *ProjectStore) GetScenePresets(sceneID string) ([]ScenePresetAssignment,
 
 func (s *ProjectStore) GetSceneCharacters(sceneID string) ([]SceneCharacterAssignment, error) {
 	query := `SELECT sc.id, sc.scene_id, sc.character_id, c.name, sc.created_at
-		FROM scene_characters sc
-		JOIN characters c ON c.id = sc.character_id
-		WHERE sc.scene_id = $1
-		ORDER BY c.name`
+			FROM scene_characters sc
+			JOIN characters c ON c.id = sc.character_id
+			WHERE sc.scene_id = $1
+			ORDER BY c.name`
 	rows, err := s.db.Query(query, sceneID)
 	if err != nil {
 		return nil, err
@@ -621,10 +634,10 @@ func (s *ProjectStore) GetSceneCharacters(sceneID string) ([]SceneCharacterAssig
 
 func (s *ProjectStore) GetSceneAssets(sceneID string) ([]SceneAssetAssignment, error) {
 	query := `SELECT sa.id, sa.scene_id, sa.file_id, f.filename, f.mime_type, sa.created_at
-		FROM scene_assets sa
-		JOIN files f ON f.id = sa.file_id
-		WHERE sa.scene_id = $1
-		ORDER BY f.filename`
+			FROM scene_assets sa
+			JOIN files f ON f.id = sa.file_id
+			WHERE sa.scene_id = $1
+			ORDER BY f.filename`
 	rows, err := s.db.Query(query, sceneID)
 	if err != nil {
 		return nil, err
