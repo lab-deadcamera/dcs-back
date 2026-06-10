@@ -16,7 +16,7 @@ SET task_id = gl.task_id
 FROM generation_logs gl
 WHERE t.task_id IS NULL
   AND gl.deleted_at IS NULL
-  AND gl.scene_id = t.scene_id
+  AND gl.scene_id::text = t.scene_id::text
   AND gl.take_number = t.number
   AND gl.task_id IS NOT NULL;
 
