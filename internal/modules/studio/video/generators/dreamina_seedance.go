@@ -107,7 +107,7 @@ func (g *SeedanceGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) 
 			if g.logStore != nil {
 				log, err := g.logStore.GetByTaskID(taskID)
 				if err == nil && log != nil {
-					localName = fmt.Sprintf("%s_%s_T%d_%s_%d.mp4", log.ProjectName, log.SceneName, log.TakeNumber, log.UserName, time.Now().UnixMilli())
+					localName = fmt.Sprintf("%s_%s_%s_T%d_%s_%s_%d.mp4", log.ProjectName, log.SceneCode, safeShortID(log.ShotID, 0, 8), log.TakeNumber, log.UserName, safeShortID(taskID, 0, 12), time.Now().UnixMilli())
 				}
 			}
 			outputs := []studio.OutputResource{{
@@ -324,4 +324,16 @@ func (g *SeedanceGenerator) findVideoURL(obj interface{}, depth int) string {
 		return ""
 	}
 	return ""
+}
+
+// safeShortID returns a substring of s from start to start+length,
+// or an empty string if s is too short.
+func safeShortID(s string, start, length int) string {
+	if start+length > len(s) {
+		if start >= len(s) {
+			return ""
+		}
+		return s[start:]
+	}
+	return s[start : start+length]
 }
