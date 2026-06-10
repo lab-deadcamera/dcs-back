@@ -109,7 +109,7 @@ func (s *GenerationLogStore) scanDetailRow(row *GenerationLog, scanner interface
 // Create inserts a new generation log entry.
 func (s *GenerationLogStore) Create(log *GenerationLog) error {
 	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, outputs, status, error_message, user_id, project_id, scene_id, shot_id, scene_code, take_number, resource_type, content_types, estimated_cost, cost_source)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		RETURNING id, created_at, updated_at`
 
 	outputsStr := marshalOutputs(log.Outputs)
