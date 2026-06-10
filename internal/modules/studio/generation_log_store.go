@@ -124,6 +124,7 @@ func (s *GenerationLogStore) Create(log *GenerationLog) error {
 		log.UserID,
 		nullIfEmpty(log.ProjectID),
 		nullIfEmpty(log.SceneID),
+		nullIfEmpty(log.ShotID),
 		nullIfEmpty(log.SceneCode),
 		log.TakeNumber,
 		log.ResourceType,
