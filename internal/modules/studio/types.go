@@ -220,7 +220,8 @@ type TaskRecord struct {
 
 // TakeSaver is a callback to persist completed generation outputs
 // to the takes table (video_url and video_local_url).
-type TakeSaver func(sceneID string, takeNumber int, videoURL, videoLocalURL string) error
+// taskID is the generation task_id used to link the take with its generation_log.
+type TakeSaver func(sceneID string, takeNumber int, videoURL, videoLocalURL, taskID string) error
 
 // ─── Generation log types ───────────────────────────────────────
 

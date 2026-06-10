@@ -1023,7 +1023,7 @@ func (s *Service) saveToTakes(taskID string, videoURL, localURL string) {
 		return
 	}
 
-	if err := s.takeSaver(shotID, log.TakeNumber, videoURL, localURL); err != nil {
+	if err := s.takeSaver(shotID, log.TakeNumber, videoURL, localURL, taskID); err != nil {
 		fmt.Printf("failed to save take for task %s: %v\n", taskID, err)
 		return
 	}

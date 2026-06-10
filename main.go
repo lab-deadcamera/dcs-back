@@ -149,11 +149,12 @@ func main() {
 		}
 		return sr.LocalURL
 	})
-	studioSvc.SetTakeSaver(func(shotID string, takeNumber int, videoURL, videoLocalURL string) error {
+	studioSvc.SetTakeSaver(func(shotID string, takeNumber int, videoURL, videoLocalURL, taskID string) error {
 		_, err := projectSvc.SaveGeneration(shotID, &project.SaveGenerationRequest{
 			Number:        takeNumber,
 			VideoURL:      videoURL,
 			VideoLocalURL: videoLocalURL,
+			TaskID:        taskID,
 		})
 		return err
 	})
