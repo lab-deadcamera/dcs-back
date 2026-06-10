@@ -402,7 +402,7 @@ const takeListCols = takeCols + `,
 	COALESCE(gl.request_payload, '') AS request_payload`
 
 const takeListFrom = `FROM takes t
-	LEFT JOIN generation_logs gl ON gl.task_id = t.task_id AND gl.deleted_at IS NULL`
+	LEFT JOIN generation_logs gl ON (gl.task_id = t.task_id OR (t.task_id = '' AND gl.scene_id = t.scene_id AND gl.take_number = t.number)) AND gl.deleted_at IS NULL`
 
 func (s *ProjectStore) scanTake(t *Take, scanner interface {
 	Scan(dest ...interface{}) error
