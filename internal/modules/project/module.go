@@ -85,6 +85,14 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, adminMw gin.HandlerFunc) 
 		assignments.DELETE("/assets/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveSceneAsset)
 	}
 
+	// ── Scenes (ruta plana sin chapterId) ──
+	scenesFlat := g.Group("/:id/scenes")
+	{
+		scenesFlat.GET("/:sceneId", m.hdl.GetSceneByID)
+		scenesFlat.PATCH("/:sceneId", m.hdl.UpdateScene)
+		scenesFlat.DELETE("/:sceneId", m.hdl.SoftDeleteScene)
+	}
+
 	// ── Scene Assignments (ruta plana sin chapterId) ──
 	assignmentsFlat := g.Group("/:id/scenes/:sceneId/assignments")
 	{
