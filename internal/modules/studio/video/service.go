@@ -120,6 +120,7 @@ func toStudioRequest(req *GenerateRequest) *studio.StudioGenerateRequest {
 		UserName:       req.UserName,
 		ProjectID:     req.ProjectID,
 		SceneID:       req.SceneID,
+		ShotID:        req.ShotID,
 		SceneCode:     req.SceneCode,
 		TakeNumber:    req.TakeNumber,
 		UserID:        req.UserID,

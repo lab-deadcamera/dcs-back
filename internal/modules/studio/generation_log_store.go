@@ -21,6 +21,7 @@ const genLogListCols = `gl.id, gl.task_id, gl.model_name,
 		gl.user_id,
 		COALESCE(gl.project_id, '') AS project_id,
 		COALESCE(gl.scene_id, '') AS scene_id,
+		COALESCE(gl.shot_id, '') AS shot_id,
 		COALESCE(gl.scene_code, '') AS scene_code,
 		COALESCE(gl.take_number, 0) AS take_number,
 		COALESCE(gl.outputs, '') AS outputs,
@@ -37,6 +38,7 @@ const genLogFullCols = `gl.id, gl.task_id, gl.model_name,
 		gl.user_id,
 		COALESCE(gl.project_id, '') AS project_id,
 		COALESCE(gl.scene_id, '') AS scene_id,
+		COALESCE(gl.shot_id, '') AS shot_id,
 		COALESCE(gl.scene_code, '') AS scene_code,
 		COALESCE(gl.take_number, 0) AS take_number,
 		gl.resource_type, gl.content_types,
@@ -62,7 +64,7 @@ func (s *GenerationLogStore) scanListRow(row *GenerationLog, scanner interface {
 	err := scanner.Scan(
 		&row.ID, &row.TaskID, &row.ModelName,
 		&row.Status, &row.ErrorMessage,
-		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
+		&row.UserID, &row.ProjectID, &row.SceneID, &row.ShotID, &row.SceneCode,
 		&row.TakeNumber,
 		&outputsStr,
 		&row.ResourceType, &row.ContentTypes,
@@ -88,7 +90,7 @@ func (s *GenerationLogStore) scanDetailRow(row *GenerationLog, scanner interface
 		&row.ID, &row.TaskID, &row.ModelName,
 		&row.Request, &outputsStr,
 		&row.Status, &row.ErrorMessage,
-		&row.UserID, &row.ProjectID, &row.SceneID, &row.SceneCode,
+		&row.UserID, &row.ProjectID, &row.SceneID, &row.ShotID, &row.SceneCode,
 		&row.TakeNumber,
 		&row.ResourceType, &row.ContentTypes,
 		&row.EstimatedCost, &row.CostSource,
@@ -106,8 +108,8 @@ func (s *GenerationLogStore) scanDetailRow(row *GenerationLog, scanner interface
 
 // Create inserts a new generation log entry.
 func (s *GenerationLogStore) Create(log *GenerationLog) error {
-	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, outputs, status, error_message, user_id, project_id, scene_id, scene_code, take_number, resource_type, content_types, estimated_cost, cost_source)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+	query := `INSERT INTO generation_logs (task_id, model_name, request_payload, outputs, status, error_message, user_id, project_id, scene_id, shot_id, scene_code, take_number, resource_type, content_types, estimated_cost, cost_source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		RETURNING id, created_at, updated_at`
 
 	outputsStr := marshalOutputs(log.Outputs)
@@ -122,6 +124,7 @@ func (s *GenerationLogStore) Create(log *GenerationLog) error {
 		log.UserID,
 		nullIfEmpty(log.ProjectID),
 		nullIfEmpty(log.SceneID),
+		nullIfEmpty(log.ShotID),
 		nullIfEmpty(log.SceneCode),
 		log.TakeNumber,
 		log.ResourceType,

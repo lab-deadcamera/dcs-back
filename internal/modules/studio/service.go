@@ -30,6 +30,7 @@ type PipelineRunner interface {
 	Name() string
 }
 
+	type ShotLookup func(sceneID string) string
 type Service struct {
 	providerStore        *provider.Store
 	fileService          *file.Service
@@ -44,6 +45,7 @@ type Service struct {
 	commStore            *ServerCommunicationStore
 	assetStore           *GeneratedAssetStore
 	takeSaver            TakeSaver
+	shotLookup           ShotLookup
 	assetAccessKeyID     string
 	assetSecretAccessKey string
 	assetDefaultGroupID  string
@@ -86,7 +88,14 @@ func (s *Service) SetAssetCredentials(accessKeyID, secretAccessKey, defaultGroup
 
 func (s *Service) SetTakeSaver(saver TakeSaver) {
 	s.takeSaver = saver
+
+	// ShotLookup resolves a shot ID from a scene ID for legacy generation logs.
+
 }
+
+	func (s *Service) SetShotLookup(lookup ShotLookup) {
+		s.shotLookup = lookup
+	}
 
 // effectiveCredentials returns the AK/SK/groupID to use for asset operations.
 // Prefers per-model values from the DB, falls back to globally configured env vars.
@@ -174,6 +183,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 			ProjectID:     req.ProjectID,
 			ProjectName:   req.ProjectName,
 			SceneID:       req.SceneID,
+			ShotID:        req.ShotID,
 			SceneCode:     req.SceneCode,
 			TakeNumber:    req.TakeNumber,
 			Request:       string(reqBytes),
@@ -1005,7 +1015,7 @@ func (s *Service) saveToTakes(taskID string, videoURL, localURL string) {
 		return
 	}
 
-	if err := s.takeSaver(log.SceneID, log.TakeNumber, videoURL, localURL); err != nil {
+	if err := s.takeSaver(log.ShotID, log.TakeNumber, videoURL, localURL, taskID); err != nil {
 		fmt.Printf("failed to save take for task %s: %v\n", taskID, err)
 		return
 	}

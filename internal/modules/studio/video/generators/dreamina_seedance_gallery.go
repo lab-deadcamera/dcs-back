@@ -107,7 +107,7 @@ func (g *SeedanceGalleryGenerator) GetStatus(taskID, apiKey, baseURL, endpoint s
 			if g.logStore != nil {
 				log, err := g.logStore.GetByTaskID(taskID)
 				if err == nil && log != nil {
-					localName = fmt.Sprintf("%s_%s_T%d_%s_%d.mp4", log.ProjectName, log.SceneName, log.TakeNumber, log.UserName, time.Now().UnixMilli())
+					localName = fmt.Sprintf("%s_%s_%s_T%d_%s_%s_%d.mp4", log.ProjectName, log.SceneCode, safeShortID(log.ShotID, 0, 8), log.TakeNumber, log.UserName, safeShortID(taskID, 0, 12), time.Now().UnixMilli())
 				}
 			}
 			outputs := []studio.OutputResource{{

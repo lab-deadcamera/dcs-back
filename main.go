@@ -149,13 +149,21 @@ func main() {
 		}
 		return sr.LocalURL
 	})
-	studioSvc.SetTakeSaver(func(sceneID string, takeNumber int, videoURL, videoLocalURL string) error {
-		_, err := projectSvc.SaveGeneration(sceneID, &project.SaveGenerationRequest{
+	studioSvc.SetTakeSaver(func(shotID string, takeNumber int, videoURL, videoLocalURL, taskID string) error {
+		_, err := projectSvc.SaveGeneration(shotID, &project.SaveGenerationRequest{
 			Number:        takeNumber,
 			VideoURL:      videoURL,
 			VideoLocalURL: videoLocalURL,
+			TaskID:        taskID,
 		})
 		return err
+	})
+	studioSvc.SetShotLookup(func(sceneID string) string {
+		shots, err := projectSvc.ListShots(sceneID)
+		if err != nil || len(shots) == 0 {
+			return ""
+		}
+		return shots[0].ID
 	})
 	projectHdl := project.NewHandler(projectSvc)
 
