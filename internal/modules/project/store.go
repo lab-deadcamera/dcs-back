@@ -417,10 +417,10 @@ func (s *ProjectStore) scanTakeWithPayload(t *Take, scanner interface {
 }
 
 func (s *ProjectStore) CreateTake(t *Take) error {
-	query := `INSERT INTO takes (id, scene_id, shot_id, number, video_url, video_local_url, status, active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	query := `INSERT INTO takes (id, scene_id, shot_id, number, video_url, video_local_url, status, active, task_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, t.ID, t.SceneID, t.ShotID, t.Number, t.VideoURL, t.VideoLocalURL, t.Status, t.Active).
+	return s.db.QueryRow(query, t.ID, t.SceneID, t.ShotID, t.Number, t.VideoURL, t.VideoLocalURL, t.Status, t.Active, nullIfEmpty(t.TaskID)).
 		Scan(&t.CreatedAt, &t.UpdatedAt)
 }
 
@@ -512,6 +512,13 @@ func (s *ProjectStore) UpdateTake(id string, updates map[string]interface{}) err
 	if len(updates) == 0 {
 		return nil
 	}
+
+	if val, ok := updates["task_id"]; ok {
+		if s, ok := val.(string); ok && s == "" {
+			return fmt.Errorf("task_id cannot be empty")
+		}
+	}
+
 	query := "UPDATE takes SET updated_at = NOW()"
 	args := []interface{}{}
 	argIdx := 1
