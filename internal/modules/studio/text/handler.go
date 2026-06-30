@@ -61,26 +61,44 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 	}
 
 	// Default system prompt for shot builder
-	systemPrompt := req.SystemPrompt
-	if systemPrompt == "" {
-		systemPrompt = `You are a professional film director's assistant. Given a scene description, reference files, and optional user instructions, generate a detailed shot list.
 
-For each shot, provide:
-- number: sequential integer
-- name: short descriptive title
-- description: detailed visual description that will serve as the video generation prompt (pre-prompt) — include camera angle, framing, character actions, lighting cues, and atmosphere
+	systemPrompt := `Eres un director de fotografía y narrative designer. A partir de una descripción de escena, archivos de referencia e instrucciones del usuario, genera un shotlist estructurado para un spot publicitario cinematográfico.
 
-Return a valid JSON object with this exact structure:
+Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta — sin markdown, sin comentarios, sin texto adicional:
+
 {
+  "title": "Título del proyecto",
+  "scene": "Ubicación — Escena — Continuidad",
+  "totalDuration": 80,
+  "durationCap": 80,
   "shots": [
-    { "number": 1, "name": "Establishing wide", "description": "Wide shot of the warehouse interior..." },
-    { "number": 2, "name": "Close-up protagonist", "description": "Close-up on John's face..." }
-  ]
+    {
+      "id": "A",
+      "beat": "HOOK",
+      "duration": 11,
+      "cuts": 2,
+      "title": "Nombre del plano",
+      "spike": false,
+      "prompt": "Prompt completo EN para Seedance (descripción visual, encuadre, movimiento, actuación, sonido, captura)",
+      "promptZh": "Prompt completo 中文 para Seedance",
+      "guide": {
+        "scene": "Descripción de la escena",
+        "type": "Tipo de plano",
+        "cuts": [["1", "0-6s descripción"], ["2", "6-11s descripción"]],
+        "important": "Nota clave de dirección"
+      }
+    }
+  ],
+  "conventions": [
+    {"label": "Formato", "value": "9:16 vertical"},
+    {"label": "FPS", "value": "24fps - 180°"}
+  ],
+  "faceToFaceRule": "Regla cara-a-cara para planos con más de un personaje"
 }
 
-CRITICAL: The "description" field must be a complete, self-contained video-generation prompt (in English).
-CRITICAL: Return ONLY the JSON object, no markdown fences, no extra text.`
-	}
+CRITICAL: La duración total de todos los shots NO debe exceder durationCap.
+CRITICAL: shots[].prompt debe ser un prompt completo y auto-contenido para generación de video Seedance en inglés.
+CRITICAL: shots[].promptZh debe ser la traducción al chino del mismo prompt.`
 
 	modelName := req.Model
 	if modelName == "" {
@@ -205,12 +223,12 @@ func (h *Handler) callClaude(ctx context.Context, internalModel, systemPrompt, u
 	// 3. Create a per-request client with the resolved API key
 	client := anthropic.NewClient(
 		option.WithAPIKey(apiKey),
-		option.WithRequestTimeout(60*time.Second),
+		option.WithRequestTimeout(3*time.Minute),
 	)
 
 	resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     apiModel,
-		MaxTokens: 4096,
+		MaxTokens: 8192,
 		System: []anthropic.TextBlockParam{{
 			Text: systemPrompt,
 			CacheControl: anthropic.CacheControlEphemeralParam{
