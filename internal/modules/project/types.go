@@ -216,3 +216,40 @@ type SceneAssignments struct {
 	Characters []SceneCharacterAssignment `json:"characters"`
 	Assets     []SceneAssetAssignment     `json:"assets"`
 }
+
+// ─── Shot Resources ───────────────────────────────────────────
+
+type ShotCharacterAssignment struct {
+	ID          string    `json:"id"`
+	ShotID      string    `json:"shot_id"`
+	CharacterID string    `json:"character_id"`
+	Name        string    `json:"name"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type ShotAssetAssignment struct {
+	ID        string    `json:"id"`
+	ShotID    string    `json:"shot_id"`
+	FileID    string    `json:"file_id"`
+	Filename  string    `json:"filename"`
+	MimeType  string    `json:"mime_type"`
+	Slot      string    `json:"slot"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ShotPresetAssignment struct {
+	ID        string    `json:"id"`
+	ShotID    string    `json:"shot_id"`
+	PresetID  string    `json:"preset_id"`
+	Code      string    `json:"code"`
+	Label     string    `json:"label"`
+	Prompt    string    `json:"prompt"`
+	GroupSlug string    `json:"group_slug"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ShotResources struct {
+	Characters []ShotCharacterAssignment `json:"characters"`
+	Assets     []ShotAssetAssignment     `json:"assets"`
+	Presets    []ShotPresetAssignment    `json:"presets"`
+}

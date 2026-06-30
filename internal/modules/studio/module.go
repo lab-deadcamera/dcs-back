@@ -38,6 +38,8 @@ type textHandler interface {
 	GetStatus(c *gin.Context)
 	CancelTask(c *gin.Context)
 	PreviewPayload(c *gin.Context)
+	ClaudeGenerateShots(c *gin.Context)
+	ClaudeOptimizePrompt(c *gin.Context)
 }
 
 func NewModule(hdl *Handler, videoHdl videoHandler, imageHdl imageHandler, audioHdl audioHandler, textHdl textHandler) *Module {
@@ -104,6 +106,12 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 			text.GET("/status/:taskId", m.textHdl.GetStatus)
 			text.DELETE("/task/:taskId", m.textHdl.CancelTask)
 			text.POST("/preview", m.textHdl.PreviewPayload)
+
+			claude := text.Group("/claude")
+			{
+				claude.POST("/generate-shots", m.textHdl.ClaudeGenerateShots)
+				claude.POST("/optimize-prompt", m.textHdl.ClaudeOptimizePrompt)
+			}
 		}
 	}
 }

@@ -66,6 +66,17 @@ type projectStore interface {
 	RemoveScenePreset(assignmentID string) error
 	RemoveSceneCharacter(assignmentID string) error
 	RemoveSceneAsset(assignmentID string) error
+
+	GetShotCharacters(shotID string) ([]ShotCharacterAssignment, error)
+	GetShotAssets(shotID string) ([]ShotAssetAssignment, error)
+	GetShotPresets(shotID string) ([]ShotPresetAssignment, error)
+	AssignCharacterToShot(shotID, characterID string) (string, error)
+	AssignAssetToShot(shotID, fileID, slot string) (string, error)
+	AssignPresetToShot(shotID, presetID string) (string, error)
+	RemoveShotCharacter(assignmentID string) error
+	RemoveShotAsset(assignmentID string) error
+	RemoveShotPreset(assignmentID string) error
+	UpdateShotModel(shotID, modelID string) error
 }
 
 type Service struct {
@@ -811,6 +822,56 @@ func (s *Service) RemoveSceneCharacter(assignmentID string) error {
 
 func (s *Service) RemoveSceneAsset(assignmentID string) error {
 	return s.store.RemoveSceneAsset(assignmentID)
+}
+
+// ─── Shot Resources ────────────────────────────────────────────
+
+func (s *Service) GetShotResources(shotID string) (*ShotResources, error) {
+	characters, err := s.store.GetShotCharacters(shotID)
+	if err != nil {
+		return nil, err
+	}
+	assets, err := s.store.GetShotAssets(shotID)
+	if err != nil {
+		return nil, err
+	}
+	presets, err := s.store.GetShotPresets(shotID)
+	if err != nil {
+		return nil, err
+	}
+	return &ShotResources{
+		Characters: characters,
+		Assets:     assets,
+		Presets:    presets,
+	}, nil
+}
+
+func (s *Service) AssignCharacterToShot(shotID, characterID string) (string, error) {
+	return s.store.AssignCharacterToShot(shotID, characterID)
+}
+
+func (s *Service) AssignAssetToShot(shotID, fileID, slot string) (string, error) {
+	return s.store.AssignAssetToShot(shotID, fileID, slot)
+}
+
+func (s *Service) AssignPresetToShot(shotID, presetID string) (string, error) {
+	return s.store.AssignPresetToShot(shotID, presetID)
+}
+
+func (s *Service) RemoveShotCharacter(assignmentID string) error {
+	return s.store.RemoveShotCharacter(assignmentID)
+}
+
+func (s *Service) RemoveShotAsset(assignmentID string) error {
+	return s.store.RemoveShotAsset(assignmentID)
+}
+
+func (s *Service) RemoveShotPreset(assignmentID string) error {
+	return s.store.RemoveShotPreset(assignmentID)
+}
+
+func (s *Service) UpdateShotModel(shotID, modelID string) error {
+	return s.store.UpdateShotModel(shotID, modelID)
 }
 
 // DownloadTakeVideo downloads the external video for a take and saves it

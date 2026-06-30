@@ -730,3 +730,149 @@ func (s *ProjectStore) RemoveSceneAsset(assignmentID string) error {
 	}
 	return nil
 }
+
+// ─── Shot Resources Store ──────────────────────────────────────────
+
+func (s *ProjectStore) GetShotCharacters(shotID string) ([]ShotCharacterAssignment, error) {
+	query := `SELECT sc.id, sc.shot_id, sc.character_id, c.name, sc.created_at
+			FROM shot_characters sc
+			JOIN characters c ON c.id = sc.character_id
+			WHERE sc.shot_id = $1
+			ORDER BY c.name`
+	rows, err := s.db.Query(query, shotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ShotCharacterAssignment
+	for rows.Next() {
+		var a ShotCharacterAssignment
+		if err := rows.Scan(&a.ID, &a.ShotID, &a.CharacterID, &a.Name, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (s *ProjectStore) GetShotAssets(shotID string) ([]ShotAssetAssignment, error) {
+	query := `SELECT sa.id, sa.shot_id, sa.file_id, f.filename, f.mime_type, sa.slot, sa.created_at
+			FROM shot_assets sa
+			JOIN files f ON f.id = sa.file_id
+			WHERE sa.shot_id = $1
+			ORDER BY f.filename`
+	rows, err := s.db.Query(query, shotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ShotAssetAssignment
+	for rows.Next() {
+		var a ShotAssetAssignment
+		if err := rows.Scan(&a.ID, &a.ShotID, &a.FileID, &a.Filename, &a.MimeType, &a.Slot, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (s *ProjectStore) GetShotPresets(shotID string) ([]ShotPresetAssignment, error) {
+	query := `SELECT sp.id, sp.shot_id, sp.preset_id, p.code, p.label, p.prompt, pg.slug AS group_slug, sp.created_at
+			FROM shot_presets sp
+			JOIN presets p ON p.id = sp.preset_id
+			JOIN preset_groups pg ON pg.id = p.group_id
+			WHERE sp.shot_id = $1
+			ORDER BY pg.slug, p.code`
+	rows, err := s.db.Query(query, shotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ShotPresetAssignment
+	for rows.Next() {
+		var a ShotPresetAssignment
+		if err := rows.Scan(&a.ID, &a.ShotID, &a.PresetID, &a.Code, &a.Label, &a.Prompt, &a.GroupSlug, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (s *ProjectStore) AssignCharacterToShot(shotID, characterID string) (string, error) {
+	var id string
+	query := `INSERT INTO shot_characters (id, shot_id, character_id)
+		VALUES (gen_random_uuid(), $1, $2)
+		RETURNING id`
+	err := s.db.QueryRow(query, shotID, characterID).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) AssignAssetToShot(shotID, fileID, slot string) (string, error) {
+	var id string
+	query := `INSERT INTO shot_assets (id, shot_id, file_id, slot)
+		VALUES (gen_random_uuid(), $1, $2, $3)
+		RETURNING id`
+	err := s.db.QueryRow(query, shotID, fileID, slot).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) AssignPresetToShot(shotID, presetID string) (string, error) {
+	var id string
+	query := `INSERT INTO shot_presets (id, shot_id, preset_id)
+		VALUES (gen_random_uuid(), $1, $2)
+		RETURNING id`
+	err := s.db.QueryRow(query, shotID, presetID).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) RemoveShotCharacter(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM shot_characters WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) RemoveShotAsset(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM shot_assets WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) RemoveShotPreset(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM shot_presets WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) UpdateShotModel(shotID, modelID string) error {
+	_, err := s.db.Exec(`UPDATE shots SET model_id = $2 WHERE id = $1`, shotID, modelID)
+	return err
+}

@@ -52,6 +52,10 @@ type Service struct {
 	mu                   sync.RWMutex
 }
 
+func (s *Service) GetProviderStore() *provider.Store {
+	return s.providerStore
+}
+
 func NewService(providerStore *provider.Store, fileService *file.Service, outputsDir, baseURL string) *Service {
 	return &Service{
 		providerStore: providerStore,

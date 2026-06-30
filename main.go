@@ -140,7 +140,7 @@ func main() {
 	projectStore := project.NewStore(database)
 	studioImageHdl := studioimage.NewHandler(imgSvc)
 	studioAudioHdl := studioaudio.NewHandler(studioSvc)
-	studioTextHdl := studiotext.NewHandler(studioSvc)
+	studioTextHdl := studiotext.NewHandler(studioSvc.GetProviderStore())
 	projectSvc := project.NewService(projectStore)
 	projectSvc.SetTaskLookup(func(taskID string) string {
 		sr, err := studioSvc.GetStatus(taskID)

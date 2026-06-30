@@ -406,6 +406,48 @@ func (m *mockStore) RemoveSceneAsset(assignmentID string) error {
 	return nil
 }
 
+// ── Shot Resources (mock) ─────────────────────────────────────
+
+func (m *mockStore) GetShotCharacters(shotID string) ([]ShotCharacterAssignment, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetShotAssets(shotID string) ([]ShotAssetAssignment, error) {
+	return nil, nil
+}
+
+func (m *mockStore) GetShotPresets(shotID string) ([]ShotPresetAssignment, error) {
+	return nil, nil
+}
+
+func (m *mockStore) AssignCharacterToShot(shotID, characterID string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStore) AssignAssetToShot(shotID, fileID, slot string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStore) AssignPresetToShot(shotID, presetID string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStore) RemoveShotCharacter(assignmentID string) error {
+	return nil
+}
+
+func (m *mockStore) RemoveShotAsset(assignmentID string) error {
+	return nil
+}
+
+func (m *mockStore) RemoveShotPreset(assignmentID string) error {
+	return nil
+}
+
+func (m *mockStore) UpdateShotModel(shotID, modelID string) error {
+	return nil
+}
+
 // ─── Tests ──────────────────────────────────────────────────────
 
 func TestCreateProject(t *testing.T) {
