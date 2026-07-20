@@ -349,6 +349,8 @@ func (s *Service) CreateShot(sceneID string, req *CreateShotRequest) (*Shot, err
 		Name:        req.Name,
 		Description: req.Description,
 		Active:      true,
+		AspectRatio:     req.AspectRatio,
+		DurationSeconds: req.DurationSeconds,
 	}
 	if err := s.store.CreateShot(sh); err != nil {
 		return nil, err
@@ -399,6 +401,12 @@ func (s *Service) UpdateShot(id string, req *UpdateShotRequest) (*Shot, error) {
 	}
 	if req.Active != nil {
 		updates["active"] = *req.Active
+	}
+	if req.AspectRatio != nil {
+		updates["aspect_ratio"] = *req.AspectRatio
+	}
+	if req.DurationSeconds != nil {
+		updates["duration_seconds"] = *req.DurationSeconds
 	}
 
 	if err := s.store.UpdateShot(id, updates); err != nil {

@@ -306,19 +306,19 @@ func (s *ProjectStore) SoftDeleteScene(id string) error {
 const shotCols = `id, scene_id, number, COALESCE(name, '') AS name,
 	COALESCE(description, '') AS description, active,
 		(SELECT COUNT(*) FROM takes WHERE shot_id IS NOT NULL AND shot_id = shots.id AND deleted_at IS NULL) AS take_count,
-	created_at, updated_at, deleted_at`
+	aspect_ratio, duration_seconds, created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanShot(sh *Shot, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(&sh.ID, &sh.SceneID, &sh.Number, &sh.Name, &sh.Description, &sh.Active, &sh.TakeCount, &sh.CreatedAt, &sh.UpdatedAt, &sh.DeletedAt)
+	return scanner.Scan(&sh.ID, &sh.SceneID, &sh.Number, &sh.Name, &sh.Description, &sh.Active, &sh.TakeCount, &sh.AspectRatio, &sh.DurationSeconds, &sh.CreatedAt, &sh.UpdatedAt, &sh.DeletedAt)
 }
 
 func (s *ProjectStore) CreateShot(sh *Shot) error {
-	query := `INSERT INTO shots (id, scene_id, number, name, description, active)
-		VALUES ($1, $2, $3, $4, $5, $6)
+	query := `INSERT INTO shots (id, scene_id, number, name, description, active, aspect_ratio, duration_seconds)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, sh.ID, sh.SceneID, sh.Number, sh.Name, sh.Description, sh.Active).
+	return s.db.QueryRow(query, sh.ID, sh.SceneID, sh.Number, sh.Name, sh.Description, sh.Active, sh.AspectRatio, sh.DurationSeconds).
 		Scan(&sh.CreatedAt, &sh.UpdatedAt)
 }
 

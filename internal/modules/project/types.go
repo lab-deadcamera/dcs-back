@@ -89,29 +89,35 @@ type UpdateSceneRequest struct {
 // ─── Shot ───────────────────────────────────────────────────────
 
 type Shot struct {
-	ID          string     `json:"id"`
-	SceneID     string     `json:"scene_id"`
-	Number      int        `json:"number"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	Active      bool       `json:"active"`
-	TakeCount   int        `json:"take_count"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+	ID              string     `json:"id"`
+	SceneID         string     `json:"scene_id"`
+	Number          int        `json:"number"`
+	Name            string     `json:"name"`
+	Description     string     `json:"description"`
+	Active          bool       `json:"active"`
+	TakeCount       int        `json:"take_count"`
+	AspectRatio     *string    `json:"aspect_ratio,omitempty"`
+	DurationSeconds *int       `json:"duration_seconds,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
 }
 
 type CreateShotRequest struct {
-	Number      int    `json:"number" binding:"required"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Number          int     `json:"number" binding:"required"`
+	Name            string  `json:"name"`
+	Description     string  `json:"description"`
+	AspectRatio     *string `json:"aspect_ratio,omitempty"`
+	DurationSeconds *int    `json:"duration_seconds,omitempty"`
 }
 
 type UpdateShotRequest struct {
-	Number      *int    `json:"number"`
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
-	Active      *bool   `json:"active"`
+	Number          *int    `json:"number"`
+	Name            *string `json:"name"`
+	Description     *string `json:"description"`
+	Active          *bool   `json:"active"`
+	AspectRatio     *string `json:"aspect_ratio,omitempty"`
+	DurationSeconds *int    `json:"duration_seconds,omitempty"`
 }
 
 // ─── Take ───────────────────────────────────────────────────────
