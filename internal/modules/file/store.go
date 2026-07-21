@@ -176,7 +176,7 @@ func (s *Store) ListFilesPage(page, pageSize int, category, storage, search stri
 		page = 1
 	}
 	if pageSize < 1 || pageSize > 200 {
-		pageSize = 50
+		pageSize = 20
 	}
 
 	where := "WHERE trashed = false AND deleted_at IS NULL"
@@ -326,3 +326,4 @@ func (s *Store) ListExpiredTemp(maxAge time.Duration) ([]File, error) {
 	}
 	return files, nil
 }
+

@@ -7,7 +7,7 @@ func (s *Store) ListPage(page, pageSize int, search string) ([]Character, int, e
 		page = 1
 	}
 	if pageSize < 1 || pageSize > 200 {
-		pageSize = 50
+		pageSize = 20
 	}
 
 	where := "WHERE deleted_at IS NULL"
@@ -53,3 +53,4 @@ func (s *Store) ListPage(page, pageSize int, search string) ([]Character, int, e
 
 	return chars, total, nil
 }
+
