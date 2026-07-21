@@ -1,6 +1,8 @@
 package file
 
 import (
+	"strconv"
+
 	"dcs-back-v0/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -151,6 +153,21 @@ func (h *Handler) HardDelete(c *gin.Context) {
 		return
 	}
 	utils.Message(c, "file permanently deleted")
+}
+
+func (h *Handler) ListFilesPage(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
+	category := c.Query("category")
+	storage := c.Query("storage")
+	search := c.Query("q")
+
+	result, err := h.svc.ListFilesPage(page, pageSize, category, storage, search)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Success(c, result)
 }
 
 func (h *Handler) ListFiles(c *gin.Context) {

@@ -33,3 +33,11 @@ type TrashItem struct {
 	File         File   `json:"file"`
 	OriginalPath string `json:"original_path"`
 }
+
+type PaginatedFiles struct {
+	Items      []File `json:"items"`
+	Total      int    `json:"total"`
+	Page       int    `json:"page"`
+	PageSize   int    `json:"pageSize"`
+	TotalPages int    `json:"totalPages"`
+}

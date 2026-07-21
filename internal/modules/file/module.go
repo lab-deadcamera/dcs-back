@@ -24,6 +24,7 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 	{
 		g.POST("/upload", m.hdl.Upload)
 		g.GET("/trash", m.hdl.ListTrash)
+		g.GET("/page", m.hdl.ListFilesPage)
 		g.GET("", m.hdl.ListFiles)
 		g.GET("/:id", m.hdl.GetFile)
 		g.DELETE("/:id", m.hdl.SoftDelete)

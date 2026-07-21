@@ -171,6 +171,79 @@ func (s *Store) GetFileByID(id string) (*File, error) {
 	return f, nil
 }
 
+func (s *Store) ListFilesPage(page, pageSize int, category, storage, search string) (*PaginatedFiles, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 50
+	}
+
+	where := "WHERE trashed = false AND deleted_at IS NULL"
+	args := []interface{}{}
+	argIdx := 1
+
+	if category != "" {
+		where += fmt.Sprintf(" AND category = $%d", argIdx)
+		args = append(args, category)
+		argIdx++
+	}
+	if storage != "" {
+		where += fmt.Sprintf(" AND storage = $%d", argIdx)
+		args = append(args, storage)
+		argIdx++
+	}
+	if search != "" {
+		where += fmt.Sprintf(" AND filename ILIKE $%d", argIdx)
+		args = append(args, "%"+search+"%")
+		argIdx++
+	}
+
+	// Count total
+	var total int
+	countQuery := "SELECT COUNT(*) FROM files " + where
+	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, err
+	}
+
+	// Fetch page
+	offset := (page - 1) * pageSize
+	query := `SELECT id, filename, path, size, mime_type, category, format, storage, duration, trashed, created_at, updated_at, deleted_at
+		FROM files ` + where + ` ORDER BY created_at DESC LIMIT $` + fmt.Sprintf("%d", argIdx) + ` OFFSET $` + fmt.Sprintf("%d", argIdx+1)
+	args = append(args, pageSize, offset)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []File
+	for rows.Next() {
+		var f File
+		if err := rows.Scan(
+			&f.ID, &f.Filename, &f.Path, &f.Size, &f.MimeType,
+			&f.Category, &f.Format, &f.Storage, &f.Duration, &f.Trashed,
+			&f.CreatedAt, &f.UpdatedAt, &f.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	if files == nil {
+		files = []File{}
+	}
+
+	totalPages := (total + pageSize - 1) / pageSize
+	return &PaginatedFiles{
+		Items:      files,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}, nil
+}
+
 func (s *Store) ListFiles(category, storage string, trashed bool) ([]File, error) {
 	deletedClause := "deleted_at IS NULL"
 	if trashed {

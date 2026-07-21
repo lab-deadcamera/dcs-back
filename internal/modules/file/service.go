@@ -224,6 +224,10 @@ func (s *Service) GetThumbnailPath(id string) (string, error) {
 	return s.store.GenerateThumbnail(f.Path, 300, 300)
 }
 
+func (s *Service) ListFilesPage(page, pageSize int, category, storage, search string) (*PaginatedFiles, error) {
+	return s.store.ListFilesPage(page, pageSize, category, storage, search)
+}
+
 func (s *Service) ListFiles(category, storage string, trashed bool) ([]File, error) {
 	return s.store.ListFiles(category, storage, trashed)
 }
