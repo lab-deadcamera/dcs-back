@@ -20,6 +20,7 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 	{
 		g.POST("", m.hdl.Create)
 		g.GET("", m.hdl.List)
+			g.GET("/page", m.hdl.ListPage)
 		g.GET("/:id", m.hdl.GetByID)
 		g.PATCH("/:id", m.hdl.Update)
 		g.DELETE("/:id", m.hdl.SoftDelete)
