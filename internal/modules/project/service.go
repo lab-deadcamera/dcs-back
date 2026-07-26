@@ -67,9 +67,6 @@ type projectStore interface {
 	RemoveSceneCharacter(assignmentID string) error
 	RemoveSceneAsset(assignmentID string) error
 
-	GetShotCharacters(shotID string) ([]ShotCharacterAssignment, error)
-	GetShotAssets(shotID string) ([]ShotAssetAssignment, error)
-	GetShotPresets(shotID string) ([]ShotPresetAssignment, error)
 	AssignCharacterToShot(shotID, characterID, slot string) (string, error)
 	AssignAssetToShot(shotID, fileID, slot string) (string, error)
 	AssignPresetToShot(shotID, presetID string) (string, error)
@@ -834,25 +831,6 @@ func (s *Service) RemoveSceneAsset(assignmentID string) error {
 
 // ─── Shot Resources ────────────────────────────────────────────
 
-func (s *Service) GetShotResources(shotID string) (*ShotResources, error) {
-	characters, err := s.store.GetShotCharacters(shotID)
-	if err != nil {
-		return nil, err
-	}
-	assets, err := s.store.GetShotAssets(shotID)
-	if err != nil {
-		return nil, err
-	}
-	presets, err := s.store.GetShotPresets(shotID)
-	if err != nil {
-		return nil, err
-	}
-	return &ShotResources{
-		Characters: characters,
-		Assets:     assets,
-		Presets:    presets,
-	}, nil
-}
 
 func (s *Service) AssignCharacterToShot(shotID, characterID, slot string) (string, error) {
 	return s.store.AssignCharacterToShot(shotID, characterID, slot)

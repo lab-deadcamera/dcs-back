@@ -408,17 +408,8 @@ func (m *mockStore) RemoveSceneAsset(assignmentID string) error {
 
 // ── Shot Resources (mock) ─────────────────────────────────────
 
-func (m *mockStore) GetShotCharacters(shotID string) ([]ShotCharacterAssignment, error) {
-	return nil, nil
-}
 
-func (m *mockStore) GetShotAssets(shotID string) ([]ShotAssetAssignment, error) {
-	return nil, nil
-}
 
-func (m *mockStore) GetShotPresets(shotID string) ([]ShotPresetAssignment, error) {
-	return nil, nil
-}
 
 func (m *mockStore) AssignCharacterToShot(shotID, characterID, slot string) (string, error) {
 	return "", nil

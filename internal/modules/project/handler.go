@@ -774,19 +774,6 @@ func (h *Handler) RemoveSceneAsset(c *gin.Context) {
 
 // ─── Shot Resources ────────────────────────────────────────────────
 
-func (h *Handler) GetShotResources(c *gin.Context) {
-	shotID := c.Param("shotId")
-	if shotID == "" {
-		utils.BadRequest(c, "shotId is required")
-		return
-	}
-	result, err := h.svc.GetShotResources(shotID)
-	if err != nil {
-		utils.InternalError(c, err.Error())
-		return
-	}
-	utils.Success(c, result)
-}
 
 func (h *Handler) AssignCharacterToShot(c *gin.Context) {
 	shotID := c.Param("shotId")

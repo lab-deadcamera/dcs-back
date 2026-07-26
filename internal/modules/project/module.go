@@ -76,7 +76,6 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, adminMw gin.HandlerFunc) 
 	// ── Shot Resources ──────────────────────────────────────
 	shotRes := g.Group("/:id/chapters/:chapterId/scenes/:sceneId/shots/:shotId/resources")
 	{
-		shotRes.GET("", m.hdl.GetShotResources)
 		shotRes.POST("/characters", m.hdl.AssignCharacterToShot)
 		shotRes.DELETE("/characters/:assignmentId", m.hdl.RemoveShotCharacter)
 		shotRes.POST("/assets", m.hdl.AssignAssetToShot)
