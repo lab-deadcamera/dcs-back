@@ -72,6 +72,7 @@ Delivers a **Seedance Shotlist** with beats, duration, references, and a final p
 ## Output format
 
 Return ONLY a valid JSON object — NO markdown fences, NO comments, NO extra text:
+IMPORTANT: Do NOT use double quotes (") inside any string value. If you need quotation marks in text (e.g., for dialogue or Chinese prompts), use single quotes (') or Chinese angle brackets 「」 instead.
 
 {
   "description": "Wyatt & Mike - Fraternal conflict in the living room",
@@ -536,12 +537,20 @@ func buildSceneContextBlock(ctx *SceneContext) string {
 	}
 
 	if len(ctx.Characters) > 0 {
-		parts = append(parts, "Characters:")
+		parts = append(parts, "Characters (use the id field as assetId):")
 		for _, c := range ctx.Characters {
+			slotInfo := ""
+			if c.Slot != "" {
+				slotInfo = fmt.Sprintf(" [slot: %s]", c.Slot)
+			}
+			idInfo := ""
+			if c.ID != "" {
+				idInfo = fmt.Sprintf(" [id: %s]", c.ID)
+			}
 			if c.Description != "" {
-				parts = append(parts, fmt.Sprintf("  - %s: %s", c.Name, c.Description))
+				parts = append(parts, fmt.Sprintf("  - %s: %s%s%s", c.Name, c.Description, slotInfo, idInfo))
 			} else {
-				parts = append(parts, fmt.Sprintf("  - %s", c.Name))
+				parts = append(parts, fmt.Sprintf("  - %s%s%s", c.Name, slotInfo, idInfo))
 			}
 		}
 	}
@@ -560,7 +569,11 @@ func buildSceneContextBlock(ctx *SceneContext) string {
 	if len(ctx.Assets) > 0 {
 		parts = append(parts, "Reference assets:")
 		for _, a := range ctx.Assets {
-			parts = append(parts, fmt.Sprintf("  - %s (%s)", a.Filename, a.MimeType))
+			idInfo := ""
+			if a.ID != "" {
+				idInfo = fmt.Sprintf(" [id: %s]", a.ID)
+			}
+			parts = append(parts, fmt.Sprintf("  - %s (%s)%s", a.Filename, a.MimeType, idInfo))
 		}
 	}
 

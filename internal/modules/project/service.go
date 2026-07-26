@@ -61,7 +61,7 @@ type projectStore interface {
 	GetSceneCharacters(sceneID string) ([]SceneCharacterAssignment, error)
 	GetSceneAssets(sceneID string) ([]SceneAssetAssignment, error)
 	AssignPresetToScene(sceneID, presetID string) (string, error)
-	AssignCharacterToScene(sceneID, characterID string) (string, error)
+	AssignCharacterToScene(sceneID, characterID, slot string) (string, error)
 	AssignAssetToScene(sceneID, fileID string) (string, error)
 	RemoveScenePreset(assignmentID string) error
 	RemoveSceneCharacter(assignmentID string) error
@@ -70,7 +70,7 @@ type projectStore interface {
 	GetShotCharacters(shotID string) ([]ShotCharacterAssignment, error)
 	GetShotAssets(shotID string) ([]ShotAssetAssignment, error)
 	GetShotPresets(shotID string) ([]ShotPresetAssignment, error)
-	AssignCharacterToShot(shotID, characterID string) (string, error)
+	AssignCharacterToShot(shotID, characterID, slot string) (string, error)
 	AssignAssetToShot(shotID, fileID, slot string) (string, error)
 	AssignPresetToShot(shotID, presetID string) (string, error)
 	RemoveShotCharacter(assignmentID string) error
@@ -812,8 +812,8 @@ func (s *Service) AssignPresetToScene(sceneID, presetID string) (string, error) 
 	return s.store.AssignPresetToScene(sceneID, presetID)
 }
 
-func (s *Service) AssignCharacterToScene(sceneID, characterID string) (string, error) {
-	return s.store.AssignCharacterToScene(sceneID, characterID)
+func (s *Service) AssignCharacterToScene(sceneID, characterID, slot string) (string, error) {
+	return s.store.AssignCharacterToScene(sceneID, characterID, slot)
 }
 
 func (s *Service) AssignAssetToScene(sceneID, fileID string) (string, error) {
@@ -854,8 +854,8 @@ func (s *Service) GetShotResources(shotID string) (*ShotResources, error) {
 	}, nil
 }
 
-func (s *Service) AssignCharacterToShot(shotID, characterID string) (string, error) {
-	return s.store.AssignCharacterToShot(shotID, characterID)
+func (s *Service) AssignCharacterToShot(shotID, characterID, slot string) (string, error) {
+	return s.store.AssignCharacterToShot(shotID, characterID, slot)
 }
 
 func (s *Service) AssignAssetToShot(shotID, fileID, slot string) (string, error) {

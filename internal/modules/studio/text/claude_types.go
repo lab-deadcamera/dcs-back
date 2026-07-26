@@ -3,8 +3,10 @@ package text
 // ─── Scene Context (used by both Shot Builder and Proncer) ───────
 
 type SceneContextCharacter struct {
+	ID          string `json:"id,omitempty"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
+	Slot        string `json:"slot,omitempty"`
 }
 
 type SceneContextPreset struct {
@@ -14,6 +16,7 @@ type SceneContextPreset struct {
 }
 
 type SceneContextAsset struct {
+	ID       string `json:"id,omitempty"`
 	Filename string `json:"filename"`
 	MimeType string `json:"mime_type"`
 }

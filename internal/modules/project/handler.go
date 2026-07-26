@@ -694,12 +694,13 @@ func (h *Handler) AssignCharacterToScene(c *gin.Context) {
 	sceneID := c.Param("sceneId")
 	var req struct {
 		CharacterID string `json:"character_id" binding:"required"`
+		Slot        string `json:"slot"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.BadRequest(c, err.Error())
 		return
 	}
-	id, err := h.svc.AssignCharacterToScene(sceneID, req.CharacterID)
+	id, err := h.svc.AssignCharacterToScene(sceneID, req.CharacterID, req.Slot)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
 			utils.BadRequest(c, "character already assigned to this scene")
@@ -791,12 +792,13 @@ func (h *Handler) AssignCharacterToShot(c *gin.Context) {
 	shotID := c.Param("shotId")
 	var req struct {
 		CharacterID string `json:"character_id" binding:"required"`
+		Slot        string `json:"slot"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.BadRequest(c, err.Error())
 		return
 	}
-	id, err := h.svc.AssignCharacterToShot(shotID, req.CharacterID)
+	id, err := h.svc.AssignCharacterToShot(shotID, req.CharacterID, req.Slot)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
 			utils.BadRequest(c, "character already assigned to this shot")

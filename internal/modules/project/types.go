@@ -205,6 +205,8 @@ type SceneCharacterAssignment struct {
 	SceneID     string    `json:"scene_id"`
 	CharacterID string    `json:"character_id"`
 	Name        string    `json:"name"`
+	Slot        string    `json:"slot"`
+	FileID      string    `json:"file_id"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -230,6 +232,8 @@ type ShotCharacterAssignment struct {
 	ShotID      string    `json:"shot_id"`
 	CharacterID string    `json:"character_id"`
 	Name        string    `json:"name"`
+	Slot        string    `json:"slot"`
+	FileID      string    `json:"file_id"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 

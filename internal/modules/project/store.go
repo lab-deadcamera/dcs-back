@@ -617,9 +617,33 @@ func (s *ProjectStore) GetScenePresets(sceneID string) ([]ScenePresetAssignment,
 }
 
 func (s *ProjectStore) GetSceneCharacters(sceneID string) ([]SceneCharacterAssignment, error) {
-	query := `SELECT sc.id, sc.scene_id, sc.character_id, c.name, sc.created_at
+		// Auto-assign @imageN slots to any characters that still have NULL slot
+	// (legacy data created before the slot column migration).
+	var nullCount int
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM scene_characters WHERE scene_id = $1 AND slot IS NULL`, sceneID).Scan(&nullCount)
+	if nullCount > 0 {
+		var offset int
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM scene_characters WHERE scene_id = $1 AND slot IS NOT NULL`, sceneID).Scan(&offset)
+		s.db.Exec(`
+			UPDATE scene_characters sc
+			SET slot = '@image' || (($2::int) + sub.rn)
+			FROM (
+				SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn
+				FROM scene_characters
+				WHERE scene_id = $1 AND slot IS NULL
+			) sub
+			WHERE sc.id = sub.id`, sceneID, offset)
+	}
+
+query := `SELECT sc.id, sc.scene_id, sc.character_id, c.name, COALESCE(sc.slot, ''),
+				COALESCE(cf.file_id::text, '') AS file_id, sc.created_at
 			FROM scene_characters sc
 			JOIN characters c ON c.id = sc.character_id
+			LEFT JOIN LATERAL (
+				SELECT cf2.file_id FROM character_files cf2
+				WHERE cf2.character_id = c.id
+				ORDER BY cf2.created_at LIMIT 1
+			) cf ON true
 			WHERE sc.scene_id = $1
 			ORDER BY c.name`
 	rows, err := s.db.Query(query, sceneID)
@@ -631,7 +655,7 @@ func (s *ProjectStore) GetSceneCharacters(sceneID string) ([]SceneCharacterAssig
 	var items []SceneCharacterAssignment
 	for rows.Next() {
 		var a SceneCharacterAssignment
-		if err := rows.Scan(&a.ID, &a.SceneID, &a.CharacterID, &a.Name, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.SceneID, &a.CharacterID, &a.Name, &a.Slot, &a.FileID, &a.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, a)
@@ -674,12 +698,12 @@ func (s *ProjectStore) AssignPresetToScene(sceneID, presetID string) (string, er
 	return id, nil
 }
 
-func (s *ProjectStore) AssignCharacterToScene(sceneID, characterID string) (string, error) {
+func (s *ProjectStore) AssignCharacterToScene(sceneID, characterID, slot string) (string, error) {
 	var id string
-	query := `INSERT INTO scene_characters (id, scene_id, character_id)
-		VALUES (gen_random_uuid(), $1, $2)
+	query := `INSERT INTO scene_characters (id, scene_id, character_id, slot)
+		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''))
 		RETURNING id`
-	err := s.db.QueryRow(query, sceneID, characterID).Scan(&id)
+	err := s.db.QueryRow(query, sceneID, characterID, slot).Scan(&id)
 	if err != nil {
 		return "", err
 	}
@@ -734,9 +758,15 @@ func (s *ProjectStore) RemoveSceneAsset(assignmentID string) error {
 // ─── Shot Resources Store ──────────────────────────────────────────
 
 func (s *ProjectStore) GetShotCharacters(shotID string) ([]ShotCharacterAssignment, error) {
-	query := `SELECT sc.id, sc.shot_id, sc.character_id, c.name, sc.created_at
+	query := `SELECT sc.id, sc.shot_id, sc.character_id, c.name, COALESCE(sc.slot, ''),
+				COALESCE(cf.file_id::text, '') AS file_id, sc.created_at
 			FROM shot_characters sc
 			JOIN characters c ON c.id = sc.character_id
+			LEFT JOIN LATERAL (
+				SELECT cf2.file_id FROM character_files cf2
+				WHERE cf2.character_id = c.id
+				ORDER BY cf2.created_at LIMIT 1
+			) cf ON true
 			WHERE sc.shot_id = $1
 			ORDER BY c.name`
 	rows, err := s.db.Query(query, shotID)
@@ -748,7 +778,7 @@ func (s *ProjectStore) GetShotCharacters(shotID string) ([]ShotCharacterAssignme
 	var items []ShotCharacterAssignment
 	for rows.Next() {
 		var a ShotCharacterAssignment
-		if err := rows.Scan(&a.ID, &a.ShotID, &a.CharacterID, &a.Name, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.ShotID, &a.CharacterID, &a.Name, &a.Slot, &a.FileID, &a.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, a)
@@ -803,12 +833,12 @@ func (s *ProjectStore) GetShotPresets(shotID string) ([]ShotPresetAssignment, er
 	return items, rows.Err()
 }
 
-func (s *ProjectStore) AssignCharacterToShot(shotID, characterID string) (string, error) {
+func (s *ProjectStore) AssignCharacterToShot(shotID, characterID, slot string) (string, error) {
 	var id string
-	query := `INSERT INTO shot_characters (id, shot_id, character_id)
-		VALUES (gen_random_uuid(), $1, $2)
+	query := `INSERT INTO shot_characters (id, shot_id, character_id, slot)
+		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''))
 		RETURNING id`
-	err := s.db.QueryRow(query, shotID, characterID).Scan(&id)
+	err := s.db.QueryRow(query, shotID, characterID, slot).Scan(&id)
 	if err != nil {
 		return "", err
 	}

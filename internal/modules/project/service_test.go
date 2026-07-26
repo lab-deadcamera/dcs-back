@@ -386,7 +386,7 @@ func (m *mockStore) AssignPresetToScene(sceneID, presetID string) (string, error
 	return "", nil
 }
 
-func (m *mockStore) AssignCharacterToScene(sceneID, characterID string) (string, error) {
+func (m *mockStore) AssignCharacterToScene(sceneID, characterID, slot string) (string, error) {
 	return "", nil
 }
 
@@ -420,7 +420,7 @@ func (m *mockStore) GetShotPresets(shotID string) ([]ShotPresetAssignment, error
 	return nil, nil
 }
 
-func (m *mockStore) AssignCharacterToShot(shotID, characterID string) (string, error) {
+func (m *mockStore) AssignCharacterToShot(shotID, characterID, slot string) (string, error) {
 	return "", nil
 }
 
