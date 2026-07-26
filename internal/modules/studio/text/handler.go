@@ -379,8 +379,8 @@ func (h *Handler) ClaudeOptimizePrompt(c *gin.Context) {
 		promptParts = append(promptParts, buildSceneContextBlock(req.SceneContext))
 	}
 
-	// Resolve system prompt: skill > request > hardcoded default
-	systemPrompt := h.resolveSystemPrompt(req.SkillID, req.SystemPrompt)
+	// Resolve system prompt: skill > request > proncer default
+	systemPrompt := h.resolveSystemPromptStrict(req.SkillID, req.SystemPrompt)
 	if systemPrompt == "" {
 		systemPrompt = defaultProncerPrompt
 	}
@@ -437,6 +437,28 @@ func (h *Handler) resolveSystemPrompt(skillID, requestPrompt string) string {
 	}
 
 	return defaultShotBuilderPrompt
+}
+
+// resolveSystemPromptStrict resolves the system prompt without falling
+// back to a hardcoded default. Returns "" when nothing is configured,
+// so the caller can supply its own default. Used by the proncer handler.
+func (h *Handler) resolveSystemPromptStrict(skillID, requestPrompt string) string {
+	if skillID != "" && h.skillSvc != nil {
+		skill, err := h.skillSvc.GetByID(skillID)
+		if err == nil && skill != nil && skill.SystemPrompt != "" {
+			log.Printf("[skill] using skill %q (%s) for system prompt", skill.Name, skill.ID)
+			return skill.SystemPrompt
+		}
+		if err != nil {
+			log.Printf("[skill] error looking up skill %q: %v", skillID, err)
+		}
+	}
+
+	if requestPrompt != "" {
+		return requestPrompt
+	}
+
+	return ""
 }
 
 // ─── Core Claude API call ─────────────────────────────────────────
