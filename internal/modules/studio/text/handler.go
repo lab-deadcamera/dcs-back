@@ -315,8 +315,24 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 		finalPrompt = buildSceneContextBlock(req.SceneContext) + "\n\n" + req.Prompt
 	}
 
-	// Resolve system prompt: skill > request > hardcoded default
-	systemPrompt := h.resolveSystemPrompt(req.SkillID, req.SystemPrompt)
+	// Build system prompt: start with the default shot builder schema,
+	// then APPEND the skill's system prompt on top (if any), so Claude
+	// still has the JSON output format and critical rules.
+	systemPrompt := defaultShotBuilderPrompt
+
+	if req.SkillID != "" && h.skillSvc != nil {
+		skill, err := h.skillSvc.GetByID(req.SkillID)
+		if err == nil && skill != nil && skill.SystemPrompt != "" {
+			log.Printf("[skill] appending skill %q (%s) to system prompt", skill.Name, skill.ID)
+			systemPrompt += "\n\n## Skill\n" + skill.SystemPrompt
+		} else if err != nil {
+			log.Printf("[skill] error looking up skill %q: %v", req.SkillID, err)
+		}
+	}
+
+	if req.SystemPrompt != "" {
+		systemPrompt += "\n\n## User instructions\n" + req.SystemPrompt
+	}
 
 	// Append zh-generation instruction when Chinese is disabled
 	if !req.GenerateZh {
