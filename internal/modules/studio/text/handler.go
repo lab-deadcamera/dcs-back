@@ -339,6 +339,10 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 		systemPrompt += "\n\nIMPORTANT: Do NOT generate Chinese prompts (prompt.zh). Only generate the English prompt (prompt.en) for each shot. Omit the prompt.zh field entirely from the JSON."
 	}
 
+	// Always generate output in English — titles, descriptions, and all
+	// text fields must be in English regardless of the user's prompt language.
+	systemPrompt += "\n\nLANGUAGE RULE: All output must be in English. Shot titles, descriptions, dialogue, scene context, and all text fields must use English only — even if the user's request is in Spanish or another language. This is a critical rule."
+
 	keyModel := req.Model
 	if keyModel == "" {
 		keyModel = "claude-shot-builder"
