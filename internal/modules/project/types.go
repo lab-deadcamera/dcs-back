@@ -135,6 +135,7 @@ type Take struct {
 	FinalizedAt    *time.Time `json:"finalized_at"`
 	TaskID         string     `json:"task_id,omitempty"`
 	RequestPayload string     `json:"request_payload,omitempty"`
+	Rating         int        `json:"rating"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
@@ -152,6 +153,7 @@ type UpdateTakeRequest struct {
 	Active        *bool   `json:"active"`
 	Final         *bool   `json:"final"`
 	TaskID        *string `json:"task_id"`
+	Rating        *int    `json:"rating"`
 }
 
 // ─── Combined responses ─────────────────────────────────────────

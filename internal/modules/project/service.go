@@ -508,6 +508,9 @@ func (s *Service) UpdateTake(id string, req *UpdateTakeRequest) (*Take, error) {
 	if req.TaskID != nil {
 		updates["task_id"] = *req.TaskID
 	}
+	if req.Rating != nil {
+		updates["rating"] = *req.Rating
+	}
 
 	if err := s.store.UpdateTake(id, updates); err != nil {
 		return nil, err
