@@ -640,13 +640,17 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 	// 1. Resolve API key from provider store
 	apiKey := h.resolveAPIKey(keyModel)
 
-	// 2. Create a per-request client with the resolved API key
+	// 2. Create a detached context so the API call survives client disconnects
+	apiCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	// 3. Create a per-request client with the resolved API key
 	client := anthropic.NewClient(
 		option.WithAPIKey(apiKey),
 		option.WithRequestTimeout(5*time.Minute),
 	)
 
-	resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
+	resp, err := client.Messages.New(apiCtx, anthropic.MessageNewParams{
 		Model:     apiModel,
 		MaxTokens: 16384,
 		System: []anthropic.TextBlockParam{{
