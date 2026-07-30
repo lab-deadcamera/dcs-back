@@ -657,9 +657,6 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 		}},
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(userPrompt)),
-			// Pre-fill with "{" so Claude starts in JSON mode and never
-			// outputs commentary before the JSON object.
-			anthropic.NewAssistantMessage(anthropic.NewTextBlock("{")),
 		},
 	})
 	if err != nil {
@@ -680,12 +677,10 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 	}
 
 	// Concatenar bloques de texto de la respuesta
-	// Prepend "{" because we pre-filled the assistant message with it
-	var reply strings.Builder
-	reply.WriteByte('{')
+	var reply string
 	for _, block := range resp.Content {
 		if block.Type == "text" {
-			reply.WriteString(block.Text)
+			reply += block.Text
 		}
 	}
 
@@ -697,7 +692,7 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 		resp.Usage.CacheCreationInputTokens,
 	)
 
-	return reply.String(), nil
+	return reply, nil
 }
 
 // resolveAPIKey looks up the API key for a model from the provider store.
