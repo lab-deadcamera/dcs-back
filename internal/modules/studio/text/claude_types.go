@@ -1,5 +1,164 @@
 package text
 
+// ─── Episode-level asset assignment ─────────────────────────────
+
+type EpisodeAsset struct {
+	Slot    string `json:"slot"`
+	AssetID string `json:"assetId"`
+	Type    string `json:"type"`
+}
+
+type Episode struct {
+	Title           string         `json:"title,omitempty"`
+	TotalDuration   int            `json:"totalDuration,omitempty"`
+	TotalShots      int            `json:"totalShots,omitempty"`
+	AssetAssignments []EpisodeAsset `json:"assetAssignments,omitempty"`
+}
+
+// ─── Scene-level types ──────────────────────────────────────────
+
+type SceneContinuity struct {
+	Location            string   `json:"location"`
+	LocationChange      bool     `json:"locationChange"`
+	TimeContinuity      string   `json:"timeContinuity"`
+	CharactersPresent   []string `json:"charactersPresent"`
+	EmotionalCarryover  string   `json:"emotionalCarryover,omitempty"`
+	PhysicalCarryover   string   `json:"physicalCarryover,omitempty"`
+	WardrobeCarryover   string   `json:"wardrobeCarryover,omitempty"`
+	Notes               []string `json:"notes,omitempty"`
+}
+
+type Camera struct {
+	Lens        string `json:"lens"`
+	Framing     string `json:"framing"`
+	Movement    string `json:"movement"`
+	FPS         int    `json:"fps"`
+	Shutter     string `json:"shutter"`
+	AspectRatio string `json:"aspectRatio"`
+}
+
+type Composition struct {
+	FrameMap        string `json:"frameMap"`
+	SubjectLock     string `json:"subjectLock"`
+	CrossFrameRules string `json:"crossFrameRules"`
+	Focus           string `json:"focus"`
+	Depth           string `json:"depth"`
+}
+
+type BlockingPosition struct {
+	SubjectID   string `json:"subjectId"`
+	Description string `json:"description"`
+}
+
+type Blocking struct {
+	Location    string             `json:"location"`
+	Movement    string             `json:"movement"`
+	Interaction string             `json:"interaction"`
+	Positions   []BlockingPosition `json:"positions"`
+}
+
+type Acting struct {
+	Emotion          string   `json:"emotion"`
+	BodyLanguage     string   `json:"bodyLanguage"`
+	Dialogue         string   `json:"dialogue"`
+	MicroExpressions []string `json:"microExpressions"`
+}
+
+type TimelineSegment struct {
+	Start int    `json:"start"`
+	End   int    `json:"end"`
+	Label string `json:"label"`
+}
+
+type TimelineBeat struct {
+	Start       int    `json:"start"`
+	End         int    `json:"end"`
+	Description string `json:"description"`
+}
+
+type Timeline struct {
+	Duration int               `json:"duration"`
+	Segments []TimelineSegment `json:"segments"`
+	Beats    []TimelineBeat    `json:"beats"`
+}
+
+type Audio struct {
+	Dialogue string   `json:"dialogue"`
+	Ambient  string   `json:"ambient"`
+	Sfx      []string `json:"sfx"`
+	Music    bool     `json:"music"`
+}
+
+type PromptPair struct {
+	En string `json:"en"`
+	Zh string `json:"zh,omitempty"`
+}
+
+type Render struct {
+	Mode   string `json:"mode"`
+	Engine string `json:"engine"`
+}
+
+type ShotNotes struct {
+	Todos    []string `json:"todos"`
+	Warnings []string `json:"warnings"`
+	Approved bool     `json:"approved"`
+}
+
+type ShotReference struct {
+	Slot    string `json:"slot"`
+	AssetID string `json:"assetId"`
+	Type    string `json:"type"`
+}
+
+type Shot struct {
+	ID          string      `json:"id"`
+	Title       string      `json:"title"`
+	Description string      `json:"description"`
+	Duration    int         `json:"duration"`
+	Start       int         `json:"start"`
+	End         int         `json:"end"`
+	Camera      Camera      `json:"camera"`
+	Composition Composition `json:"composition"`
+	Blocking    Blocking    `json:"blocking"`
+	Acting      Acting      `json:"acting"`
+	Timeline    Timeline    `json:"timeline"`
+	Audio       Audio       `json:"audio"`
+	References  []ShotReference `json:"references"`
+	Prompt      PromptPair  `json:"prompt"`
+	Render      Render      `json:"render"`
+	Notes       ShotNotes   `json:"notes"`
+}
+
+type SceneData struct {
+	ScriptNumber   int              `json:"scriptNumber"`
+	ScriptLocation string           `json:"scriptLocation"`
+	Title          string           `json:"title"`
+	Description    string           `json:"description"`
+	Duration       int              `json:"duration"`
+	Start          int              `json:"start"`
+	End            int              `json:"end"`
+	SceneType      string           `json:"sceneType"`
+	Mode           string           `json:"mode"`
+	Continuity     SceneContinuity  `json:"continuity"`
+	References     []ShotReference  `json:"references"`
+	Shots          []Shot           `json:"shots"`
+}
+
+type DirectorNotes struct {
+	Goal       string   `json:"goal"`
+	StyleGuide string   `json:"styleGuide"`
+	Warnings   []string `json:"warnings"`
+}
+
+// ─── Shots API response (legacy, used by create-shot endpoints) ─
+
+type ShotRecord struct {
+	ID     string `json:"id"`
+	Number int    `json:"number"`
+	Name   string `json:"name"`
+}
+
 // ─── Scene Context (used by both Shot Builder and Proncer) ───────
 
 type SceneContextCharacter struct {
@@ -45,10 +204,15 @@ type ClaudeGenerateShotsRequest struct {
 }
 
 type ClaudeGenerateShotsResponse struct {
-	TaskID string `json:"taskId"`
-	Model  string `json:"model"`
-	Status string `json:"status"`
-	Text   string `json:"text,omitempty"`
+	TaskID string      `json:"taskId"`
+	Model  string      `json:"model"`
+	Status string      `json:"status"`
+	Text   string      `json:"text,omitempty"`
+	Episode *Episode   `json:"episode,omitempty"`
+	Scenes  []SceneData `json:"scenes,omitempty"`
+	DirectorNotes *DirectorNotes `json:"directorNotes,omitempty"`
+	AspectRatio string `json:"aspectRatio,omitempty"`
+	Mode string        `json:"mode,omitempty"`
 }
 
 // ─── Proncer ─────────────────────────────────────────────────────

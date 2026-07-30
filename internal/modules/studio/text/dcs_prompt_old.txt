@@ -1,51 +1,3 @@
-package text
-
-import (
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"log"
-	"strings"
-	"time"
-
-	"dcs-back-v0/internal/modules/provider"
-	skillmodule "dcs-back-v0/internal/modules/skill"
-	"dcs-back-v0/internal/utils"
-
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/gin-gonic/gin"
-)
-
-type Handler struct {
-	providerStore *provider.Store
-	skillSvc      *skillmodule.Service
-}
-
-func NewHandler(providerStore *provider.Store, skillSvc *skillmodule.Service) *Handler {
-	return &Handler{providerStore: providerStore, skillSvc: skillSvc}
-}
-
-func (h *Handler) Generate(c *gin.Context) {
-	utils.BadRequest(c, "text generation not yet implemented")
-}
-
-func (h *Handler) GetStatus(c *gin.Context) {
-	utils.BadRequest(c, "text generation not yet implemented")
-}
-
-func (h *Handler) CancelTask(c *gin.Context) {
-	utils.BadRequest(c, "text generation not yet implemented")
-}
-
-func (h *Handler) PreviewPayload(c *gin.Context) {
-	utils.BadRequest(c, "text generation not yet implemented")
-}
-
-// ─── Default system prompts (fallbacks when no skill is selected) ─────
-
-const defaultShotBuilderPrompt = `
 ## Mission
 
 DCS-DIRECTION — Script-to-Acting Seedance Director. You turn literary scripts written in metaphor and mood into explicit, physically-directed Seedance 2.5 prompts that render real human acting instead of robotic caricature. You are a writer and screenwriter first — you read scripts and interpret them physically.
@@ -61,41 +13,41 @@ DCS-DIRECTION — Script-to-Acting Seedance Director. You turn literary scripts 
 
 You receive a script in standard screenplay format. Each scene unit follows this pattern:
 
-'''
+```
 56. INT. WYATT'S KITCHEN — DAY
 Content, dialogue, and action description...
 
 57. INT. CONVENIENCE STORE - NIGHT (FLASHBACK - HALLOWEEN 2015)
 Content...
-'''
+```
 
-Parse each 'NN. INT/EXT. LOCATION — TIME' block as follows:
-- **NN** (e.g., 56) = 'scriptNumber' — the scene number from the script
-- **INT. WYATT'S KITCHEN — DAY** = 'scriptLocation' — full location string
+Parse each `NN. INT/EXT. LOCATION — TIME` block as follows:
+- **NN** (e.g., 56) = `scriptNumber` — the scene number from the script
+- **INT. WYATT'S KITCHEN — DAY** = `scriptLocation` — full location string
 - **Content** = the scene's dramatic material to interpret and subdivide into shots
 
-Detect scene types: 'present', 'flashback', 'fantasy', 'dream', 'montage'. Look for markers like (FLASHBACK), (CONTINUOUS), SMASH CUT TO, HARD CUT TO, etc.
+Detect scene types: `present`, `flashback`, `fantasy`, `dream`, `montage`. Look for markers like (FLASHBACK), (CONTINUOUS), SMASH CUT TO, HARD CUT TO, etc.
 
 ## Episode-Level Asset Assignment
 
-You receive a 'scene_context' with characters, presets, and assets. Assign assets at the EPISODE level:
+You receive a `scene_context` with characters, presets, and assets. Assign assets at the EPISODE level:
 
-'''
+```
 episode.assetAssignments: [
   { "slot": "@image1", "assetId": "wyatt", "type": "character" },
   { "slot": "@image4", "assetId": "kitchen-plate", "type": "environment" }
 ]
-'''
+```
 
 Type values: "character", "environment", "prop", "reference".
 - Same character across multiple scenes = same @imageN slot
-- Each scene's 'references' array only includes assets that actually appear in THAT scene
+- Each scene's `references` array only includes assets that actually appear in THAT scene
 - If an asset is an environment/location plate, only assign it to scenes that take place in that location
 - Environment plates anchor the Location & Blocking block in the prompt
 
 ## Continuity Engine — Scene-to-Scene Tracking
 
-For every scene AFTER the first, analyze how it differs from the previous scene and populate the 'continuity' object. Track these dimensions:
+For every scene AFTER the first, analyze how it differs from the previous scene and populate the `continuity` object. Track these dimensions:
 
 1. **Location** — did the location change? INT. KITCHEN → INT. CONVENIENCE STORE = YES
 2. **Time** — did time jump? DAY → NIGHT, PRESENT → FLASHBACK 2015, CONTINUOUS
@@ -186,9 +138,9 @@ Default to M1 for dramatic/lived-in scenes. Flashbacks may use M2 (cleaner, edit
 
 ## Prompt Engine — 11-Block Format for prompt.en
 
-Every shot's 'prompt.en' must be a complete, self-contained Seedance prompt with exactly these 11 labeled blocks in THIS EXACT ORDER, separated by double newlines:
+Every shot's `prompt.en` must be a complete, self-contained Seedance prompt with exactly these 11 labeled blocks in THIS EXACT ORDER, separated by double newlines:
 
-'''
+```
 Scene & Mood: LEAD with subject + primary physical action in the first sentence — the first 20-30 words carry ~80% of the spatial-init weight. Then one line of dramatic mood as residue. Camera and style NEVER open the prompt.
 
 Frame Map: Where each subject sits in 2-D screen space — left/center/right third, foreground/midground/background, x% where helpful, negative space, frame occupancy.
@@ -210,7 +162,7 @@ Sound Bed: Diegetic only — list specific ambient/foley sounds. NO music, NO ly
 Capture Realism: The anti-plastic block. (1) Depth via suspended atmosphere between planes. (2) Moisture without shine only if wet. (3) Per-zone specular kill on skin — zero shine, true subcutaneous scattering, real peach fuzz, fine even pore texture, flattering ceiling (real but not ugly). (4) Contrast curve stated three ways: shadows lifted, highlights rolled, speculars removed.
 
 Camera Capture: Single trimmed paragraph — body, lens, filter, movement as RHYTHM (slow/smooth/gradual), stock, grade, frame rate, runtime. One primary camera move only. NEVER doubled.
-'''
+```
 
 ### Universal Prompt Rules
 1. Front-load subject + physical action in Scene & Mood — camera and style never open the prompt.
@@ -381,462 +333,3 @@ EXAMPLES OF WHAT NOT TO DO:
 ❌ "'''json\n{...}\n'''"
 
 ✅ "{...}" — valid JSON only, nothing else.
-`
-
-
-const defaultProncerPrompt = `You are a professional cinematography prompt consultant. Your ONLY role is to help refine and optimize video-generation prompts.
-
-Given a current prompt and optional context, the user may ask you to:
-- Make the prompt more descriptive or cinematic
-- Add specific camera angles, lighting, or atmosphere
-- Shorten or restructure the prompt
-- Suggest improvements
-
-Return ONLY a valid JSON object:
-{
-  "optimized_prompt": "the improved prompt",
-  "suggestions": ["suggestion 1", "suggestion 2"],
-  "changes_made": ["Added camera angle", "Enhanced lighting description"]
-}
-
-CRITICAL:
-- Do NOT generate shot lists. Do NOT generate scene descriptions.
-- Only refine the given prompt.
-- Return ONLY valid JSON, no markdown fences, no extra text.`
-
-// ─── Shot Builder ─────────────────────────────────────────────────
-
-func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
-	var req ClaudeGenerateShotsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequest(c, fmt.Sprintf("invalid request: %v", err))
-		return
-	}
-
-	if req.Prompt == "" {
-		utils.BadRequest(c, "prompt is required")
-		return
-	}
-
-	// Build final prompt with optional scene context
-	finalPrompt := req.Prompt
-	if req.SceneContext != nil {
-		finalPrompt = buildSceneContextBlock(req.SceneContext) + "\n\n" + req.Prompt
-	}
-
-	// Build system prompt: start with the default shot builder schema,
-	// then APPEND the skill's system prompt on top (if any), so Claude
-	// still has the JSON output format and critical rules.
-	systemPrompt := defaultShotBuilderPrompt
-
-	if req.SkillID != "" && h.skillSvc != nil {
-		skill, err := h.skillSvc.GetByID(req.SkillID)
-		if err == nil && skill != nil && skill.SystemPrompt != "" {
-			log.Printf("[skill] appending skill %q (%s) to system prompt", skill.Name, skill.ID)
-			systemPrompt += "\n\n## Skill\n" + skill.SystemPrompt
-		} else if err != nil {
-			log.Printf("[skill] error looking up skill %q: %v", req.SkillID, err)
-		}
-	}
-
-	if req.SystemPrompt != "" {
-		systemPrompt += "\n\n## User instructions\n" + req.SystemPrompt
-	}
-
-	// Append zh-generation instruction when Chinese is disabled
-	if !req.GenerateZh {
-		systemPrompt += "\n\nIMPORTANT: Do NOT generate Chinese prompts (prompt.zh). Only generate the English prompt (prompt.en) for each shot. Omit the prompt.zh field entirely from the JSON."
-	}
-
-	// Always generate output in English — titles, descriptions, and all
-	// text fields must be in English regardless of the user's prompt language.
-	systemPrompt += "\n\nLANGUAGE RULE: All output must be in English. Shot titles, descriptions, dialogue, scene context, and all text fields must use English only — even if the user's request is in Spanish or another language. This is a critical rule."
-
-	keyModel := req.Model
-	if keyModel == "" {
-		keyModel = "claude-shot-builder"
-	}
-	apiModel := req.APIModel
-	if apiModel == "" {
-		apiModel = keyModel
-	}
-
-	// Retry loop: up to 3 attempts with corrective feedback
-	const maxAttempts = 3
-	var lastReply string
-
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		reply, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt)
-		if err != nil {
-			utils.InternalError(c, fmt.Sprintf("failed to generate shots: %v", err))
-			return
-		}
-
-		// Extract clean JSON from Claude's response
-		clean := extractJSON(reply)
-
-		if validateShotJSON(clean) {
-			// ✅ Valid — return clean JSON
-			utils.Success(c, ClaudeGenerateShotsResponse{
-				TaskID: fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
-				Model:  apiModel,
-				Status: "succeeded",
-				Text:   clean,
-			})
-			return
-		}
-
-		// ❌ Invalid — store for feedback and retry
-		lastReply = reply
-		log.Printf("[claude] shot JSON validation failed (attempt %d/%d), retrying...",
-			attempt+1, maxAttempts)
-
-		if attempt < maxAttempts-1 {
-			finalPrompt = fmt.Sprintf(
-				"Your previous response was not valid JSON with a \"shots\" array. "+
-					"Respond with ONLY valid JSON matching the schema, no extra text.\n\n"+
-					"Previous response:\n%s", reply,
-			)
-		}
-	}
-
-	// All attempts exhausted
-	utils.InternalError(c, fmt.Sprintf(
-		"failed to generate valid shot JSON after %d attempts. Last response: %s",
-		maxAttempts, extractJSON(lastReply),
-	))
-}
-
-// ─── Proncer ──────────────────────────────────────────────────────
-
-func (h *Handler) ClaudeOptimizePrompt(c *gin.Context) {
-	var req ClaudeOptimizePromptRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequest(c, fmt.Sprintf("invalid request: %v", err))
-		return
-	}
-
-	if req.CurrentPrompt == "" {
-		utils.BadRequest(c, "current_prompt is required")
-		return
-	}
-
-	// Build the prompt
-	var promptParts []string
-	promptParts = append(promptParts, fmt.Sprintf("Current prompt:\n%s", req.CurrentPrompt))
-
-	if req.UserInstructions != "" {
-		promptParts = append(promptParts, fmt.Sprintf("User instructions:\n%s", req.UserInstructions))
-	}
-
-	if req.ShotContext != nil {
-		promptParts = append(promptParts, fmt.Sprintf("Shot name: %s", req.ShotContext.ShotName))
-		if req.ShotContext.ShotDescription != "" {
-			promptParts = append(promptParts, fmt.Sprintf("Shot description: %s", req.ShotContext.ShotDescription))
-		}
-	}
-
-	if req.SceneContext != nil {
-		promptParts = append(promptParts, buildSceneContextBlock(req.SceneContext))
-	}
-
-	// Resolve system prompt: skill > request > proncer default
-	systemPrompt := h.resolveSystemPromptStrict(req.SkillID, req.SystemPrompt)
-	if systemPrompt == "" {
-		systemPrompt = defaultProncerPrompt
-	}
-
-	finalPrompt := strings.Join(promptParts, "\n\n")
-
-	keyModel := req.Model
-	if keyModel == "" {
-		keyModel = "claude-shot-builder"
-	}
-	apiModel := req.APIModel
-	if apiModel == "" {
-		apiModel = keyModel
-	}
-
-	reply, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt)
-	if err != nil {
-		utils.InternalError(c, fmt.Sprintf("failed to optimize prompt: %v", err))
-		return
-	}
-
-	optimized, suggestions, changes := parseOptimizeResponse(reply)
-	utils.Success(c, ClaudeOptimizePromptResponse{
-		TaskID:          fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
-		Model:           apiModel,
-		Status:          "succeeded",
-		OptimizedPrompt: optimized,
-		Suggestions:     suggestions,
-		ChangesMade:     changes,
-		RawText:         reply,
-	})
-}
-
-// ─── Skill resolution ─────────────────────────────────────────────
-
-// resolveSystemPrompt resolves the system prompt to use:
-//  1. skill_id → look up skill in DB, use its system_prompt
-//  2. request system_prompt (fallback)
-//  3. hardcoded default (fallback)
-func (h *Handler) resolveSystemPrompt(skillID, requestPrompt string) string {
-	if skillID != "" && h.skillSvc != nil {
-		skill, err := h.skillSvc.GetByID(skillID)
-		if err == nil && skill != nil && skill.SystemPrompt != "" {
-			log.Printf("[skill] using skill %q (%s) for system prompt", skill.Name, skill.ID)
-			return skill.SystemPrompt
-		}
-		if err != nil {
-			log.Printf("[skill] error looking up skill %q: %v", skillID, err)
-		}
-	}
-
-	if requestPrompt != "" {
-		return requestPrompt
-	}
-
-	return defaultShotBuilderPrompt
-}
-
-// resolveSystemPromptStrict resolves the system prompt without falling
-// back to a hardcoded default. Returns "" when nothing is configured,
-// so the caller can supply its own default. Used by the proncer handler.
-func (h *Handler) resolveSystemPromptStrict(skillID, requestPrompt string) string {
-	if skillID != "" && h.skillSvc != nil {
-		skill, err := h.skillSvc.GetByID(skillID)
-		if err == nil && skill != nil && skill.SystemPrompt != "" {
-			log.Printf("[skill] using skill %q (%s) for system prompt", skill.Name, skill.ID)
-			return skill.SystemPrompt
-		}
-		if err != nil {
-			log.Printf("[skill] error looking up skill %q: %v", skillID, err)
-		}
-	}
-
-	if requestPrompt != "" {
-		return requestPrompt
-	}
-
-	return ""
-}
-
-// ─── Core Claude API call ─────────────────────────────────────────
-
-// modelNameMap maps model names (from frontend or DB) to real Anthropic model IDs.
-// Add entries here for each model registered in the Providers UI.
-// Real Anthropic model IDs are mapped to themselves for passthrough.
-var modelNameMap = map[string]string{
-	"claude-shot-builder": "claude-sonnet-4-6",
-	"claude-assistant":    "claude-sonnet-4-6",
-	"claude-sonnet-4-6":   "claude-sonnet-4-6",
-	"claude-opus-4-8":     "claude-opus-4-8",
-	"claude-haiku-4-5":    "claude-haiku-4-5",
-	"claude-fable-5":      "claude-fable-5",
-}
-
-func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemPrompt, userPrompt string) (string, error) {
-	// 1. Resolve API key from provider store
-	apiKey := h.resolveAPIKey(keyModel)
-
-	// 2. Create a per-request client with the resolved API key
-	client := anthropic.NewClient(
-		option.WithAPIKey(apiKey),
-		option.WithRequestTimeout(5*time.Minute),
-	)
-
-	resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     apiModel,
-		MaxTokens: 16384,
-		System: []anthropic.TextBlockParam{{
-			Text: systemPrompt,
-			CacheControl: anthropic.CacheControlEphemeralParam{
-				TTL: anthropic.CacheControlEphemeralTTLTTL5m,
-			},
-		}},
-		Messages: []anthropic.MessageParam{
-			anthropic.NewUserMessage(anthropic.NewTextBlock(userPrompt)),
-			// Pre-fill with "{" so Claude starts in JSON mode and never
-			// outputs commentary before the JSON object.
-			anthropic.NewAssistantMessage(anthropic.NewTextBlock("{")),
-		},
-	})
-	if err != nil {
-		// Try to extract the human-readable message from the API error response.
-		msg := err.Error()
-		var apiErr *anthropic.Error
-		if errors.As(err, &apiErr) && apiErr.RawJSON() != "" {
-			var body struct {
-				Error struct {
-					Message string `json:"message"`
-				} `json:"error"`
-			}
-			if ue := json.Unmarshal([]byte(apiErr.RawJSON()), &body); ue == nil && body.Error.Message != "" {
-				msg = body.Error.Message
-			}
-		}
-		return "", fmt.Errorf("Claude API error: %s", msg)
-	}
-
-	// Concatenar bloques de texto de la respuesta
-	// Prepend "{" because we pre-filled the assistant message with it
-	var reply strings.Builder
-	reply.WriteByte('{')
-	for _, block := range resp.Content {
-		if block.Type == "text" {
-			reply.WriteString(block.Text)
-		}
-	}
-
-	log.Printf("[claude] keyModel=%q apiModel=%q tokens: input=%d output=%d cache_read=%d cache_created=%d",
-		keyModel, apiModel,
-		resp.Usage.InputTokens,
-		resp.Usage.OutputTokens,
-		resp.Usage.CacheReadInputTokens,
-		resp.Usage.CacheCreationInputTokens,
-	)
-
-	return reply.String(), nil
-}
-
-// resolveAPIKey looks up the API key for a model from the provider store.
-func (h *Handler) resolveAPIKey(modelName string) string {
-	if h.providerStore == nil {
-		return ""
-	}
-
-	m, err := h.providerStore.GetModelByName(modelName)
-	if err == nil && m != nil && m.APIKey != "" {
-		return m.APIKey
-	}
-
-	return ""
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────
-
-func buildSceneContextBlock(ctx *SceneContext) string {
-	var parts []string
-	parts = append(parts, "=== Scene Context ===")
-
-	if ctx.Description != "" {
-		parts = append(parts, fmt.Sprintf("Description: %s", ctx.Description))
-	}
-
-	if len(ctx.Characters) > 0 {
-		parts = append(parts, "Characters (use the id field as assetId):")
-		for _, c := range ctx.Characters {
-			slotInfo := ""
-			if c.Slot != "" {
-				slotInfo = fmt.Sprintf(" [slot: %s]", c.Slot)
-			}
-			idInfo := ""
-			if c.ID != "" {
-				idInfo = fmt.Sprintf(" [id: %s]", c.ID)
-			}
-			if c.Description != "" {
-				parts = append(parts, fmt.Sprintf("  - %s: %s%s%s", c.Name, c.Description, slotInfo, idInfo))
-			} else {
-				parts = append(parts, fmt.Sprintf("  - %s%s%s", c.Name, slotInfo, idInfo))
-			}
-		}
-	}
-
-	if len(ctx.Presets) > 0 {
-		parts = append(parts, "Cinematography presets:")
-		for _, p := range ctx.Presets {
-			if p.Prompt != "" {
-				parts = append(parts, fmt.Sprintf("  - %s (%s): %s", p.Label, p.Code, p.Prompt))
-			} else {
-				parts = append(parts, fmt.Sprintf("  - %s (%s)", p.Label, p.Code))
-			}
-		}
-	}
-
-	if len(ctx.Assets) > 0 {
-		parts = append(parts, "Reference assets:")
-		for _, a := range ctx.Assets {
-			idInfo := ""
-			if a.ID != "" {
-				idInfo = fmt.Sprintf(" [id: %s]", a.ID)
-			}
-			parts = append(parts, fmt.Sprintf("  - %s (%s)%s", a.Filename, a.MimeType, idInfo))
-		}
-	}
-
-	return strings.Join(parts, "\n")
-}
-
-// ─── JSON extraction & validation ────────────────────────────────
-
-// extractJSON finds the outermost balanced JSON object { ... } in text.
-// If none found, returns the full text as-is (caller will fail to parse).
-func extractJSON(text string) string {
-	start := strings.IndexByte(text, '{')
-	if start < 0 {
-		return text
-	}
-
-	depth := 0
-	for i := start; i < len(text); i++ {
-		switch text[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return text[start : i+1]
-			}
-		}
-	}
-
-	return text
-}
-
-// validateShotJSON checks that the text is a JSON object with either:
-//   - Legacy format: a "shots" array
-//   - New format: an "episode" object + "scenes" array (each scene has shots)
-func validateShotJSON(text string) bool {
-	// Try new format first (episode + scenes)
-	var newFormat struct {
-		Episode *struct{} `json:"episode"`
-		Scenes  []struct {
-			Shots []any `json:"shots"`
-		} `json:"scenes"`
-	}
-	if json.Unmarshal([]byte(text), &newFormat) == nil && newFormat.Episode != nil && len(newFormat.Scenes) > 0 {
-		return true
-	}
-
-	// Fallback: legacy format (flat shots array)
-	var legacy struct {
-		Shots []any `json:"shots"`
-	}
-	return json.Unmarshal([]byte(text), &legacy) == nil && len(legacy.Shots) > 0
-}
-
-func parseOptimizeResponse(text string) (optimized string, suggestions, changes []string) {
-	if text == "" {
-		return "", nil, nil
-	}
-
-	var parsed struct {
-		OptimizedPrompt string   `json:"optimized_prompt"`
-		Suggestions     []string `json:"suggestions"`
-		ChangesMade     []string `json:"changes_made"`
-	}
-
-	cleanText := text
-	if idx := strings.Index(text, "{"); idx >= 0 {
-		if endIdx := strings.LastIndex(text, "}"); endIdx > idx {
-			cleanText = text[idx : endIdx+1]
-		}
-	}
-
-	if err := json.Unmarshal([]byte(cleanText), &parsed); err == nil {
-		return parsed.OptimizedPrompt, parsed.Suggestions, parsed.ChangesMade
-	}
-
-	return text, nil, nil
-}
