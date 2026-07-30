@@ -830,3 +830,151 @@ func (s *ProjectStore) UpdateShotModel(shotID, modelID string) error {
 	_, err := s.db.Exec(`UPDATE shots SET model_id = $2 WHERE id = $1`, shotID, modelID)
 	return err
 }
+
+// ─── Chapter Assignment Store Methods ─────────────────────────────
+
+func (s *ProjectStore) GetChapterCharacters(chapterID string) ([]ChapterCharacterAssignment, error) {
+	query := `SELECT cc.id, cc.chapter_id, cc.character_id, c.name, COALESCE(cc.slot, ''),
+			COALESCE(cf.file_id::text, '') AS file_id, cc.created_at
+		FROM chapter_characters cc
+		JOIN characters c ON c.id = cc.character_id
+		LEFT JOIN LATERAL (
+			SELECT cf2.file_id FROM character_files cf2
+			WHERE cf2.character_id = c.id
+			ORDER BY cf2.created_at LIMIT 1
+		) cf ON true
+		WHERE cc.chapter_id = $1
+		ORDER BY c.name`
+	rows, err := s.db.Query(query, chapterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ChapterCharacterAssignment
+	for rows.Next() {
+		var a ChapterCharacterAssignment
+		if err := rows.Scan(&a.ID, &a.ChapterID, &a.CharacterID, &a.Name, &a.Slot, &a.FileID, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (s *ProjectStore) GetChapterAssets(chapterID string) ([]ChapterAssetAssignment, error) {
+	query := `SELECT ca.id, ca.chapter_id, ca.file_id, f.filename, f.mime_type,
+			COALESCE(ca.slot, '') AS slot, ca.created_at
+		FROM chapter_assets ca
+		JOIN files f ON f.id = ca.file_id
+		WHERE ca.chapter_id = $1
+		ORDER BY f.filename`
+	rows, err := s.db.Query(query, chapterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ChapterAssetAssignment
+	for rows.Next() {
+		var a ChapterAssetAssignment
+		if err := rows.Scan(&a.ID, &a.ChapterID, &a.FileID, &a.Filename, &a.MimeType, &a.Slot, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (s *ProjectStore) GetChapterPresets(chapterID string) ([]ChapterPresetAssignment, error) {
+	query := `SELECT cp.id, cp.chapter_id, cp.preset_id, p.code, p.label, pg.slug AS group_slug, cp.created_at
+		FROM chapter_presets cp
+		JOIN presets p ON p.id = cp.preset_id
+		JOIN preset_groups pg ON pg.id = p.group_id
+		WHERE cp.chapter_id = $1
+		ORDER BY pg.slug, p.code`
+	rows, err := s.db.Query(query, chapterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ChapterPresetAssignment
+	for rows.Next() {
+		var a ChapterPresetAssignment
+		if err := rows.Scan(&a.ID, &a.ChapterID, &a.PresetID, &a.Code, &a.Label, &a.GroupSlug, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (s *ProjectStore) AssignCharacterToChapter(chapterID, characterID, slot string) (string, error) {
+	var id string
+	query := `INSERT INTO chapter_characters (id, chapter_id, character_id, slot)
+		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''))
+		RETURNING id`
+	err := s.db.QueryRow(query, chapterID, characterID, slot).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) AssignAssetToChapter(chapterID, fileID, slot string) (string, error) {
+	var id string
+	query := `INSERT INTO chapter_assets (id, chapter_id, file_id, slot)
+		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''))
+		RETURNING id`
+	err := s.db.QueryRow(query, chapterID, fileID, slot).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) AssignPresetToChapter(chapterID, presetID string) (string, error) {
+	var id string
+	query := `INSERT INTO chapter_presets (id, chapter_id, preset_id)
+		VALUES (gen_random_uuid(), $1, $2)
+		RETURNING id`
+	err := s.db.QueryRow(query, chapterID, presetID).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) RemoveChapterCharacter(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM chapter_characters WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) RemoveChapterAsset(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM chapter_assets WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) RemoveChapterPreset(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM chapter_presets WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}

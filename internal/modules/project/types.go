@@ -227,5 +227,43 @@ type SceneAssignments struct {
 	Assets     []SceneAssetAssignment     `json:"assets"`
 }
 
+// ─── Chapter Assignments ───────────────────────────────────────
+
+type ChapterCharacterAssignment struct {
+	ID          string    `json:"id"`
+	ChapterID   string    `json:"chapter_id"`
+	CharacterID string    `json:"character_id"`
+	Name        string    `json:"name"`
+	Slot        string    `json:"slot"`
+	FileID      string    `json:"file_id"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type ChapterAssetAssignment struct {
+	ID        string    `json:"id"`
+	ChapterID string    `json:"chapter_id"`
+	FileID    string    `json:"file_id"`
+	Filename  string    `json:"filename"`
+	MimeType  string    `json:"mime_type"`
+	Slot      string    `json:"slot,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ChapterPresetAssignment struct {
+	ID        string    `json:"id"`
+	ChapterID string    `json:"chapter_id"`
+	PresetID  string    `json:"preset_id"`
+	Code      string    `json:"code"`
+	Label     string    `json:"label"`
+	GroupSlug string    `json:"group_slug"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ChapterAssignments struct {
+	Characters []ChapterCharacterAssignment `json:"characters"`
+	Assets     []ChapterAssetAssignment     `json:"assets"`
+	Presets    []ChapterPresetAssignment    `json:"presets"`
+}
+
 
 

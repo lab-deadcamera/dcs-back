@@ -74,6 +74,15 @@ type projectStore interface {
 	RemoveShotAsset(assignmentID string) error
 	RemoveShotPreset(assignmentID string) error
 	UpdateShotModel(shotID, modelID string) error
+		GetChapterCharacters(chapterID string) ([]ChapterCharacterAssignment, error)
+		GetChapterAssets(chapterID string) ([]ChapterAssetAssignment, error)
+		GetChapterPresets(chapterID string) ([]ChapterPresetAssignment, error)
+		AssignCharacterToChapter(chapterID, characterID, slot string) (string, error)
+		AssignAssetToChapter(chapterID, fileID, slot string) (string, error)
+		AssignPresetToChapter(chapterID, presetID string) (string, error)
+		RemoveChapterCharacter(assignmentID string) error
+		RemoveChapterAsset(assignmentID string) error
+		RemoveChapterPreset(assignmentID string) error
 }
 
 type Service struct {
@@ -954,4 +963,50 @@ func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 	t.VideoURL = localURL
 	t.VideoLocalURL = localURL
 	return t, nil
+}
+
+// ─── Chapter Assignment Service Methods ──────────────────────────
+
+func (s *Service) GetChapterAssignments(chapterID string) (*ChapterAssignments, error) {
+	characters, err := s.store.GetChapterCharacters(chapterID)
+	if err != nil {
+		return nil, err
+	}
+	assets, err := s.store.GetChapterAssets(chapterID)
+	if err != nil {
+		return nil, err
+	}
+	presets, err := s.store.GetChapterPresets(chapterID)
+	if err != nil {
+		return nil, err
+	}
+	return &ChapterAssignments{
+		Characters: characters,
+		Assets:     assets,
+		Presets:    presets,
+	}, nil
+}
+
+func (s *Service) AssignCharacterToChapter(chapterID, characterID, slot string) (string, error) {
+	return s.store.AssignCharacterToChapter(chapterID, characterID, slot)
+}
+
+func (s *Service) AssignAssetToChapter(chapterID, fileID, slot string) (string, error) {
+	return s.store.AssignAssetToChapter(chapterID, fileID, slot)
+}
+
+func (s *Service) AssignPresetToChapter(chapterID, presetID string) (string, error) {
+	return s.store.AssignPresetToChapter(chapterID, presetID)
+}
+
+func (s *Service) RemoveChapterCharacter(assignmentID string) error {
+	return s.store.RemoveChapterCharacter(assignmentID)
+}
+
+func (s *Service) RemoveChapterAsset(assignmentID string) error {
+	return s.store.RemoveChapterAsset(assignmentID)
+}
+
+func (s *Service) RemoveChapterPreset(assignmentID string) error {
+	return s.store.RemoveChapterPreset(assignmentID)
 }

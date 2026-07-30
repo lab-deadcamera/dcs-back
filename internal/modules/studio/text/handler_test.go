@@ -1,117 +1,206 @@
 package text
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
-// ─── resolveSystemPrompt (used by shot builder) — fallback paths ──────
-//
-// The skill resolution path (skillID → DB lookup) simply delegates to
-// skillSvc.GetByID which is tested in the skill module itself.
-// These tests focus on the fallback decisions that differ between
-// resolveSystemPrompt and resolveSystemPromptStrict.
-
-func TestResolveSystemPrompt_NoSkillNoRequest_UsesDefault(t *testing.T) {
-	h := &Handler{skillSvc: nil}
-	got := h.resolveSystemPrompt("", "")
-	if got != defaultShotBuilderPrompt {
-		t.Errorf("expected defaultShotBuilderPrompt, got %q (len=%d)", got[:40]+"...", len(got))
+// TestPromptNoBackticks verifies the prompt constant has no raw backticks
+// that would break Go string syntax.
+func TestPromptNoBackticks(t *testing.T) {
+	if strings.Contains(defaultShotBuilderPrompt, "`") {
+		t.Error("defaultShotBuilderPrompt contains raw backtick character")
 	}
 }
 
-func TestResolveSystemPrompt_RequestPromptGiven_ReturnsIt(t *testing.T) {
-	h := &Handler{skillSvc: nil}
-	prompt := "custom-system-prompt"
-	got := h.resolveSystemPrompt("", prompt)
-	if got != prompt {
-		t.Errorf("expected %q, got %q", prompt, got)
+// TestPromptMentionsEpisode verifies the prompt describes the episode→scenes→shots format.
+func TestPromptMentionsEpisode(t *testing.T) {
+	required := []string{
+		"episode",          // episode-level structure
+		"scenes",           // scenes array
+		"scriptNumber",     // script number parsing
+		"scriptLocation",   // INT/EXT location
+		"continuity",       // continuity tracking
+		"shots",            // shots inside scenes
+		"Scene & Mood",     // 11-block format
+		"Frame Map",
+		"Location & Blocking",
+		"Cross-Frame Rules",
+		"Movement",
+		"Dialogue",
+		"Last Frame",
+		"World Plate",
+		"Sound Bed",
+		"Capture Realism",
+		"Camera Capture",
+		"micro-fidgeting",  // acting features
+		"Anatomical Emotion",
+	}
+	for _, s := range required {
+		if !strings.Contains(defaultShotBuilderPrompt, s) {
+			t.Errorf("prompt missing required section/keyword: %q", s)
+		}
 	}
 }
 
-func TestResolveSystemPrompt_SkillIDButNoSkillService_FallsBackToRequestPrompt(t *testing.T) {
-	h := &Handler{skillSvc: nil}
-	got := h.resolveSystemPrompt("any-skill", "req-prompt")
-	if got != "req-prompt" {
-		t.Errorf("expected request prompt, got %q", got)
+// TestPromptHasFormatRule verifies the CRITICAL output format rule is present.
+func TestPromptHasFormatRule(t *testing.T) {
+	if !strings.Contains(defaultShotBuilderPrompt, "CRITICAL — Output Format") {
+		t.Error("prompt missing CRITICAL output format rule")
+	}
+	if !strings.Contains(defaultShotBuilderPrompt, "valid JSON object") {
+		t.Error("prompt missing 'valid JSON object' instruction")
 	}
 }
 
-func TestResolveSystemPrompt_SkillIDButNoSkillServiceNoRequest_UsesDefault(t *testing.T) {
-	h := &Handler{skillSvc: nil}
-	got := h.resolveSystemPrompt("any-skill", "")
-	if got != defaultShotBuilderPrompt {
-		t.Errorf("expected defaultShotBuilderPrompt, got %q", got[:40]+"...")
+// TestExtractJSON tests brace-matching extraction.
+func TestExtractJSON(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+		desc     string
+	}{
+		{
+			input:    `{"episode":{},"scenes":[]}`,
+			expected: `{"episode":{},"scenes":[]}`,
+			desc:     "pure JSON — no text around it",
+		},
+		{
+			input:    `Here is the result: {"episode":{},"scenes":[]}`,
+			expected: `{"episode":{},"scenes":[]}`,
+			desc:     "text before JSON",
+		},
+		{
+			input:    `{"episode":{},"scenes":[]} Let me know if you need changes.`,
+			expected: `{"episode":{},"scenes":[]}`,
+			desc:     "text after JSON",
+		},
+		{
+			input:    `no braces here`,
+			expected: `no braces here`,
+			desc:     "no JSON at all",
+		},
+		{
+			input:    `{unclosed`,
+			expected: `{unclosed`,
+			desc:     "unclosed brace",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			got := extractJSON(tc.input)
+			if got != tc.expected {
+				t.Errorf("\n  got:  %q\n  want: %q", got, tc.expected)
+			}
+		})
 	}
 }
 
-// ─── resolveSystemPromptStrict (used by proncer) — fallback paths ─────
-
-func TestResolveSystemPromptStrict_NoSkillNoRequest_ReturnsEmpty(t *testing.T) {
-	h := &Handler{skillSvc: nil}
-	got := h.resolveSystemPromptStrict("", "")
-	if got != "" {
-		t.Errorf("expected empty string, got %q", got)
+// TestValidateShotJSON tests validation of both new and legacy formats.
+func TestValidateShotJSON(t *testing.T) {
+	tests := []struct {
+		json  string
+		valid bool
+		desc  string
+	}{
+		{
+			json:  `{"episode":{"title":"EP16"},"scenes":[{"shots":[{"id":"A"}]}]}`,
+			valid: true,
+			desc:  "new format: episode + scenes with shots",
+		},
+		{
+			json:  `{"scenes":[{"shots":[{"id":"A"}]}]}`,
+			valid: false,
+			desc:  "new format without episode",
+		},
+		{
+			json:  `{"shots":[{"id":"A"}]}`,
+			valid: true,
+			desc:  "legacy format: flat shots array",
+		},
+		{
+			json:  `{"shots":[]}`,
+			valid: false,
+			desc:  "empty shots array",
+		},
+		{
+			json:  `{"episode":{},"scenes":[]}`,
+			valid: false,
+			desc:  "scenes with no shots",
+		},
+		{
+			json:  `not json at all`,
+			valid: false,
+			desc:  "invalid JSON",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			got := validateShotJSON(tc.json)
+			if got != tc.valid {
+				t.Errorf("\n  input: %s\n  got:   %v\n  want:  %v", tc.json, got, tc.valid)
+			}
+		})
 	}
 }
 
-func TestResolveSystemPromptStrict_RequestPromptGiven_ReturnsIt(t *testing.T) {
-	h := &Handler{skillSvc: nil}
-	got := h.resolveSystemPromptStrict("", "proncer-prompt")
-	if got != "proncer-prompt" {
-		t.Errorf("expected %q, got %q", "proncer-prompt", got)
+// TestJSONExampleIsValid checks that the JSON structure in the prompt is valid.
+func TestJSONExampleIsValid(t *testing.T) {
+	example := `{"episode":{"title":"Test","totalDuration":120},"scenes":[{"scriptNumber":56,"scriptLocation":"INT. KITCHEN — DAY","title":"Test","description":"Test","duration":25,"start":0,"end":25,"sceneType":"present","mode":"M1","continuity":{"location":"INT. KITCHEN — DAY","locationChange":false,"timeContinuity":"DAY","charactersPresent":["Wyatt"]},"references":[],"shots":[{"id":"A","title":"Test","description":"Test","duration":10,"start":0,"end":10,"camera":{"lens":"40mm","framing":"Medium","movement":"Handheld","fps":24,"shutter":"180 degree","aspectRatio":"9:16"},"composition":{"frameMap":"x=50%","subjectLock":"none","crossFrameRules":"none","focus":"subject","depth":"Shallow DOF"},"blocking":{"location":"Kitchen","movement":"None","interaction":"None","positions":[]},"acting":{"emotion":"Calm","bodyLanguage":"Still","dialogue":"none — silent","microExpressions":[]},"timeline":{"duration":10,"segments":[],"beats":[]},"audio":{"dialogue":"","ambient":"Room tone","sfx":[],"music":false},"references":[],"prompt":{"en":"Scene & Mood:\n\nFrame Map:"},"render":{"mode":"M1","engine":"Seedance"},"notes":{"todos":[],"warnings":[],"approved":false}}]}]}`
+
+	var parsed interface{}
+	if err := json.Unmarshal([]byte(example), &parsed); err != nil {
+		t.Fatalf("JSON example does not parse: %v", err)
+	}
+	if !validateShotJSON(example) {
+		t.Error("example JSON should pass validateShotJSON")
 	}
 }
 
-func TestResolveSystemPromptStrict_SkillIDButNoSkillService_FallsBackToRequestPrompt(t *testing.T) {
-	h := &Handler{skillSvc: nil}
-	got := h.resolveSystemPromptStrict("missing", "req-prompt")
-	if got != "req-prompt" {
-		t.Errorf("expected request prompt, got %q", got)
+// TestPreFillWorks verifies pre-fill "{" produces valid JSON when
+// concatenated with Claude's continuation.
+func TestPreFillWorks(t *testing.T) {
+	claudeContinuation := `"episode":{"title":"EP16","totalDuration":120},"scenes":[{"scriptNumber":56,"scriptLocation":"INT. WYATT'S KITCHEN","title":"Wyatt confronts Dixie","duration":25,"shots":[{"id":"A","title":"Test","duration":10}]}]}`
+
+	fullJSON := "{" + claudeContinuation
+	if !validateShotJSON(fullJSON) {
+		t.Error("pre-filled response should validate as JSON")
 	}
 }
 
-func TestResolveSystemPromptStrict_SkillIDButNoSkillServiceNoRequest_ReturnsEmpty(t *testing.T) {
-	h := &Handler{skillSvc: nil}
-	got := h.resolveSystemPromptStrict("missing", "")
-	if got != "" {
-		t.Errorf("expected empty string, got %q", got)
+// TestParseOptimizeResponse verifies the Proncer response parser.
+func TestParseOptimizeResponse(t *testing.T) {
+	tests := []struct {
+		input       string
+		expectOptim bool
+		desc        string
+	}{
+		{
+			input:       `{"optimized_prompt":"Better prompt","suggestions":["Add light"],"changes_made":["Fixed"]}`,
+			expectOptim: true,
+			desc:        "clean JSON",
+		},
+		{
+			input:       `Here: {"optimized_prompt":"Better prompt","suggestions":[],"changes_made":[]}`,
+			expectOptim: true,
+			desc:        "text before JSON",
+		},
+		{
+			input:       `not json`,
+			expectOptim: false,
+			desc:        "no JSON — returns input as-is",
+		},
 	}
-}
-
-// ─── Cross-contamination guard ────────────────────────────────────────
-//
-// These tests guarantee the two resolution functions never return each
-// other's default — the most common class of bug when one endpoint
-// accidentally receives the other's system prompt.
-
-func TestCrossContamination_StrictNeverLeaksShotBuilderDefault(t *testing.T) {
-	h := &Handler{skillSvc: nil}
-	got := h.resolveSystemPromptStrict("", "")
-	if got == defaultShotBuilderPrompt {
-		t.Error("strict mode must NOT return defaultShotBuilderPrompt")
-	}
-}
-
-func TestCrossContamination_ShotBuilderNeverReturnsEmptyWhenNoConfig(t *testing.T) {
-	h := &Handler{skillSvc: nil}
-	got := h.resolveSystemPrompt("", "")
-	if got == "" {
-		t.Error("shot builder must fall back to a default prompt, not empty")
-	}
-}
-
-// ─── Request prompt overrides skillID when skill service is missing ──
-
-func TestCrossContamination_ShotBuilderRequestPromptTakesPriorityOverUnknownSkill(t *testing.T) {
-	h := &Handler{skillSvc: nil}
-	got := h.resolveSystemPrompt("some-skill", "user-prompt")
-	if got != "user-prompt" {
-		t.Errorf("expected request prompt when skill service is nil, got %q", got)
-	}
-}
-
-func TestCrossContamination_StrictRequestPromptTakesPriorityOverUnknownSkill(t *testing.T) {
-	h := &Handler{skillSvc: nil}
-	got := h.resolveSystemPromptStrict("some-skill", "user-prompt")
-	if got != "user-prompt" {
-		t.Errorf("expected request prompt when skill service is nil, got %q", got)
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			optim, _, _ := parseOptimizeResponse(tc.input)
+			if tc.expectOptim && optim == "" {
+				t.Error("expected an optimized prompt but got empty")
+			}
+			if !tc.expectOptim && optim != tc.input {
+				t.Errorf("expected input as-is, got %q", optim)
+			}
+		})
 	}
 }
