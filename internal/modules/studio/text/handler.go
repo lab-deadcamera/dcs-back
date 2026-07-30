@@ -770,7 +770,7 @@ func buildSceneContextBlock(ctx *SceneContext) string {
 // ─── JSON extraction & validation ────────────────────────────────
 
 // extractJSON finds the outermost balanced JSON object { ... } in text.
-// If none found, returns the full text as-is (caller will fail to parse).
+// Correctly handles braces inside JSON string values (e.g., "{...}" inside prompt.en).
 func extractJSON(text string) string {
 	start := strings.IndexByte(text, '{')
 	if start < 0 {
@@ -778,8 +778,29 @@ func extractJSON(text string) string {
 	}
 
 	depth := 0
+	inString := false
+	escaped := false
 	for i := start; i < len(text); i++ {
-		switch text[i] {
+		ch := text[i]
+
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+
+		switch ch {
+		case '"':
+			inString = true
 		case '{':
 			depth++
 		case '}':

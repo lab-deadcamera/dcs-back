@@ -204,3 +204,27 @@ func TestParseOptimizeResponse(t *testing.T) {
 		})
 	}
 }
+
+// TestExtractJSONStringBraces verifies brace matching inside JSON strings
+// does not interfere with extraction.
+func TestExtractJSONStringBraces(t *testing.T) {
+	input := `Some text: {"episode":{},"scenes":[{"shots":[{"id":"A","en":"Scene & Mood: {mood here}\n\nFrame Map: {map here} {another}"}]}]} trailing`
+
+	expected := `{"episode":{},"scenes":[{"shots":[{"id":"A","en":"Scene & Mood: {mood here}\n\nFrame Map: {map here} {another}"}]}]}`
+
+	got := extractJSON(input)
+	if got != expected {
+		t.Errorf("\n  got:  %s\n  want: %s", got[:min(len(got), 100)], expected[:min(len(expected), 100)])
+	}
+	// Validate it actually parses
+	if !validateShotJSON(got) {
+		t.Error("extracted JSON should validate")
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
