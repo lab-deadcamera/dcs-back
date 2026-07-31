@@ -492,11 +492,14 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 			attempt+1, maxAttempts)
 
 		if attempt < maxAttempts-1 {
-			finalPrompt = fmt.Sprintf(
-				"Your previous response was not valid JSON with a \"shots\" array. "+
-					"Respond with ONLY valid JSON matching the schema, no extra text.\n\n"+
-					"Previous response:\n%s", reply,
-			)
+			// Do NOT resend the (likely truncated) previous reply — it wastes
+			// context and produces the same oversized output. Instead instruct
+			// brevity so the retry converges under max_tokens.
+			finalPrompt = "Your previous response was not valid JSON (likely truncated). " +
+				"Regenerate from scratch. Keep EVERY field concise: shot descriptions in one " +
+				"sentence, prompt.en in compact form, max 2 microExpressions, omit empty fields " +
+				"and optional sub-objects. Respond with ONLY valid JSON matching the schema — " +
+				"no extra text, no markdown, no comments."
 		}
 	}
 
@@ -655,7 +658,7 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 
 	resp, err := client.Messages.New(apiCtx, anthropic.MessageNewParams{
 		Model:     apiModel,
-		MaxTokens: 16384,
+		MaxTokens: 32768,
 		System: []anthropic.TextBlockParam{{
 			Text: systemPrompt,
 			CacheControl: anthropic.CacheControlEphemeralParam{
