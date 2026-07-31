@@ -640,14 +640,17 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 	// 1. Resolve API key from provider store
 	apiKey := h.resolveAPIKey(keyModel)
 
-	// 2. Create a detached context so the API call survives client disconnects
-	apiCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// 2. Create a detached context so the API call survives client disconnects.
+	//    The shot builder sends the full DCS-DIRECTION system prompt (large,
+	//    cache-miss on first call) plus up to 16384 output tokens (EN + ZH),
+	//    which can take well over 5 minutes on Claude.
+	apiCtx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
 	// 3. Create a per-request client with the resolved API key
 	client := anthropic.NewClient(
 		option.WithAPIKey(apiKey),
-		option.WithRequestTimeout(5*time.Minute),
+		option.WithRequestTimeout(15*time.Minute),
 	)
 
 	resp, err := client.Messages.New(apiCtx, anthropic.MessageNewParams{
