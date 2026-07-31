@@ -23,17 +23,16 @@ func TestPromptMentionsEpisode(t *testing.T) {
 		"scriptLocation",   // INT/EXT location
 		"continuity",       // continuity tracking
 		"shots",            // shots inside scenes
-		"Scene & Mood",     // 11-block format
-		"Frame Map",
-		"Location & Blocking",
-		"Cross-Frame Rules",
-		"Movement",
+		"Scene and Mood",   // simplified pre-prompt format
+		"Composition",
+		"Space and Mélange",
+		"Cross-Shot Rule",
+		"Action",
 		"Dialogue",
-		"Last Frame",
-		"World Plate",
-		"Sound Bed",
-		"Capture Realism",
-		"Camera Capture",
+		"Ending Shot",
+		"Environmental Base",
+		"Sound Layer",
+		"Severe shaking, time flickering, and identity drift were avoided",
 		"micro-fidgeting",  // acting features
 		"Anatomical Emotion",
 	}

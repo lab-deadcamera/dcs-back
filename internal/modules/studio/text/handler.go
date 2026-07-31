@@ -184,46 +184,41 @@ Inject ONE OR TWO per acting beat. Asynchronous — these fire OFF the rhythm of
 
 Default to M1 for dramatic/lived-in scenes. Flashbacks may use M2 (cleaner, editorial flashback) or M3 (gritty memory). Scene type shifts (present→flashback) should be reflected in different modes.
 
-## Prompt Engine — 11-Block Format for prompt.en
+## Prompt Engine — The Pre-Prompt Is the Heart
 
-Every shot's 'prompt.en' must be a complete, self-contained Seedance prompt with exactly these 11 labeled blocks in THIS EXACT ORDER, separated by double newlines:
+Every shot's 'prompt.en' is a complete, self-contained Seedance prompt written as a natural, flowing director's note. It is the MOST IMPORTANT field — all of the shot's visual direction (composition, blocking, acting, audio, camera) lives INSIDE this text, not in separate sub-objects. Keep it concise: 220-360 words per shot. Plain text, one line per section.
+
+Start with a references header listing the @image slots used in this shot as bracketed tags (uppercase, no @):
 
 '''
-Scene & Mood: LEAD with subject + primary physical action in the first sentence — the first 20-30 words carry ~80% of the spatial-init weight. Then one line of dramatic mood as residue. Camera and style NEVER open the prompt.
-
-Frame Map: Where each subject sits in 2-D screen space — left/center/right third, foreground/midground/background, x% where helpful, negative space, frame occupancy.
-
-Location & Blocking — @imageN(plate): FIRST establish the physical space from the environment asset (space type, key surfaces, navigable zones, sight lines, scale). THEN pin each character to a coherent physical place — which surface they sit/stand/lean on, body orientation toward geometry, contact point, gaze direction. Carry each identity anchor inline (@imageN). Bodies must sit INSIDE the space, not float over a backdrop.
-
-Cross-Frame Rules: For 2+ characters — never swap positions, never cross center, never change depth, distance and screen sides held, eyelines named. For multi-shot — what carries across the cut.
-
-Movement: Four layers in order — (1) character motion (the transitive action plus the muscular state from the Anatomical Dictionary with per-beat timestamps) · (2) micro-motion (breath, hair, fabric, and the injected micro-fidgeting) · (3) environmental motion (rain, smoke, dust, traffic) · (4) camera motion only if not already in Camera Capture. Subject motion and camera motion strictly separated.
-
-Dialogue: MANDATORY — never omitted, never merged into Sound Bed. If spoken: exact line(s) in English, in double quotes, speaker identified by visual descriptor + @imageN tag. Budgeted to runtime (~2-2.5 words/sec). If silent: write exactly "none — silent shot".
-
-Last Frame: Exact closing composition at end of runtime. Always close with: "No on-screen text, no captions, no signage typography, no rendered text in the frame."
-
-World Plate: Location anchored to @imageN if plate attached. Time of day, weather, set dressing, atmosphere, color palette.
-
-Sound Bed: Diegetic only — list specific ambient/foley sounds. NO music, NO lyrics, NO score. Dialogue NEVER restated here — it lives exclusively in the Dialogue block.
-
-Capture Realism: The anti-plastic block. (1) Depth via suspended atmosphere between planes. (2) Moisture without shine only if wet. (3) Per-zone specular kill on skin — zero shine, true subcutaneous scattering, real peach fuzz, fine even pore texture, flattering ceiling (real but not ugly). (4) Contrast curve stated three ways: shadows lifted, highlights rolled, speculars removed.
-
-Camera Capture: Single trimmed paragraph — body, lens, filter, movement as RHYTHM (slow/smooth/gradual), stock, grade, frame rate, runtime. One primary camera move only. NEVER doubled.
+[Image1] [Image2] [Image3]
 '''
+
+Then write the sections in THIS EXACT ORDER, each on its own line, separated by blank lines. Do NOT nest them in JSON — this is the prompt body text:
+
+- **Scene and Mood**: LEAD with the subject + primary physical action in the first sentence (the first 20-30 words carry ~80% of spatial-init weight). Then one line of dramatic mood as residue. Camera and style NEVER open.
+- **Composition**: Where each subject sits in 2-D screen space — center/two-thirds of frame, foreground/midground/background, x% where helpful. Name the @imageN anchors.
+- **Space and Mélange**: First establish the physical space (space type, key surfaces, lighting, atmosphere). Then pin each character to a coherent place — surface, body orientation, contact point, gaze. Carry each @imageN anchor inline. Bodies sit INSIDE the space, not on a backdrop.
+- **Cross-Shot Rule**: For 2+ subjects — never swap positions/sides/depth, eyelines named. For multi-shot — what carries across the cut.
+- **Action**: The character's physical action as observable muscular facts (transitive verb; NO result-oriented adjectives like "angry"/"sad"), with per-beat timestamps and 1-2 micro-fidgeting injections (see Anatomy Library). Subject motion and camera motion strictly separated.
+- **Dialogue**: MANDATORY — exact line in double quotes, speaker identified by visual descriptor + @imageN tag. Budget ~2-2.5 words/sec. If silent write exactly "None—Silent shot."
+- **Ending Shot**: Exact closing composition at end of runtime. Close with: "No on-screen text, subtitles, sign fonts, or rendered text appear in the shot."
+- **Environmental Base**: Location anchored to @imageN plate if attached. Time of day, lighting, atmosphere, color palette.
+- **Sound Layer**: Diegetic only — specific ambient/foley sounds. NO music, NO lyrics, NO score. Dialogue NEVER restated here.
+- Final paragraph (no header) integrating: capture realism (matte skin, no highlights, real texture, spatial depth) + camera capture (lens, handheld/locked as rhythm, stock, grade, grain, fps, shutter, runtime) + close with "Severe shaking, time flickering, and identity drift were avoided."
 
 ### Universal Prompt Rules
-1. Front-load subject + physical action in Scene & Mood — camera and style never open the prompt.
+1. Front-load subject + physical action in Scene and Mood — camera and style never open.
 2. No character names in prompt output — describe by hair, wardrobe, identity markers; @imageN tag carries anchoring.
 3. No brand names, no platform names (Seedance, Higgsfield, Veo) inside the prompt body.
-4. Diegetic audio only — no music, no lyrics, no score in Sound Bed.
-5. Dialogue block is MANDATORY even for silent shots — write "none — silent shot".
-6. Every shot's prompt must be SELF-CONTAINED. Do NOT rely on external context.
+4. Diegetic audio only — no music, no lyrics, no score in Sound Layer.
+5. Dialogue line is MANDATORY even for silent shots — write "None—Silent shot."
+6. Every prompt.en must be SELF-CONTAINED. Do NOT rely on external context.
 7. Trust the reference image for wardrobe — only restate state-changes the image cannot carry (damp, torn, dusty, bloodied).
 8. One main idea per shot. One dominant action, one camera strategy.
 9. Per-shot runtime: 4-8s = one strong action, 8-12s = action + hold, 12-15s = 2-3 beats.
-10. Max ~3500 chars per prompt.en. Target 280-400 words per single-shot scene, up to 600 for multi-shot.
-11. Include micro-fidgeting injection in Movement block — timed per-beat.
+10. Target 220-360 words per prompt.en. Concise beats verbose — the pre-prompt is what the generator uses.
+11. Include micro-fidgeting injection in Action — timed per-beat.
 
 ## Output JSON Structure
 
@@ -281,69 +276,17 @@ Return ONLY a valid JSON object with this exact structure. This is the ONLY thin
           "duration": 10,
           "start": 0,
           "end": 10,
-          "camera": {
-            "lens": "40mm to 55mm",
-            "framing": "Pan following Wyatt's pacing",
-            "movement": "Handheld, following subject",
-            "fps": 24,
-            "shutter": "180 degree",
-            "aspectRatio": "9:16"
-          },
-          "composition": {
-            "frameMap": "Cut 1 (0-5s): @image1 left-to-right pan, kitchen background. Cut 2 (5-10s): @image1 stops center x=50%.",
-            "subjectLock": "@image1: sweaty brow, shirt untucked from pacing. @image2: completely immobile.",
-            "crossFrameRules": "Single on @image1. No crossing issues.",
-            "focus": "Cut 1: @image1. Cut 2: @image1, @image2 soft in background.",
-            "depth": "Shallow DOF"
-          },
-          "blocking": {
-            "location": "Kitchen — near the table",
-            "movement": "Cut 1: @image1 paces L-to-R, hands cutting air. Cut 2: @image1 stops, plants both feet, turns to @image2.",
-            "interaction": "@image1 directing outburst at @image2 seated at table",
-            "positions": [
-              { "subjectId": "@image1", "description": "Center, foreground, standing, slightly out of breath" },
-              { "subjectId": "@image2", "description": "Right third x=75%, midground, seated at table" }
-            ]
-          },
-          "acting": {
-            "emotion": "Desperation, anxiety",
-            "bodyLanguage": "@image1: pacing, chopping hand gestures, jaw tight. @image2: no physical reaction, immobile, unblinking stare.",
-            "dialogue": "\"If it were that simple, why haven't you done it before? We're talking about going to jail or even dying if things go south!!!\"",
-            "microExpressions": ["@image1: brow furrowed, lips pulled thin", "@image2: zero blink, no facial movement"]
-          },
-          "timeline": {
-            "duration": 10,
-            "segments": [
-              { "start": 0, "end": 5, "label": "Pacing — desperate energy" },
-              { "start": 5, "end": 10, "label": "Stops — direct confrontation" }
-            ],
-            "beats": [
-              { "start": 0, "end": 5, "description": "@image1 paces, gesturing wildly" },
-              { "start": 5, "end": 10, "description": "@image1 stops, plants feet, delivers line" }
-            ]
-          },
-          "audio": {
-            "dialogue": "\"If it were that simple...\" \"...dying if things go south!!!\"",
-            "ambient": "Kitchen room tone, refrigerator hum",
-            "sfx": ["Footsteps on tile — pacing", "Chair creak"],
-            "music": false
-          },
           "references": [
             { "slot": "@image1", "assetId": "character_uuid", "type": "character" },
             { "slot": "@image4", "assetId": "environment_file_id", "type": "environment" }
           ],
           "prompt": {
-            "en": "Scene & Mood: A man in a rumpled shirt paces frantically across a small kitchen, chopping the air with his hands...\n\nFrame Map: ...\n\nLocation & Blocking — @image4(plate): ...\n\nCross-Frame Rules: ...\n\nMovement: ...\n\nDialogue: ...\n\nLast Frame: ...\n\nWorld Plate: ...\n\nSound Bed: ...\n\nCapture Realism: ...\n\nCamera Capture: ...",
+            "en": "[Image1] [Image4]\n\nScene and Mood: ...\n\nComposition: ...\n\nSpace and Mélange: ...\n\nCross-Shot Rule: ...\n\nAction: ...\n\nDialogue: ...\n\nEnding Shot: ...\n\nEnvironmental Base: ...\n\nSound Layer: ...\n\n<final paragraph: capture realism + camera capture + runtime + 'Severe shaking, time flickering, and identity drift were avoided.'>",
             "zh": "Full Chinese translation of the same prompt"
-          },
-          "render": {
-            "mode": "M1",
-            "engine": "Seedance"
           },
           "notes": {
             "todos": ["Load @image1 Wyatt - sweaty variant", "Load @image4 kitchen plate"],
-            "warnings": [],
-            "approved": false
+            "warnings": []
           }
         }
       ]
@@ -359,12 +302,12 @@ Return ONLY a valid JSON object with this exact structure. This is the ONLY thin
 4. **All timestamps (start, end)** are cumulative from the episode start. First scene starts at 0.
 5. **Flashback visual language**: Flashback scenes should use distinct visual language. Note this in continuity.notes and consider a different mode.
 6. **Continuity accuracy**: Every scene must have an accurate continuity object. locationChange=true when the location changes. Note flashback transitions.
-7. **prompt.en** must use the 11-block format with EXACT block labels in the exact order. Each block separated by blank lines.
+7. **prompt.en** must use the simplified format: references header "[ImageN]" then the sections Scene and Mood / Composition / Space and Mélange / Cross-Shot Rule / Action / Dialogue / Ending Shot / Environmental Base / Sound Layer, then a final capture-and-camera paragraph. Concise, 220-360 words.
 8. **No result-oriented acting**: Replace every emotional adjective ("angry," "sad," "scared") with muscular description or transitive verb.
 9. **At least one micro-fidgeting injection per acting shot**, timed per-beat.
 10. **prompt.zh** is OPTIONAL. Only include it when the user explicitly requests Chinese generation.
 11. **Do NOT use double quotes (") inside JSON string values.** If dialogue quotes are needed inside a prompt, use single quotes (') or Chinese angle brackets 「」. Escape quotes in the JSON structure only.
-12. **Every prompt.en must use the 11-block format.** No exceptions.
+12. **Shot objects are SLIM**: id, title, description, duration, start, end, references, prompt, notes. Do NOT emit camera/composition/blocking/acting/timeline/audio — that direction lives inside prompt.en.
 
 ## CRITICAL — Output Format (MANDATORY — THIS IS THE LAST RULE)
 
