@@ -423,6 +423,9 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 	if req.SceneContext != nil {
 		finalPrompt = buildSceneContextBlock(req.SceneContext) + "\n\n" + req.Prompt
 	}
+	// Keep the original script+context for retries — the corrective prompt must
+	// resend it, otherwise Claude answers "No script provided".
+	originalPrompt := finalPrompt
 
 	// Build system prompt: start with the default shot builder schema,
 	// then APPEND the skill's system prompt on top (if any), so Claude
@@ -493,13 +496,16 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 
 		if attempt < maxAttempts-1 {
 			// Do NOT resend the (likely truncated) previous reply — it wastes
-			// context and produces the same oversized output. Instead instruct
-			// brevity so the retry converges under max_tokens.
-			finalPrompt = "Your previous response was not valid JSON (likely truncated). " +
-				"Regenerate from scratch. Keep EVERY field concise: shot descriptions in one " +
-				"sentence, prompt.en in compact form, max 2 microExpressions, omit empty fields " +
-				"and optional sub-objects. Respond with ONLY valid JSON matching the schema — " +
-				"no extra text, no markdown, no comments."
+			// context and produces the same oversized output. Instead resend the
+			// ORIGINAL script + instructions with a brevity directive so the
+			// retry converges under max_tokens.
+			finalPrompt = "Your previous response was not valid JSON (likely truncated or " +
+				"empty). Regenerate the full shot breakdown from the ORIGINAL script below. " +
+				"Keep EVERY field concise: shot descriptions in one sentence, prompt.en in " +
+				"compact form, max 2 microExpressions, omit empty fields and optional " +
+				"sub-objects. Respond with ONLY valid JSON matching the schema — no extra " +
+				"text, no markdown, no comments.\n\n" +
+				"=== ORIGINAL SCRIPT AND INSTRUCTIONS ===\n" + originalPrompt
 		}
 	}
 
