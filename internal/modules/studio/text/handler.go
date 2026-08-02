@@ -83,15 +83,19 @@ You receive a 'scene_context' with characters, presets, and assets. Assign asset
 '''
 episode.assetAssignments: [
   { "slot": "@image1", "assetId": "wyatt", "type": "character" },
-  { "slot": "@image4", "assetId": "kitchen-plate", "type": "environment" }
+  { "slot": "@image4", "assetId": "kitchen-plate", "type": "location" }
 ]
 '''
 
-Type values: "character", "environment", "prop", "reference".
+Type values: "character", "location", "prop", "audio".
+- "character" = a person / character (people, actors)
+- "location" = a location or environment where the shot takes place (INT/EXT space, set)
+- "prop" = an additional object in the scene that must stay consistent over time or needs an exact design (suitcase, hair dryer, chair, or anything with a unique feature)
+- "audio" = an audio asset
 - Same character across multiple scenes = same @imageN slot
 - Each scene's 'references' array only includes assets that actually appear in THAT scene
-- If an asset is an environment/location plate, only assign it to scenes that take place in that location
-- Environment plates anchor the Location & Blocking block in the prompt
+- If an asset is a location/environment plate, only assign it to scenes that take place in that location
+- Location plates anchor the Location & Blocking block in the prompt
 
 ## Continuity Engine — Scene-to-Scene Tracking
 
@@ -188,10 +192,10 @@ Default to M1 for dramatic/lived-in scenes. Flashbacks may use M2 (cleaner, edit
 
 Every shot's 'prompt.en' is a complete, self-contained Seedance prompt written as a natural, flowing director's note. It is the MOST IMPORTANT field — all of the shot's visual direction (composition, blocking, acting, audio, camera) lives INSIDE this text, not in separate sub-objects. Keep it concise: 220-360 words per shot. Plain text, one line per section.
 
-Start with a references header listing the @image slots used in this shot as bracketed tags (uppercase, no @):
+Start with a references header listing the @image slots used in this shot, in the exact seedance slot format (lowercase with the @, matching the shot's references array):
 
 '''
-[Image1] [Image2] [Image3]
+@image1 @image2 @image3
 '''
 
 Then write the sections in THIS EXACT ORDER, each on its own line, separated by blank lines. Do NOT nest them in JSON — this is the prompt body text:
@@ -231,7 +235,7 @@ Return ONLY a valid JSON object with this exact structure. This is the ONLY thin
     "totalShots": total_number_of_shots_across_all_scenes,
     "assetAssignments": [
       { "slot": "@image1", "assetId": "character_uuid_from_scene_context", "type": "character" },
-      { "slot": "@image2", "assetId": "name_of_asset", "type": "environment" }
+      { "slot": "@image2", "assetId": "name_of_asset", "type": "location" }
     ]
   },
   "description": "One-line logline describing the episode's core dramatic conflict",
@@ -266,7 +270,7 @@ Return ONLY a valid JSON object with this exact structure. This is the ONLY thin
       },
       "references": [
         { "slot": "@image1", "assetId": "character_uuid", "type": "character" },
-        { "slot": "@image4", "assetId": "environment_file_id", "type": "environment" }
+        { "slot": "@image4", "assetId": "location_file_id", "type": "location" }
       ],
       "shots": [
         {
@@ -278,10 +282,10 @@ Return ONLY a valid JSON object with this exact structure. This is the ONLY thin
           "end": 10,
           "references": [
             { "slot": "@image1", "assetId": "character_uuid", "type": "character" },
-            { "slot": "@image4", "assetId": "environment_file_id", "type": "environment" }
+            { "slot": "@image4", "assetId": "location_file_id", "type": "location" }
           ],
           "prompt": {
-            "en": "[Image1] [Image4]\n\nScene and Mood: ...\n\nComposition: ...\n\nSpace and Mélange: ...\n\nCross-Shot Rule: ...\n\nAction: ...\n\nDialogue: ...\n\nEnding Shot: ...\n\nEnvironmental Base: ...\n\nSound Layer: ...\n\n<final paragraph: capture realism + camera capture + runtime + 'Severe shaking, time flickering, and identity drift were avoided.'>",
+            "en": "@image1 @image4\n\nScene and Mood: ...\n\nComposition: ...\n\nSpace and Mélange: ...\n\nCross-Shot Rule: ...\n\nAction: ...\n\nDialogue: ...\n\nEnding Shot: ...\n\nEnvironmental Base: ...\n\nSound Layer: ...\n\n<final paragraph: capture realism + camera capture + runtime + 'Severe shaking, time flickering, and identity drift were avoided.'>",
             "zh": "Full Chinese translation of the same prompt"
           },
           "notes": {
@@ -302,7 +306,7 @@ Return ONLY a valid JSON object with this exact structure. This is the ONLY thin
 4. **All timestamps (start, end)** are cumulative from the episode start. First scene starts at 0.
 5. **Flashback visual language**: Flashback scenes should use distinct visual language. Note this in continuity.notes and consider a different mode.
 6. **Continuity accuracy**: Every scene must have an accurate continuity object. locationChange=true when the location changes. Note flashback transitions.
-7. **prompt.en** must use the simplified format: references header "[ImageN]" then the sections Scene and Mood / Composition / Space and Mélange / Cross-Shot Rule / Action / Dialogue / Ending Shot / Environmental Base / Sound Layer, then a final capture-and-camera paragraph. Concise, 220-360 words.
+7. **prompt.en** must use the simplified format: references header "@imageN" then the sections Scene and Mood / Composition / Space and Mélange / Cross-Shot Rule / Action / Dialogue / Ending Shot / Environmental Base / Sound Layer, then a final capture-and-camera paragraph. Concise, 220-360 words.
 8. **No result-oriented acting**: Replace every emotional adjective ("angry," "sad," "scared") with muscular description or transitive verb.
 9. **At least one micro-fidgeting injection per acting shot**, timed per-beat.
 10. **prompt.zh** is OPTIONAL. Only include it when the user explicitly requests Chinese generation.
