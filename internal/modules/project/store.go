@@ -335,7 +335,7 @@ func (s *ProjectStore) GetShotByID(id string) (*Shot, error) {
 }
 
 func (s *ProjectStore) ListShots(sceneID string) ([]Shot, error) {
-	query := `SELECT ` + shotCols + ` FROM shots WHERE scene_id = $1 AND deleted_at IS NULL ORDER BY number ASC`
+	query := `SELECT ` + shotCols + ` FROM shots WHERE scene_id = $1 AND deleted_at IS NULL ORDER BY number ASC, created_at ASC`
 	rows, err := s.db.Query(query, sceneID)
 	if err != nil {
 		return nil, err
