@@ -834,6 +834,10 @@ func (s *ProjectStore) UpdateShotModel(shotID, modelID string) error {
 // ─── Chapter Assignment Store Methods ─────────────────────────────
 
 func (s *ProjectStore) GetChapterCharacters(chapterID string) ([]ChapterCharacterAssignment, error) {
+	// Backfill slots for legacy assignments so the response always carries one.
+	if err := s.assignMissingChapterSlots(chapterID); err != nil {
+		return nil, err
+	}
 	query := `SELECT cc.id, cc.chapter_id, cc.character_id, c.name, COALESCE(cc.slot, ''),
 			COALESCE(cf.file_id::text, '') AS file_id, cc.created_at
 		FROM chapter_characters cc
@@ -863,6 +867,10 @@ func (s *ProjectStore) GetChapterCharacters(chapterID string) ([]ChapterCharacte
 }
 
 func (s *ProjectStore) GetChapterAssets(chapterID string) ([]ChapterAssetAssignment, error) {
+	// Backfill slots for legacy assignments so the response always carries one.
+	if err := s.assignMissingChapterSlots(chapterID); err != nil {
+		return nil, err
+	}
 	query := `SELECT ca.id, ca.chapter_id, ca.file_id, f.filename, f.mime_type,
 			COALESCE(ca.slot, '') AS slot, ca.created_at
 		FROM chapter_assets ca
@@ -911,6 +919,16 @@ func (s *ProjectStore) GetChapterPresets(chapterID string) ([]ChapterPresetAssig
 }
 
 func (s *ProjectStore) AssignCharacterToChapter(chapterID, characterID, slot string) (string, error) {
+	// Episode assets must always have a @imageN slot so they reach the shot
+	// builder ordered and labeled — auto-assign the next free one when the
+	// caller doesn't provide one (e.g. free assets uploaded from the panel).
+	if slot == "" {
+		next, err := s.nextFreeChapterSlot(chapterID)
+		if err != nil {
+			return "", err
+		}
+		slot = next
+	}
 	var id string
 	query := `INSERT INTO chapter_characters (id, chapter_id, character_id, slot)
 		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''))
@@ -923,6 +941,14 @@ func (s *ProjectStore) AssignCharacterToChapter(chapterID, characterID, slot str
 }
 
 func (s *ProjectStore) AssignAssetToChapter(chapterID, fileID, slot string) (string, error) {
+	// See AssignCharacterToChapter — episode assets keep an @imageN slot.
+	if slot == "" {
+		next, err := s.nextFreeChapterSlot(chapterID)
+		if err != nil {
+			return "", err
+		}
+		slot = next
+	}
 	var id string
 	query := `INSERT INTO chapter_assets (id, chapter_id, file_id, slot)
 		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''))
@@ -932,6 +958,85 @@ func (s *ProjectStore) AssignAssetToChapter(chapterID, fileID, slot string) (str
 		return "", err
 	}
 	return id, nil
+}
+
+// nextFreeChapterSlot returns the lowest @imageN not yet used by any character
+// or asset assigned to the chapter, so auto-assigned slots never collide.
+func (s *ProjectStore) nextFreeChapterSlot(chapterID string) (string, error) {
+	used := map[int]bool{}
+	rows, err := s.db.Query(`
+		SELECT slot FROM chapter_characters WHERE chapter_id = $1 AND slot IS NOT NULL
+		UNION ALL
+		SELECT slot FROM chapter_assets WHERE chapter_id = $1 AND slot IS NOT NULL`, chapterID)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var slot string
+		if err := rows.Scan(&slot); err != nil {
+			return "", err
+		}
+		if n := chapterSlotNum(slot); n > 0 {
+			used[n] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	n := 1
+	for used[n] {
+		n++
+	}
+	return fmt.Sprintf("@image%d", n), nil
+}
+
+// assignMissingChapterSlots backfills @imageN slots for character/asset
+// assignments created without one (legacy data before auto-assignment), so
+// the assignments endpoint always returns a slot. Same pattern as the
+// scene_characters backfill in GetSceneCharacters.
+func (s *ProjectStore) assignMissingChapterSlots(chapterID string) error {
+	type target struct {
+		id   string
+		kind string // "character" | "asset"
+	}
+	var targets []target
+	rows, err := s.db.Query(`
+		SELECT 'character' AS kind, id, created_at FROM chapter_characters WHERE chapter_id = $1 AND slot IS NULL
+		UNION ALL
+		SELECT 'asset' AS kind, id, created_at FROM chapter_assets WHERE chapter_id = $1 AND slot IS NULL
+		ORDER BY kind, created_at`, chapterID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var t target
+		var _createdAt string // only used for the deterministic ORDER BY
+		if err := rows.Scan(&t.kind, &t.id, &_createdAt); err != nil {
+			rows.Close()
+			return err
+		}
+		targets = append(targets, t)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, t := range targets {
+		slot, err := s.nextFreeChapterSlot(chapterID)
+		if err != nil {
+			return err
+		}
+		table := "chapter_characters"
+		if t.kind == "asset" {
+			table = "chapter_assets"
+		}
+		if _, err := s.db.Exec(`UPDATE `+table+` SET slot = $2 WHERE id = $1`, t.id, slot); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *ProjectStore) AssignPresetToChapter(chapterID, presetID string) (string, error) {
@@ -977,4 +1082,16 @@ func (s *ProjectStore) RemoveChapterPreset(assignmentID string) error {
 		return fmt.Errorf("assignment not found")
 	}
 	return nil
+}
+
+// chapterSlotNum extracts the trailing number of a slot like "@image5" (→ 5);
+// 0 when the slot has no numeric suffix.
+func chapterSlotNum(slot string) int {
+	n := 0
+	mult := 1
+	for i := len(slot) - 1; i >= 0 && slot[i] >= '0' && slot[i] <= '9'; i-- {
+		n += int(slot[i]-'0') * mult
+		mult *= 10
+	}
+	return n
 }
