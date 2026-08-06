@@ -40,6 +40,8 @@ type textHandler interface {
 	PreviewPayload(c *gin.Context)
 	ClaudeGenerateShots(c *gin.Context)
 	ClaudeOptimizePrompt(c *gin.Context)
+	ListGenerateShotsLogs(c *gin.Context)
+	GetGenerateShotsLog(c *gin.Context)
 }
 
 func NewModule(hdl *Handler, videoHdl videoHandler, imageHdl imageHandler, audioHdl audioHandler, textHdl textHandler) *Module {
@@ -111,6 +113,8 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 			{
 				claude.POST("/generate-shots", m.textHdl.ClaudeGenerateShots)
 				claude.POST("/optimize-prompt", m.textHdl.ClaudeOptimizePrompt)
+				claude.GET("/generate-shots-logs", m.textHdl.ListGenerateShotsLogs)
+				claude.GET("/generate-shots-logs/:id", m.textHdl.GetGenerateShotsLog)
 			}
 		}
 	}

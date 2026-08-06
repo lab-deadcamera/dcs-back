@@ -85,6 +85,11 @@ func TestExtractJSON(t *testing.T) {
 			expected: `{unclosed`,
 			desc:     "unclosed brace",
 		},
+		{
+			input:    ``,
+			expected: ``,
+			desc:     "empty text (API-error path has no reply)",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -165,6 +170,35 @@ func TestPreFillWorks(t *testing.T) {
 	fullJSON := "{" + claudeContinuation
 	if !validateShotJSON(fullJSON) {
 		t.Error("pre-filled response should validate as JSON")
+	}
+}
+
+// TestBuildCorrectivePrompt verifies the retry prompt resends the ORIGINAL
+// script (guards a documented bug: a retry without originalPrompt made Claude
+// answer "No script provided").
+func TestBuildCorrectivePrompt(t *testing.T) {
+	original := "56. INT. WYATT'S KITCHEN — DAY\nContent here."
+	prompt := buildCorrectivePrompt(original)
+
+	if !strings.Contains(prompt, original) {
+		t.Error("corrective prompt must resend the ORIGINAL script")
+	}
+	for _, s := range []string{"ORIGINAL SCRIPT", "not valid JSON", "Regenerate the full shot breakdown"} {
+		if !strings.Contains(prompt, s) {
+			t.Errorf("corrective prompt missing required part: %q", s)
+		}
+	}
+}
+
+// TestBuildExhaustionError verifies the final error message after all retries
+// report the attempt count and the extracted JSON of the last reply.
+func TestBuildExhaustionError(t *testing.T) {
+	msg := buildExhaustionError(3, `Here: {"episode":{},"scenes":[]}`)
+	if !strings.Contains(msg, "after 3 attempts") {
+		t.Errorf("message must report the attempt count: %q", msg)
+	}
+	if !strings.Contains(msg, `{"episode":{},"scenes":[]}`) {
+		t.Errorf("message must contain the extracted last response: %q", msg)
 	}
 }
 

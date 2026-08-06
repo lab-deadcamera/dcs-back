@@ -146,7 +146,8 @@ func main() {
 	skillSvc := skill.NewService(skillStore)
 	skillHdl := skill.NewHandler(skillSvc)
 
-	studioTextHdl := studiotext.NewHandler(studioSvc.GetProviderStore(), skillSvc)
+	shotBuilderLogStore := studiotext.NewLogStore(database)
+	studioTextHdl := studiotext.NewHandler(studioSvc.GetProviderStore(), skillSvc, shotBuilderLogStore)
 	projectSvc := project.NewService(projectStore)
 	projectSvc.SetTaskLookup(func(taskID string) string {
 		sr, err := studioSvc.GetStatus(taskID)

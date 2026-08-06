@@ -215,6 +215,18 @@ type ClaudeGenerateShotsResponse struct {
 	Mode string        `json:"mode,omitempty"`
 }
 
+// ListShotBuilderLogsRequest holds pagination and filter params for listing
+// failed generate-shots calls.
+type ListShotBuilderLogsRequest struct {
+	Page      int    `form:"page"`
+	Limit     int    `form:"limit"`
+	ProjectID string `form:"project_id"`
+	SceneID   string `form:"scene_id"`
+	UserID    int    `form:"user_id"`
+	DateFrom  string `form:"date_from"`
+	DateTo    string `form:"date_to"`
+}
+
 // ─── Proncer ─────────────────────────────────────────────────────
 
 type ClaudeOptimizePromptRequest struct {

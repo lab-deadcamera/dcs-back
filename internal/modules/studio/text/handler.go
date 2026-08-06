@@ -1,10 +1,12 @@
 package text
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"strings"
 	"time"
@@ -21,10 +23,11 @@ import (
 type Handler struct {
 	providerStore *provider.Store
 	skillSvc      *skillmodule.Service
+	logStore      *LogStore
 }
 
-func NewHandler(providerStore *provider.Store, skillSvc *skillmodule.Service) *Handler {
-	return &Handler{providerStore: providerStore, skillSvc: skillSvc}
+func NewHandler(providerStore *provider.Store, skillSvc *skillmodule.Service, logStore *LogStore) *Handler {
+	return &Handler{providerStore: providerStore, skillSvc: skillSvc, logStore: logStore}
 }
 
 func (h *Handler) Generate(c *gin.Context) {
@@ -354,6 +357,16 @@ CRITICAL:
 // ─── Shot Builder ─────────────────────────────────────────────────
 
 func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
+	// Capture the raw request body BEFORE binding — it is the ground truth for
+	// reconstructing a failed request (payload + scene_context with the
+	// assigned resources). Restore it so ShouldBindJSON still works.
+	rawBody, err := c.GetRawData()
+	if err != nil {
+		utils.BadRequest(c, fmt.Sprintf("failed to read request body: %v", err))
+		return
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(rawBody))
+
 	var req ClaudeGenerateShotsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.BadRequest(c, fmt.Sprintf("invalid request: %v", err))
@@ -379,10 +392,12 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 	// still has the JSON output format and critical rules.
 	systemPrompt := defaultShotBuilderPrompt
 
+	var skillName string
 	if req.SkillID != "" && h.skillSvc != nil {
 		skill, err := h.skillSvc.GetByID(req.SkillID)
 		if err == nil && skill != nil && skill.SystemPrompt != "" {
 			log.Printf("[skill] appending skill %q (%s) to system prompt", skill.Name, skill.ID)
+			skillName = skill.Name
 			systemPrompt += "\n\n## Skill\n" + skill.SystemPrompt
 		} else if err != nil {
 			log.Printf("[skill] error looking up skill %q: %v", req.SkillID, err)
@@ -415,18 +430,47 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 	const maxAttempts = 3
 	var lastReply string
 
+	// Failure-tracking state. Attempts are buffered in memory and only
+	// persisted when the call ends in failure (log-only-failures rule).
+	start := time.Now()
+	var attempts []*ShotBuilderAttempt
+	totalInputTokens, totalOutputTokens := 0, 0
+
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		reply, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt)
-		if err != nil {
-			utils.InternalError(c, fmt.Sprintf("failed to generate shots: %v", err))
+		reply, usage, duration, callErr := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt)
+
+		a := &ShotBuilderAttempt{
+			AttemptNumber: attempt + 1,
+			Prompt:        finalPrompt,
+			DurationMs:    duration.Milliseconds(),
+		}
+
+		if callErr != nil {
+			// ❌ Claude API error — persist immediately with the attempt in error.
+			a.ErrorMessage = callErr.Error()
+			attempts = append(attempts, a)
+			msg := fmt.Sprintf("failed to generate shots: %v", callErr)
+			h.persistFailure(c, req, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, msg, start)
+			utils.InternalError(c, msg)
 			return
 		}
 
 		// Extract clean JSON from Claude's response
 		clean := extractJSON(reply)
+		a.Response = reply
+		a.Valid = validateShotJSON(clean)
+		if usage != nil {
+			a.InputTokens = int(usage.InputTokens)
+			a.OutputTokens = int(usage.OutputTokens)
+			a.CacheReadTokens = int(usage.CacheReadInputTokens)
+			a.CacheCreationTokens = int(usage.CacheCreationInputTokens)
+			totalInputTokens += a.InputTokens
+			totalOutputTokens += a.OutputTokens
+		}
+		attempts = append(attempts, a)
 
-		if validateShotJSON(clean) {
-			// ✅ Valid — return clean JSON
+		if a.Valid {
+			// ✅ Valid — return clean JSON. Success is NOT logged.
 			utils.Success(c, ClaudeGenerateShotsResponse{
 				TaskID: fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
 				Model:  apiModel,
@@ -446,21 +490,165 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 			// context and produces the same oversized output. Instead resend the
 			// ORIGINAL script + instructions with a brevity directive so the
 			// retry converges under max_tokens.
-			finalPrompt = "Your previous response was not valid JSON (likely truncated or " +
-				"empty). Regenerate the full shot breakdown from the ORIGINAL script below. " +
-				"Keep EVERY field concise: shot descriptions in one sentence, prompt.en in " +
-				"compact form, max 2 microExpressions, omit empty fields and optional " +
-				"sub-objects. Respond with ONLY valid JSON matching the schema — no extra " +
-				"text, no markdown, no comments.\n\n" +
-				"=== ORIGINAL SCRIPT AND INSTRUCTIONS ===\n" + originalPrompt
+			finalPrompt = buildCorrectivePrompt(originalPrompt)
 		}
 	}
 
-	// All attempts exhausted
-	utils.InternalError(c, fmt.Sprintf(
-		"failed to generate valid shot JSON after %d attempts. Last response: %s",
-		maxAttempts, extractJSON(lastReply),
-	))
+	// All attempts exhausted — persist the failure before returning.
+	msg := buildExhaustionError(maxAttempts, lastReply)
+	h.persistFailure(c, req, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, msg, start)
+	utils.InternalError(c, msg)
+}
+
+// ─── Shot Builder Logs (failed calls) ─────────────────────────────
+
+// ListGenerateShotsLogs returns paginated failed generate-shots calls.
+func (h *Handler) ListGenerateShotsLogs(c *gin.Context) {
+	var req ListShotBuilderLogsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	if req.Page < 1 {
+		req.Page = 1
+	}
+	if req.Limit < 1 || req.Limit > 100 {
+		req.Limit = 20
+	}
+
+	if h.logStore == nil {
+		utils.InternalError(c, "log store not available")
+		return
+	}
+
+	logs, total, err := h.logStore.ListLogs(req.Page, req.Limit, req.ProjectID, req.SceneID, req.UserID, req.DateFrom, req.DateTo)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+
+	totalPages := (total + req.Limit - 1) / req.Limit
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	utils.Success(c, ListShotBuilderLogsResponse{
+		Logs:       logs,
+		Total:      total,
+		Page:       req.Page,
+		Limit:      req.Limit,
+		TotalPages: totalPages,
+	})
+}
+
+// GetGenerateShotsLog returns a single failed generate-shots call with its attempts.
+func (h *Handler) GetGenerateShotsLog(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		utils.BadRequest(c, "id is required")
+		return
+	}
+
+	if h.logStore == nil {
+		utils.InternalError(c, "log store not available")
+		return
+	}
+
+	logEntry, attempts, err := h.logStore.GetLog(id)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	if logEntry == nil {
+		utils.NotFound(c, "shot builder log not found")
+		return
+	}
+
+	utils.Success(c, gin.H{"log": logEntry, "attempts": attempts})
+}
+
+// persistFailure writes the shot builder log row and all buffered attempts
+// for a failed generate-shots call. A logging error must never mask the real
+// error already sent to the client, so failures are only logged with log.Printf.
+func (h *Handler) persistFailure(
+	c *gin.Context,
+	req ClaudeGenerateShotsRequest,
+	systemPrompt, originalPrompt string,
+	rawBody []byte,
+	skillName, keyModel, apiModel string,
+	attempts []*ShotBuilderAttempt,
+	totalInput, totalOutput int,
+	lastReply, errorMsg string,
+	start time.Time,
+) {
+	if h.logStore == nil {
+		return
+	}
+
+	userID := userIDFromContext(c)
+	if userID == 0 {
+		userID = req.UserID
+	}
+	userName := stringFromContext(c, "username")
+	if userName == "" {
+		userName = req.UserName
+	}
+
+	logEntry := &ShotBuilderLog{
+		UserID:            userID,
+		UserName:          userName,
+		UserEmail:         stringFromContext(c, "user_email"),
+		ProjectID:         req.ProjectID,
+		SceneID:           req.SceneID,
+		KeyModel:          keyModel,
+		APIModel:          apiModel,
+		SkillID:           req.SkillID,
+		SkillName:         skillName,
+		RequestPayload:    string(rawBody),
+		SystemPrompt:      systemPrompt,
+		Prompt:            originalPrompt,
+		Status:            "failed",
+		ErrorMessage:      errorMsg,
+		Response:          extractJSON(lastReply),
+		Attempts:          len(attempts),
+		TotalInputTokens:  totalInput,
+		TotalOutputTokens: totalOutput,
+		DurationMs:        time.Since(start).Milliseconds(),
+	}
+
+	if err := h.logStore.Create(logEntry); err != nil {
+		log.Printf("[shot-builder-log] failed to persist log: %v", err)
+		return
+	}
+
+	for _, a := range attempts {
+		a.LogID = logEntry.ID
+		if err := h.logStore.InsertAttempt(a); err != nil {
+			log.Printf("[shot-builder-log] failed to persist attempt %d: %v", a.AttemptNumber, err)
+		}
+	}
+}
+
+// userIDFromContext returns the authenticated user ID from the JWT claims,
+// or 0 when unavailable.
+func userIDFromContext(c *gin.Context) int {
+	if v, ok := c.Get("userID"); ok {
+		if id, ok := v.(int64); ok {
+			return int(id)
+		}
+	}
+	return 0
+}
+
+// stringFromContext returns a string claim from the gin context, or "".
+func stringFromContext(c *gin.Context, key string) string {
+	if v, ok := c.Get(key); ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 // ─── Proncer ──────────────────────────────────────────────────────
@@ -513,7 +701,7 @@ func (h *Handler) ClaudeOptimizePrompt(c *gin.Context) {
 		apiModel = keyModel
 	}
 
-	reply, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt)
+	reply, _, _, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt)
 	if err != nil {
 		utils.InternalError(c, fmt.Sprintf("failed to optimize prompt: %v", err))
 		return
@@ -592,7 +780,9 @@ var modelNameMap = map[string]string{
 	"claude-fable-5":      "claude-fable-5",
 }
 
-func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemPrompt, userPrompt string) (string, error) {
+func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemPrompt, userPrompt string) (string, *anthropic.Usage, time.Duration, error) {
+	start := time.Now()
+
 	// 1. Resolve API key from provider store
 	apiKey := h.resolveAPIKey(keyModel)
 
@@ -636,7 +826,7 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 				msg = body.Error.Message
 			}
 		}
-		return "", fmt.Errorf("Claude API error: %s", msg)
+		return "", nil, time.Since(start), fmt.Errorf("Claude API error: %s", msg)
 	}
 
 	// Concatenar bloques de texto de la respuesta
@@ -655,7 +845,7 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 		resp.Usage.CacheCreationInputTokens,
 	)
 
-	return reply, nil
+	return reply, &resp.Usage, time.Since(start), nil
 }
 
 // resolveAPIKey looks up the API key for a model from the provider store.
@@ -727,6 +917,28 @@ func buildSceneContextBlock(ctx *SceneContext) string {
 }
 
 // ─── JSON extraction & validation ────────────────────────────────
+
+// buildCorrectivePrompt builds the retry prompt. It must resend the ORIGINAL
+// script + instructions (never the truncated previous reply), otherwise Claude
+// answers "No script provided".
+func buildCorrectivePrompt(originalPrompt string) string {
+	return "Your previous response was not valid JSON (likely truncated or " +
+		"empty). Regenerate the full shot breakdown from the ORIGINAL script below. " +
+		"Keep EVERY field concise: shot descriptions in one sentence, prompt.en in " +
+		"compact form, max 2 microExpressions, omit empty fields and optional " +
+		"sub-objects. Respond with ONLY valid JSON matching the schema — no extra " +
+		"text, no markdown, no comments.\n\n" +
+		"=== ORIGINAL SCRIPT AND INSTRUCTIONS ===\n" + originalPrompt
+}
+
+// buildExhaustionError builds the error message when all retry attempts
+// produced invalid JSON.
+func buildExhaustionError(maxAttempts int, lastReply string) string {
+	return fmt.Sprintf(
+		"failed to generate valid shot JSON after %d attempts. Last response: %s",
+		maxAttempts, extractJSON(lastReply),
+	)
+}
 
 // extractJSON finds the outermost balanced JSON object { ... } in text.
 // Correctly handles braces inside JSON string values (e.g., "{...}" inside prompt.en).
