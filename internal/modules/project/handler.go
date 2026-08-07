@@ -1,6 +1,7 @@
 package project
 
 import (
+	"errors"
 	"strings"
 
 	"dcs-back-v0/internal/utils"
@@ -342,6 +343,10 @@ func (h *Handler) SoftDeleteScene(c *gin.Context) {
 	}
 
 	if err := h.svc.SoftDeleteScene(sceneID); err != nil {
+		if errors.Is(err, ErrSceneHasTakes) {
+			utils.BadRequest(c, err.Error())
+			return
+		}
 		if err.Error() == "scene not found" {
 			utils.NotFound(c, err.Error())
 			return
@@ -459,6 +464,10 @@ func (h *Handler) SoftDeleteShot(c *gin.Context) {
 	}
 
 	if err := h.svc.SoftDeleteShot(shotID); err != nil {
+		if errors.Is(err, ErrShotHasTakes) {
+			utils.BadRequest(c, err.Error())
+			return
+		}
 		if err.Error() == "shot not found" {
 			utils.NotFound(c, err.Error())
 			return

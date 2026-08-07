@@ -217,12 +217,13 @@ func (s *ProjectStore) SoftDeleteChapter(id string) error {
 const sceneCols = `id, project_id, COALESCE(chapter_id::text, '') AS chapter_id, number,
 	COALESCE(name, '') AS name, COALESCE(description, '') AS description, active,
 		(SELECT COUNT(*) FROM shots WHERE scene_id IS NOT NULL AND scene_id = scenes.id AND deleted_at IS NULL) AS shot_count,
+		(SELECT COUNT(*) FROM takes WHERE scene_id IS NOT NULL AND scene_id = scenes.id AND deleted_at IS NULL) AS take_count,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanScene(sc *Scene, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(&sc.ID, &sc.ProjectID, &sc.ChapterID, &sc.Number, &sc.Name, &sc.Description, &sc.Active, &sc.ShotCount, &sc.CreatedAt, &sc.UpdatedAt, &sc.DeletedAt)
+	return scanner.Scan(&sc.ID, &sc.ProjectID, &sc.ChapterID, &sc.Number, &sc.Name, &sc.Description, &sc.Active, &sc.ShotCount, &sc.TakeCount, &sc.CreatedAt, &sc.UpdatedAt, &sc.DeletedAt)
 }
 
 func (s *ProjectStore) CreateScene(sc *Scene) error {

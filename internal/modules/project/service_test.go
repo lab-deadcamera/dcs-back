@@ -439,6 +439,46 @@ func (m *mockStore) UpdateShotModel(shotID, modelID string) error {
 	return nil
 }
 
+// ── Chapter Resources (mock) ──────────────────────────────────
+// Needed so the mock satisfies the projectStore interface. No existing
+// test exercises these (they were never implemented).
+
+func (m *mockStore) GetChapterCharacters(chapterID string) ([]ChapterCharacterAssignment, error) {
+	return []ChapterCharacterAssignment{}, nil
+}
+
+func (m *mockStore) GetChapterAssets(chapterID string) ([]ChapterAssetAssignment, error) {
+	return []ChapterAssetAssignment{}, nil
+}
+
+func (m *mockStore) GetChapterPresets(chapterID string) ([]ChapterPresetAssignment, error) {
+	return []ChapterPresetAssignment{}, nil
+}
+
+func (m *mockStore) AssignCharacterToChapter(chapterID, characterID, slot string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStore) AssignAssetToChapter(chapterID, fileID, slot string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStore) AssignPresetToChapter(chapterID, presetID string) (string, error) {
+	return "", nil
+}
+
+func (m *mockStore) RemoveChapterCharacter(assignmentID string) error {
+	return nil
+}
+
+func (m *mockStore) RemoveChapterAsset(assignmentID string) error {
+	return nil
+}
+
+func (m *mockStore) RemoveChapterPreset(assignmentID string) error {
+	return nil
+}
+
 // ─── Tests ──────────────────────────────────────────────────────
 
 func TestCreateProject(t *testing.T) {
@@ -789,6 +829,28 @@ func TestSoftDeleteShot(t *testing.T) {
 	}
 }
 
+func TestSoftDeleteShot_WithTakes(t *testing.T) {
+	m := newMockStore()
+	svc := &Service{store: m}
+
+	proj, _ := svc.Create(&CreateProjectRequest{Name: "test"})
+	ch, _ := svc.CreateChapter(proj.ID, &CreateChapterRequest{Number: 1})
+	sc, _ := svc.CreateScene(ch.ID, &CreateSceneRequest{Number: 1})
+	sh, _ := svc.CreateShot(sc.ID, &CreateShotRequest{Number: 1})
+	sh.TakeCount = 1
+
+	if err := svc.SoftDeleteShot(sh.ID); !errors.Is(err, ErrShotHasTakes) {
+		t.Fatalf("expected ErrShotHasTakes, got %v", err)
+	}
+	got, err := svc.GetShotByID(sh.ID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Error("shot should still exist after blocked delete")
+	}
+}
+
 // ─── Take Tests (adapted) ───────────────────────────────────────
 
 func TestCreateTake_DefaultStatus(t *testing.T) {
@@ -941,6 +1003,27 @@ func TestSoftDeleteScene(t *testing.T) {
 	_, err := svc.GetSceneByID(sc.ID)
 	if err == nil || err.Error() != "scene not found" {
 		t.Errorf("expected 'scene not found' after delete, got %v", err)
+	}
+}
+
+func TestSoftDeleteScene_WithTakes(t *testing.T) {
+	m := newMockStore()
+	svc := &Service{store: m}
+
+	proj, _ := svc.Create(&CreateProjectRequest{Name: "test"})
+	ch, _ := svc.CreateChapter(proj.ID, &CreateChapterRequest{Number: 1})
+	sc, _ := svc.CreateScene(ch.ID, &CreateSceneRequest{Number: 1})
+	sc.TakeCount = 1
+
+	if err := svc.SoftDeleteScene(sc.ID); !errors.Is(err, ErrSceneHasTakes) {
+		t.Fatalf("expected ErrSceneHasTakes, got %v", err)
+	}
+	got, err := svc.GetSceneByID(sc.ID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Error("scene should still exist after blocked delete")
 	}
 }
 

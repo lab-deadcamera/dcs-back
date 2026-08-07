@@ -68,6 +68,7 @@ type Scene struct {
 	Description string     `json:"description"`
 	Active      bool       `json:"active"`
 	ShotCount   int        `json:"shot_count"`
+	TakeCount   int        `json:"take_count"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`

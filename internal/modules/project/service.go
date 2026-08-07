@@ -1,6 +1,7 @@
 package project
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,12 @@ import (
 // TaskLookup resolves a completed generation task to its local video URL.
 // Returns empty string if the task is not found or not yet completed.
 type TaskLookup func(taskID string) string
+
+// Sentinel errors for delete protections (scenes/shots with existing takes).
+var (
+	ErrSceneHasTakes = errors.New("scene has existing takes")
+	ErrShotHasTakes  = errors.New("shot has existing takes")
+)
 
 // projectStore defines the storage interface needed by Service.
 type projectStore interface {
@@ -333,6 +340,16 @@ func (s *Service) UpdateScene(id string, req *UpdateSceneRequest) (*Scene, error
 }
 
 func (s *Service) SoftDeleteScene(id string) error {
+	sc, err := s.store.GetSceneByID(id)
+	if err != nil {
+		return err
+	}
+	if sc == nil {
+		return fmt.Errorf("scene not found")
+	}
+	if sc.TakeCount > 0 {
+		return ErrSceneHasTakes
+	}
 	return s.store.SoftDeleteScene(id)
 }
 
@@ -422,6 +439,16 @@ func (s *Service) UpdateShot(id string, req *UpdateShotRequest) (*Shot, error) {
 }
 
 func (s *Service) SoftDeleteShot(id string) error {
+	sh, err := s.store.GetShotByID(id)
+	if err != nil {
+		return err
+	}
+	if sh == nil {
+		return fmt.Errorf("shot not found")
+	}
+	if sh.TakeCount > 0 {
+		return ErrShotHasTakes
+	}
 	return s.store.SoftDeleteShot(id)
 }
 
