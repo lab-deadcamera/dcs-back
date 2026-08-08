@@ -651,8 +651,18 @@ func (s *Service) ListGalleryAssets(modelID string) ([]GalleryAsset, error) {
 		return nil, err
 	}
 
+	// Retries/fixes of the same file create one model_assets row per attempt.
+	// Show only the latest attempt per file (records arrive newest-first) so
+	// each asset appears once — the per-asset error history is available via
+	// ListGalleryErrors.
+	seen := make(map[string]bool)
 	assets := make([]GalleryAsset, 0, len(records))
 	for _, ma := range records {
+		if seen[ma.FileID] {
+			continue
+		}
+		seen[ma.FileID] = true
+
 		asset := GalleryAsset{ModelAsset: ma}
 		if s.fileService != nil {
 			if f, err := s.fileService.GetFile(ma.FileID); err == nil && f != nil {
