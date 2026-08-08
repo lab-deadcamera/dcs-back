@@ -56,7 +56,7 @@ func NewModule(hdl *Handler, videoHdl videoHandler, imageHdl imageHandler, audio
 
 func (m *Module) Name() string { return "studio" }
 
-func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
+func (m *Module) Register(rg *gin.RouterGroup, authMw, adminMw gin.HandlerFunc) {
 	g := rg.Group("/studio")
 	g.Use(authMw)
 	{
@@ -66,6 +66,15 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 		g.GET("/files-with-sync", m.hdl.ListFilesWithSync)
 		g.GET("/characters/:id/files-with-sync", m.hdl.ListCharacterFilesWithSync)
 		g.POST("/sync-character-assets", m.hdl.SyncCharacterAssets)
+
+		// External gallery admin view
+		gallery := g.Group("/gallery")
+		gallery.Use(adminMw)
+		{
+			gallery.GET("/models", m.hdl.ListGalleryModels)
+			gallery.GET("/models/:modelId/assets", m.hdl.ListGalleryModelAssets)
+			gallery.GET("/errors", m.hdl.ListGalleryErrors)
+		}
 
 		// Logs
 		g.GET("/logs/generation", m.hdl.ListGenerationLogs)

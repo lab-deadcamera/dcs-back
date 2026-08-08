@@ -98,6 +98,48 @@ func (h *Handler) SyncCharacterAssets(c *gin.Context) {
 	utils.Success(c, result)
 }
 
+// ─── Gallery (external galleries admin view) ───────────────────
+
+func (h *Handler) ListGalleryModels(c *gin.Context) {
+	models, err := h.svc.ListGalleryModels()
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Success(c, models)
+}
+
+func (h *Handler) ListGalleryModelAssets(c *gin.Context) {
+	modelID := c.Param("modelId")
+	if modelID == "" {
+		utils.BadRequest(c, "modelId is required")
+		return
+	}
+
+	assets, err := h.svc.ListGalleryAssets(modelID)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Success(c, assets)
+}
+
+func (h *Handler) ListGalleryErrors(c *gin.Context) {
+	modelID := c.Query("model_id")
+	fileID := c.Query("file_id")
+	if modelID == "" || fileID == "" {
+		utils.BadRequest(c, "model_id and file_id query parameters are required")
+		return
+	}
+
+	errors, err := h.svc.ListGalleryErrors(modelID, fileID)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Success(c, errors)
+}
+
 func (h *Handler) ListGenerationLogs(c *gin.Context) {
 	var req ListGenerationLogsRequest
 	if err := c.ShouldBindQuery(&req); err != nil {

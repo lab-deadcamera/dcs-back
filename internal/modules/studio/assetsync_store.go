@@ -29,6 +29,17 @@ type ModelAsset struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+// ModelSyncSummary agrega los registros de model_assets por modelo,
+// con conteos por estado — usado por la vista admin "Galerías Externas".
+type ModelSyncSummary struct {
+	ModelID  string     `json:"model_id"`
+	Total    int        `json:"total"`
+	Active   int        `json:"active"`
+	Failed   int        `json:"failed"`
+	Syncing  int        `json:"syncing"`
+	LastSync *time.Time `json:"last_sync,omitempty"`
+}
+
 // ─── Queries ─────────────────────────────────────────────────────
 
 const (
@@ -49,6 +60,17 @@ const (
 		WHERE id = $7`
 
 	deleteModelAssetSQL = `DELETE FROM model_assets WHERE id = $1`
+
+	listModelSummariesSQL = `SELECT model_id, COUNT(*) AS total,
+			COUNT(*) FILTER (WHERE status = 'active') AS active,
+			COUNT(*) FILTER (WHERE status = 'failed') AS failed,
+			COUNT(*) FILTER (WHERE status = 'syncing') AS syncing,
+			MAX(updated_at) AS last_sync
+		FROM model_assets GROUP BY model_id ORDER BY last_sync DESC`
+
+	listRecentErrorsSQL = `SELECT id, model_id, file_id, asset_id, asset_group_id, status, error_message, asset_url, asset_type, reference_uri, created_at, updated_at
+		FROM model_assets WHERE model_id = $1 AND file_id = $2 AND status = 'failed'
+		ORDER BY created_at DESC LIMIT $3`
 )
 
 // ─── Store ───────────────────────────────────────────────────────
@@ -161,4 +183,45 @@ func (s *AssetSyncStore) GetByFileIDs(fileIDs []string) (map[string][]ModelAsset
 		result[ma.FileID] = append(result[ma.FileID], ma)
 	}
 	return result, nil
+}
+
+// ListModelSummaries agrega los registros de sync por modelo — los modelos
+// que tienen datos en model_assets (para la vista admin de galerías externas).
+func (s *AssetSyncStore) ListModelSummaries() ([]ModelSyncSummary, error) {
+	rows, err := s.db.Query(listModelSummariesSQL)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var summaries []ModelSyncSummary
+	for rows.Next() {
+		var m ModelSyncSummary
+		if err := rows.Scan(&m.ModelID, &m.Total, &m.Active, &m.Failed, &m.Syncing, &m.LastSync); err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, m)
+	}
+	return summaries, nil
+}
+
+// ListRecentErrors devuelve los últimos `limit` intentos fallidos de sync
+// para un archivo concreto en un modelo (status = 'failed').
+func (s *AssetSyncStore) ListRecentErrors(modelID, fileID string, limit int) ([]ModelAsset, error) {
+	rows, err := s.db.Query(listRecentErrorsSQL, modelID, fileID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var errors []ModelAsset
+	for rows.Next() {
+		var ma ModelAsset
+		if err := rows.Scan(&ma.ID, &ma.ModelID, &ma.FileID, &ma.AssetID,
+			&ma.AssetGroupID, &ma.Status, &ma.ErrorMessage, &ma.AssetURL, &ma.AssetType, &ma.ReferenceURI, &ma.CreatedAt, &ma.UpdatedAt); err != nil {
+			return nil, err
+		}
+		errors = append(errors, ma)
+	}
+	return errors, nil
 }

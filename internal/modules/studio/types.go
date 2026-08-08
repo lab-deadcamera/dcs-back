@@ -184,6 +184,35 @@ type SyncResultSummary struct {
 	Results    []SyncAssetResponse `json:"results"`
 }
 
+// ─── Galería externa (admin) ────────────────────────────────────
+
+// GalleryModel resume el estado de sync de un modelo — usado por la vista
+// admin "Galerías Externas" para listar modelos con datos en model_assets.
+type GalleryModel struct {
+	ModelID   string     `json:"model_id"`
+	ModelName string     `json:"model_name"`
+	Total     int        `json:"total"`
+	Active    int        `json:"active"`
+	Failed    int        `json:"failed"`
+	Syncing   int        `json:"syncing"`
+	LastSync  *time.Time `json:"last_sync,omitempty"`
+}
+
+// GalleryCharacter es un personaje interno que usa el archivo sincronizado.
+type GalleryCharacter struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// GalleryAsset es un registro de model_assets enriquecido con el archivo
+// interno (galería interna) y los personajes que lo referencian.
+type GalleryAsset struct {
+	ModelAsset
+	FileName   string             `json:"file_name"`
+	MimeType   string             `json:"mime_type"`
+	Characters []GalleryCharacter `json:"characters"`
+}
+
 // ─── Asset sync ─────────────────────────────────────────────────
 
 type SyncAssetRequest struct {

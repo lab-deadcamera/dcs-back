@@ -568,6 +568,84 @@ func (s *Service) GetFilesWithSync(category, storage string, trashed bool) ([]Fi
 	return result, nil
 }
 
+// ListGalleryModels returns the models that have records in model_assets,
+// with per-status counts — powers the admin "External Galleries" view.
+func (s *Service) ListGalleryModels() ([]GalleryModel, error) {
+	if s.assetSyncStore == nil {
+		return nil, fmt.Errorf("asset sync store not available")
+	}
+	summaries, err := s.assetSyncStore.ListModelSummaries()
+	if err != nil {
+		return nil, err
+	}
+
+	models := make([]GalleryModel, 0, len(summaries))
+	for _, sm := range summaries {
+		name := "unknown"
+		if s.providerStore != nil {
+			if m, err := s.providerStore.GetModelByID(sm.ModelID); err == nil && m != nil {
+				name = m.Name
+			}
+		}
+		models = append(models, GalleryModel{
+			ModelID:   sm.ModelID,
+			ModelName: name,
+			Total:     sm.Total,
+			Active:    sm.Active,
+			Failed:    sm.Failed,
+			Syncing:   sm.Syncing,
+			LastSync:  sm.LastSync,
+		})
+	}
+	return models, nil
+}
+
+// ListGalleryAssets returns a model's sync records enriched with the internal
+// gallery match (file name/mime) and the characters that reference each file.
+func (s *Service) ListGalleryAssets(modelID string) ([]GalleryAsset, error) {
+	if s.assetSyncStore == nil {
+		return nil, fmt.Errorf("asset sync store not available")
+	}
+	records, err := s.assetSyncStore.ListByModel(modelID)
+	if err != nil {
+		return nil, err
+	}
+
+	assets := make([]GalleryAsset, 0, len(records))
+	for _, ma := range records {
+		asset := GalleryAsset{ModelAsset: ma}
+		if s.fileService != nil {
+			if f, err := s.fileService.GetFile(ma.FileID); err == nil && f != nil {
+				asset.FileName = f.Filename
+				asset.MimeType = f.MimeType
+			}
+		}
+		if s.charService != nil {
+			if ids, err := s.charService.FindCharactersByFileID(ma.FileID); err == nil {
+				for _, id := range ids {
+					if c, err := s.charService.GetByID(id); err == nil && c != nil {
+						asset.Characters = append(asset.Characters, GalleryCharacter{ID: c.ID, Name: c.Name})
+					}
+				}
+			}
+		}
+		if asset.Characters == nil {
+			asset.Characters = []GalleryCharacter{}
+		}
+		assets = append(assets, asset)
+	}
+	return assets, nil
+}
+
+// ListGalleryErrors returns the last 5 failed sync attempts for a specific
+// file in a model.
+func (s *Service) ListGalleryErrors(modelID, fileID string) ([]ModelAsset, error) {
+	if s.assetSyncStore == nil {
+		return nil, fmt.Errorf("asset sync store not available")
+	}
+	return s.assetSyncStore.ListRecentErrors(modelID, fileID, 5)
+}
+
 // GetCharacterFilesWithSync returns a character's files with their synced model info.
 func (s *Service) GetCharacterFilesWithSync(characterID string) ([]CharacterFileWithSync, error) {
 	if s.charService == nil {
