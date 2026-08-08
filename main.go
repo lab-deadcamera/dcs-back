@@ -117,6 +117,7 @@ func main() {
 	studioSvc.SetAssetSyncStore(assetSyncStore)
 	studioSvc.SetCharacterService(charSvc)
 	studioSvc.SetAssetCredentials(cfg.AssetAccessKeyID, cfg.AssetSecretAccessKey, cfg.AssetDefaultGroupID)
+	studioSvc.SetAssetFixOptions(cfg.AssetAutoNormalize, cfg.AssetAspectFix, cfg.AssetAIRepair, cfg.AssetImageModel)
 	genLogStore := studio.NewGenerationLogStore(database)
 	studioSvc.SetLogStore(genLogStore)
 	studioSvc.SetCommStore(studio.NewServerCommunicationStore(database))

@@ -140,6 +140,21 @@ func (h *Handler) ListGalleryErrors(c *gin.Context) {
 	utils.Success(c, errors)
 }
 
+func (h *Handler) FixAsset(c *gin.Context) {
+	var req FixAssetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.svc.FixAsset(&req)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Success(c, result)
+}
+
 func (h *Handler) ListGenerationLogs(c *gin.Context) {
 	var req ListGenerationLogsRequest
 	if err := c.ShouldBindQuery(&req); err != nil {

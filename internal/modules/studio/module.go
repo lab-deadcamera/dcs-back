@@ -74,6 +74,7 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, adminMw gin.HandlerFunc) 
 			gallery.GET("/models", m.hdl.ListGalleryModels)
 			gallery.GET("/models/:modelId/assets", m.hdl.ListGalleryModelAssets)
 			gallery.GET("/errors", m.hdl.ListGalleryErrors)
+			gallery.POST("/fix-asset", m.hdl.FixAsset)
 		}
 
 		// Logs

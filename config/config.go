@@ -30,6 +30,12 @@ type Config struct {
 	AssetAccessKeyID     string
 	AssetSecretAccessKey string
 	AssetDefaultGroupID  string
+
+	// Asset fix on BytePlus validation errors
+	AssetAutoNormalize bool   // redimensionar/pad/crop imágenes fuera de rango antes de subir
+	AssetAspectFix     string // "pad" (barras, conserva contenido) | "crop" (recorta)
+	AssetAIRepair      bool   // reparar con IA en el retry si la normalización no basta
+	AssetImageModel    string // modelo de imagen usado por el repair con IA
 }
 
 var AppConfig *Config
@@ -78,6 +84,23 @@ func Load() *Config {
 	assetSecretAccessKey := os.Getenv("ASSET_SECRET_ACCESS_KEY")
 	assetDefaultGroupID := os.Getenv("ASSET_DEFAULT_GROUP_ID")
 
+	assetAutoNormalize := os.Getenv("ASSET_AUTO_NORMALIZE")
+	if assetAutoNormalize == "" {
+		assetAutoNormalize = "true"
+	}
+	assetAspectFix := os.Getenv("ASSET_ASPECT_FIX")
+	if assetAspectFix == "" {
+		assetAspectFix = "pad"
+	}
+	assetAIRepair := os.Getenv("ASSET_AI_REPAIR")
+	if assetAIRepair == "" {
+		assetAIRepair = "true"
+	}
+	assetImageModel := os.Getenv("ASSET_IMAGE_MODEL")
+	if assetImageModel == "" {
+		assetImageModel = "dreamina-seedream-4-pro-251224"
+	}
+
 	log.Printf("[config] ASSET_ACCESS_KEY_ID=%s", tern(assetAccessKeyID != "", "set", "EMPTY"))
 	log.Printf("[config] ASSET_SECRET_ACCESS_KEY=%s", tern(assetSecretAccessKey != "", "set", "EMPTY"))
 	log.Printf("[config] ASSET_DEFAULT_GROUP_ID=%s", tern(assetDefaultGroupID != "", "set", "EMPTY"))
@@ -109,6 +132,11 @@ func Load() *Config {
 		AssetAccessKeyID:     assetAccessKeyID,
 		AssetSecretAccessKey: assetSecretAccessKey,
 		AssetDefaultGroupID:  assetDefaultGroupID,
+
+		AssetAutoNormalize: assetAutoNormalize == "true",
+		AssetAspectFix:     assetAspectFix,
+		AssetAIRepair:      assetAIRepair == "true",
+		AssetImageModel:    assetImageModel,
 	}
 	return AppConfig
 }

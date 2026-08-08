@@ -229,6 +229,27 @@ type SyncAssetResponse struct {
 	Status       string `json:"status"`
 	ErrorMessage string `json:"error_message,omitempty"`
 	ReferenceURI string `json:"reference_uri,omitempty"`
+	// Normalized reports whether a geometric fix (resize/pad/crop) was applied
+	// before uploading because the image violated BytePlus dimension limits.
+	Normalized bool `json:"normalized,omitempty"`
+}
+
+// FixAssetRequest is the payload for retrying/reparing a failed asset sync.
+type FixAssetRequest struct {
+	ModelID string `json:"model_id" binding:"required"`
+	FileID  string `json:"file_id" binding:"required"`
+	// Mode: "auto" (default, normalize then AI fallback) | "normalize" | "ai".
+	Mode  string `json:"mode"`
+	Ratio string `json:"ratio"`
+}
+
+// FixAssetResult reports how a fix/sync ended.
+type FixAssetResult struct {
+	FileID       string `json:"file_id"`
+	Status       string `json:"status"`
+	ErrorMessage string `json:"error_message,omitempty"`
+	// UsedFix: "normalize" | "ai" | "none".
+	UsedFix string `json:"used_fix"`
 }
 
 // ─── In-memory task tracking ────────────────────────────────────

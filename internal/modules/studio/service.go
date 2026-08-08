@@ -3,7 +3,9 @@
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -49,6 +51,10 @@ type Service struct {
 	assetAccessKeyID     string
 	assetSecretAccessKey string
 	assetDefaultGroupID  string
+	assetAutoNormalize   bool
+	assetAspectFix       string
+	assetAIRepair        bool
+	assetImageModel      string
 	mu                   sync.RWMutex
 }
 
@@ -88,6 +94,15 @@ func (s *Service) SetAssetCredentials(accessKeyID, secretAccessKey, defaultGroup
 	s.assetAccessKeyID = accessKeyID
 	s.assetSecretAccessKey = secretAccessKey
 	s.assetDefaultGroupID = defaultGroupID
+}
+
+// SetAssetFixOptions configures the automatic repair of assets that fail
+// BytePlus validation (aspect ratio / height limits).
+func (s *Service) SetAssetFixOptions(autoNormalize bool, aspectFix string, aiRepair bool, imageModel string) {
+	s.assetAutoNormalize = autoNormalize
+	s.assetAspectFix = aspectFix
+	s.assetAIRepair = aiRepair
+	s.assetImageModel = imageModel
 }
 
 func (s *Service) SetTakeSaver(saver TakeSaver) {
@@ -417,12 +432,35 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 
 	// Build the publicly accessible URL for the file
 	fileURL := s.baseURL + "/api/v1/files/" + req.FileID + "/serve"
+	uploadName := f.Filename
+	normalized := false
+
+	// Auto-normalize images that violate BytePlus dimension limits (aspect
+	// ratio / height), uploading a derived copy so the original file is
+	// never modified and model_assets.file_id keeps pointing at it.
+	if s.assetAutoNormalize && s.fileService != nil && isImageMime(f.MimeType) {
+		if servePath, err := s.fileService.GetServePath(req.FileID); err == nil {
+			if data, err := normalizeImage(servePath, s.assetAspectFix); err != nil {
+				log.Printf("[sync-asset] normalizeImage error: %v", err)
+			} else if data != nil {
+				up, upErr := s.fileService.Upload(data, "normalized-"+req.FileID+".jpg", "temp", "temp")
+				if upErr != nil || up == nil {
+					log.Printf("[sync-asset] upload normalized copy failed: %v", upErr)
+				} else {
+					fileURL = s.baseURL + "/api/v1/files/" + up.ID + "/serve"
+					uploadName = "normalized-" + f.Filename
+					normalized = true
+					log.Printf("[sync-asset] normalized image %q -> derived file %s", req.FileID, up.ID)
+				}
+			}
+		}
+	}
 
 	// Upload to the asset library
-	log.Printf("[sync-asset] calling CreateAsset url=%q filename=%q type=%q", fileURL, f.Filename, detectAssetType(f.MimeType))
+	log.Printf("[sync-asset] calling CreateAsset url=%q filename=%q type=%q normalized=%v", fileURL, uploadName, detectAssetType(f.MimeType), normalized)
 	api := NewAssetAPI(ak, sk, groupID)
 	api.SetCommStore(s.commStore)
-	result, err := api.CreateAsset(fileURL, f.Filename, detectAssetType(f.MimeType), "")
+	result, err := api.CreateAsset(fileURL, uploadName, detectAssetType(f.MimeType), "")
 	if err != nil {
 		log.Printf("[sync-asset] CreateAsset FAILED: %v", err)
 		s.assetSyncStore.UpdateStatus(record.ID, "failed", err.Error(), "", "", "", "")
@@ -432,6 +470,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 			FileID:       req.FileID,
 			Status:       "failed",
 			ErrorMessage: err.Error(),
+			Normalized:   normalized,
 		}, nil
 	}
 
@@ -501,6 +540,7 @@ func (s *Service) SyncAsset(req *SyncAssetRequest) (*SyncAssetResponse, error) {
 		Status:       finalStatus,
 		ErrorMessage: errMsg,
 		ReferenceURI: referenceURI,
+		Normalized:   normalized,
 	}, nil
 }
 
@@ -644,6 +684,197 @@ func (s *Service) ListGalleryErrors(modelID, fileID string) ([]ModelAsset, error
 		return nil, fmt.Errorf("asset sync store not available")
 	}
 	return s.assetSyncStore.ListRecentErrors(modelID, fileID, 5)
+}
+
+// RepairImageWithAI regenerates an image with the configured image model,
+// using the failing file as a reference (same pipeline as app-image-gen-panel),
+// stores the result as a temp file, and returns the new file id.
+func (s *Service) RepairImageWithAI(fileID, prompt, ratio, resolution string) (string, error) {
+	if s.assetImageModel == "" {
+		return "", fmt.Errorf("no image model configured for AI repair (ASSET_IMAGE_MODEL)")
+	}
+	if s.fileService == nil || s.providerStore == nil {
+		return "", fmt.Errorf("file or provider service not available")
+	}
+
+	f, err := s.fileService.GetFile(fileID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get file: %w", err)
+	}
+	if f == nil {
+		return "", fmt.Errorf("file not found")
+	}
+	if !isImageMime(f.MimeType) {
+		return "", fmt.Errorf("file is not an image; AI repair is only for images")
+	}
+
+	m, err := s.providerStore.GetModelByName(s.assetImageModel)
+	if err != nil {
+		return "", fmt.Errorf("failed to get image model: %w", err)
+	}
+	if m == nil {
+		return "", fmt.Errorf("image model %q not found", s.assetImageModel)
+	}
+
+	gen := s.pickGenerator(m.Name)
+	if gen == nil {
+		return "", fmt.Errorf("no generator for image model %q", m.Name)
+	}
+
+	if prompt == "" {
+		prompt = f.Filename
+	}
+	req := &GeneratorRequest{
+		Model:      m.Name,
+		Content: []ContentItem{
+			{Type: "image", DataURL: s.baseURL + "/api/v1/files/" + fileID + "/serve", Name: f.Filename},
+			{Type: "text", Text: prompt},
+		},
+		Ratio:      ratio,
+		Resolution: resolution,
+		APIKey:     m.APIKey,
+		BaseURL:    m.URL,
+		Endpoint:   m.Endpoint,
+	}
+
+	result, err := gen.Generate(req)
+	if err != nil {
+		return "", fmt.Errorf("AI generation failed: %w", err)
+	}
+
+	outputURL := ""
+	if len(result.Outputs) > 0 {
+		outputURL = result.Outputs[0].URL
+	}
+
+	// Async generators: poll until terminal (up to ~60s).
+	if outputURL == "" && result.TaskID != "" && result.Status != config.STATUS_SUCCESS && result.Status != config.STATUS_FAILED {
+		for i := 0; i < 20; i++ {
+			time.Sleep(3 * time.Second)
+			st, err := gen.GetStatus(result.TaskID, m.APIKey, m.URL, m.Endpoint)
+			if err != nil {
+				continue
+			}
+			if st.Status == config.STATUS_SUCCESS && len(st.Outputs) > 0 {
+				outputURL = st.Outputs[0].URL
+				break
+			}
+			if st.Status == config.STATUS_FAILED {
+				return "", fmt.Errorf("AI repair failed: %s", st.Error)
+			}
+		}
+	}
+	if outputURL == "" {
+		return "", fmt.Errorf("AI repair produced no image")
+	}
+
+	data, err := downloadBytes(resolveOutputURL(outputURL, s.baseURL))
+	if err != nil {
+		return "", fmt.Errorf("failed to download generated image: %w", err)
+	}
+
+	up, err := s.fileService.Upload(data, "ai-fixed-"+fileID+".png", "temp", "temp")
+	if err != nil {
+		return "", fmt.Errorf("failed to store generated image: %w", err)
+	}
+	if up == nil {
+		return "", fmt.Errorf("upload returned nil result")
+	}
+	log.Printf("[fix-asset] AI repair file=%q -> new file=%s url=%q", fileID, up.ID, outputURL)
+	return up.ID, nil
+}
+
+// FixAsset retries a failed asset sync, optionally repairing the image first:
+//   - mode "ai"        → regenerate with the image generator, then sync.
+//   - mode "normalize" → sync (SyncAsset auto-normalizes geometry).
+//   - mode "auto"      → sync; if it still fails and AI repair is enabled,
+//     fall back to regenerating with AI and syncing the result.
+func (s *Service) FixAsset(req *FixAssetRequest) (*FixAssetResult, error) {
+	mode := req.Mode
+	if mode == "" {
+		mode = "auto"
+	}
+
+	switch mode {
+	case "ai":
+		newFileID, err := s.RepairImageWithAI(req.FileID, "", req.Ratio, "")
+		if err != nil {
+			return &FixAssetResult{FileID: req.FileID, Status: "failed", ErrorMessage: err.Error(), UsedFix: "ai"}, nil
+		}
+		return s.syncFixed(req.ModelID, newFileID, "ai")
+
+	case "normalize":
+		res, err := s.SyncAsset(&SyncAssetRequest{ModelID: req.ModelID, FileID: req.FileID})
+		if err != nil {
+			return nil, err
+		}
+		usedFix := "none"
+		if res.Normalized {
+			usedFix = "normalize"
+		}
+		return &FixAssetResult{FileID: req.FileID, Status: res.Status, ErrorMessage: res.ErrorMessage, UsedFix: usedFix}, nil
+
+	default: // auto
+		res, err := s.SyncAsset(&SyncAssetRequest{ModelID: req.ModelID, FileID: req.FileID})
+		if err != nil {
+			return nil, err
+		}
+		if res.Status != "failed" {
+			usedFix := "none"
+			if res.Normalized {
+				usedFix = "normalize"
+			}
+			return &FixAssetResult{FileID: req.FileID, Status: res.Status, ErrorMessage: res.ErrorMessage, UsedFix: usedFix}, nil
+		}
+		if !s.assetAIRepair {
+			return &FixAssetResult{FileID: req.FileID, Status: res.Status, ErrorMessage: res.ErrorMessage, UsedFix: "none"}, nil
+		}
+		newFileID, err := s.RepairImageWithAI(req.FileID, "", req.Ratio, "")
+		if err != nil {
+			return &FixAssetResult{FileID: req.FileID, Status: res.Status, ErrorMessage: res.ErrorMessage + " (AI repair: " + err.Error() + ")", UsedFix: "none"}, nil
+		}
+		return s.syncFixed(req.ModelID, newFileID, "ai")
+	}
+}
+
+func (s *Service) syncFixed(modelID, fileID, usedFix string) (*FixAssetResult, error) {
+	res, err := s.SyncAsset(&SyncAssetRequest{ModelID: modelID, FileID: fileID})
+	if err != nil {
+		return nil, err
+	}
+	return &FixAssetResult{FileID: fileID, Status: res.Status, ErrorMessage: res.ErrorMessage, UsedFix: usedFix}, nil
+}
+
+// resolveOutputURL turns a generator output URL (possibly relative to the
+// backend) into an absolute URL that can be fetched server-side.
+func resolveOutputURL(url, baseURL string) string {
+	if url == "" {
+		return ""
+	}
+	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+		return url
+	}
+	if strings.HasPrefix(url, "/") {
+		return baseURL + url
+	}
+	return baseURL + "/outputs/" + url
+}
+
+// downloadBytes fetches a URL and returns its body.
+func downloadBytes(url string) ([]byte, error) {
+	if url == "" {
+		return nil, fmt.Errorf("empty url")
+	}
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("download failed: %s", resp.Status)
+	}
+	return io.ReadAll(resp.Body)
 }
 
 // GetCharacterFilesWithSync returns a character's files with their synced model info.
