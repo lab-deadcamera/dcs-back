@@ -686,12 +686,18 @@ func (s *Service) ListGalleryErrors(modelID, fileID string) ([]ModelAsset, error
 	return s.assetSyncStore.ListRecentErrors(modelID, fileID, 5)
 }
 
-// RepairImageWithAI regenerates an image with the configured image model,
-// using the failing file as a reference (same pipeline as app-image-gen-panel),
-// stores the result as a temp file, and returns the new file id.
-func (s *Service) RepairImageWithAI(fileID, prompt, ratio, resolution string) (string, error) {
-	if s.assetImageModel == "" {
-		return "", fmt.Errorf("no image model configured for AI repair (ASSET_IMAGE_MODEL)")
+// RepairImageWithAI regenerates an image with an image model, using the
+// failing file as a reference (same pipeline as app-image-gen-panel), stores
+// the result as a temp file, and returns the new file id. `modelName` selects
+// the generator model; when empty it falls back to the configured
+// ASSET_IMAGE_MODEL.
+func (s *Service) RepairImageWithAI(fileID, prompt, ratio, resolution, modelName string) (string, error) {
+	resolveName := modelName
+	if resolveName == "" {
+		resolveName = s.assetImageModel
+	}
+	if resolveName == "" {
+		return "", fmt.Errorf("no image model selected for AI repair (choose one in the dialog or set ASSET_IMAGE_MODEL)")
 	}
 	if s.fileService == nil || s.providerStore == nil {
 		return "", fmt.Errorf("file or provider service not available")
@@ -708,17 +714,9 @@ func (s *Service) RepairImageWithAI(fileID, prompt, ratio, resolution string) (s
 		return "", fmt.Errorf("file is not an image; AI repair is only for images")
 	}
 
-	m, err := s.providerStore.GetModelByName(s.assetImageModel)
+	m, gen, err := s.resolveImageModel(resolveName)
 	if err != nil {
-		return "", fmt.Errorf("failed to get image model: %w", err)
-	}
-	if m == nil {
-		return "", fmt.Errorf("image model %q not found", s.assetImageModel)
-	}
-
-	gen := s.pickGenerator(m.Name)
-	if gen == nil {
-		return "", fmt.Errorf("no generator for image model %q", m.Name)
+		return "", err
 	}
 
 	if prompt == "" {
@@ -797,7 +795,7 @@ func (s *Service) FixAsset(req *FixAssetRequest) (*FixAssetResult, error) {
 
 	switch mode {
 	case "ai":
-		newFileID, err := s.RepairImageWithAI(req.FileID, "", req.Ratio, "")
+		newFileID, err := s.RepairImageWithAI(req.FileID, "", req.Ratio, "", req.Model)
 		if err != nil {
 			return &FixAssetResult{FileID: req.FileID, Status: "failed", ErrorMessage: err.Error(), UsedFix: "ai"}, nil
 		}
@@ -829,7 +827,7 @@ func (s *Service) FixAsset(req *FixAssetRequest) (*FixAssetResult, error) {
 		if !s.assetAIRepair {
 			return &FixAssetResult{FileID: req.FileID, Status: res.Status, ErrorMessage: res.ErrorMessage, UsedFix: "none"}, nil
 		}
-		newFileID, err := s.RepairImageWithAI(req.FileID, "", req.Ratio, "")
+		newFileID, err := s.RepairImageWithAI(req.FileID, "", req.Ratio, "", req.Model)
 		if err != nil {
 			return &FixAssetResult{FileID: req.FileID, Status: res.Status, ErrorMessage: res.ErrorMessage + " (AI repair: " + err.Error() + ")", UsedFix: "none"}, nil
 		}
@@ -843,6 +841,46 @@ func (s *Service) syncFixed(modelID, fileID, usedFix string) (*FixAssetResult, e
 		return nil, err
 	}
 	return &FixAssetResult{FileID: fileID, Status: res.Status, ErrorMessage: res.ErrorMessage, UsedFix: usedFix}, nil
+}
+
+// resolveImageModel resolves the image model used by RepairImageWithAI.
+// Resolution order:
+//  1. exact name match on the configured model,
+//  2. first image model whose name contains the configured name (BytePlus
+//     models often carry version suffixes, e.g. "...-251224-260128"),
+//  3. any image model that has a registered pipeline generator.
+func (s *Service) resolveImageModel(configuredName string) (*provider.Model, PipelineRunner, error) {
+	// 1. Exact match.
+	if m, err := s.providerStore.GetModelByName(configuredName); err == nil && m != nil {
+		if gen := s.pickGenerator(m.Name); gen != nil {
+			return m, gen, nil
+		}
+	}
+
+	models, err := s.providerStore.ListModels("image")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list image models: %w", err)
+	}
+
+	// 2. Partial (substring) match on the configured name.
+	if configuredName != "" {
+		for i := range models {
+			if strings.Contains(models[i].Name, configuredName) {
+				if gen := s.pickGenerator(models[i].Name); gen != nil {
+					return &models[i].Model, gen, nil
+				}
+			}
+		}
+	}
+
+	// 3. First usable image model.
+	for i := range models {
+		if gen := s.pickGenerator(models[i].Name); gen != nil {
+			return &models[i].Model, gen, nil
+		}
+	}
+
+	return nil, nil, fmt.Errorf("no usable image model found (configured %q not found and no image model with a generator)", configuredName)
 }
 
 // resolveOutputURL turns a generator output URL (possibly relative to the

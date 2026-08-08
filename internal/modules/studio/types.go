@@ -241,6 +241,9 @@ type FixAssetRequest struct {
 	// Mode: "auto" (default, normalize then AI fallback) | "normalize" | "ai".
 	Mode  string `json:"mode"`
 	Ratio string `json:"ratio"`
+	// Model is the image generator model name used by the AI repair
+	// (overrides ASSET_IMAGE_MODEL when provided).
+	Model string `json:"model"`
 }
 
 // FixAssetResult reports how a fix/sync ended.
