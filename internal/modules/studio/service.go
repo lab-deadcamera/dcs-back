@@ -687,10 +687,10 @@ func (s *Service) ListGalleryErrors(modelID, fileID string) ([]ModelAsset, error
 }
 
 // RepairImageWithAI regenerates an image with an image model, using the
-// failing file as a reference (same pipeline as app-image-gen-panel), stores
-// the result as a temp file, and returns the new file id. `modelName` selects
-// the generator model; when empty it falls back to the configured
-// ASSET_IMAGE_MODEL.
+// failing file as a reference (same pipeline as app-image-gen-panel), then
+// overwrites the original file in place — respecting its path and regenerating
+// its thumbnail — and returns the same file id. `modelName` selects the
+// generator model; when empty it falls back to the configured ASSET_IMAGE_MODEL.
 func (s *Service) RepairImageWithAI(fileID, prompt, ratio, resolution, modelName string) (string, error) {
 	resolveName := modelName
 	if resolveName == "" {
@@ -771,15 +771,13 @@ func (s *Service) RepairImageWithAI(fileID, prompt, ratio, resolution, modelName
 		return "", fmt.Errorf("failed to download generated image: %w", err)
 	}
 
-	up, err := s.fileService.Upload(data, "ai-fixed-"+fileID+".png", "temp", "temp")
-	if err != nil {
+	// Overwrite the original file in place so its path, URL and thumbnail stay
+	// stable — the gallery and any references keep pointing at the same file.
+	if _, err := s.fileService.ReplaceImageContent(fileID, data); err != nil {
 		return "", fmt.Errorf("failed to store generated image: %w", err)
 	}
-	if up == nil {
-		return "", fmt.Errorf("upload returned nil result")
-	}
-	log.Printf("[fix-asset] AI repair file=%q -> new file=%s url=%q", fileID, up.ID, outputURL)
-	return up.ID, nil
+	log.Printf("[fix-asset] AI repair file=%q replaced in place url=%q", fileID, outputURL)
+	return fileID, nil
 }
 
 // FixAsset retries a failed asset sync, optionally repairing the image first:

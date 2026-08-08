@@ -224,6 +224,50 @@ func (s *Service) GetThumbnailPath(id string) (string, error) {
 	return s.store.GenerateThumbnail(f.Path, 300, 300)
 }
 
+// ReplaceImageContent overwrites an existing image file's bytes in place,
+// preserving its path — and therefore its file ID, serve URL and thumbnail
+// location. The thumbnail is regenerated at the same path. It returns the
+// updated file record.
+func (s *Service) ReplaceImageContent(id string, data []byte) (*File, error) {
+	f, err := s.store.GetFileByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if f == nil {
+		return nil, fmt.Errorf("file not found")
+	}
+	if f.Trashed {
+		return nil, fmt.Errorf("file has been deleted")
+	}
+	if !strings.HasPrefix(f.MimeType, "image/") {
+		return nil, fmt.Errorf("file is not an image")
+	}
+	if err := s.store.ValidateImage(data); err != nil {
+		return nil, fmt.Errorf("invalid image content: %w", err)
+	}
+
+	// Write to the same path, then regenerate the thumbnail in place.
+	if err := s.store.SaveFile(data, f.Path); err != nil {
+		return nil, fmt.Errorf("failed to overwrite file: %w", err)
+	}
+	if err := s.store.RemoveThumbnail(f.Path); err != nil {
+		return nil, fmt.Errorf("failed to remove stale thumbnail: %w", err)
+	}
+	if _, err := s.store.GenerateThumbnail(f.Path, 300, 300); err != nil {
+		// Non-fatal: thumbnail can be generated on-demand later if needed.
+		fmt.Printf("warning: failed to regenerate thumbnail for %s: %v\n", f.Path, err)
+	}
+
+	if _, err := s.store.db.Exec(
+		`UPDATE files SET size = $1, updated_at = NOW() WHERE id = $2`,
+		len(data), id,
+	); err != nil {
+		return nil, fmt.Errorf("failed to update file record: %w", err)
+	}
+
+	return s.store.GetFileByID(id)
+}
+
 func (s *Service) ListFilesPage(page, pageSize int, category, storage, search string) (*PaginatedFiles, error) {
 	return s.store.ListFilesPage(page, pageSize, category, storage, search)
 }

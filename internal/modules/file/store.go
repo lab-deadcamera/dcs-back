@@ -1,6 +1,7 @@
 package file
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"image"
@@ -128,19 +129,62 @@ func decodeImage(path string) (image.Image, error) {
 	}
 	defer f.Close()
 
+	// The extension is only a hint — the stored bytes are authoritative. Files
+	// can carry a wrong extension (e.g. a JPEG saved as ".png"), which makes
+	// extension-based decoders fail. Try the extension first, then fall back to
+	// sniffing the magic bytes so thumbnails still work.
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".jpg", ".jpeg":
-		return jpeg.Decode(f)
+		if img, err := jpeg.Decode(f); err == nil {
+			return img, nil
+		}
 	case ".png":
-		return png.Decode(f)
+		if img, err := png.Decode(f); err == nil {
+			return img, nil
+		}
 	case ".gif":
-		return gif.Decode(f)
+		if img, err := gif.Decode(f); err == nil {
+			return img, nil
+		}
 	case ".webp":
-		return webp.Decode(f)
-	default:
-		return imaging.Open(path)
+		if img, err := webp.Decode(f); err == nil {
+			return img, nil
+		}
 	}
+
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	// image.Decode sniffs the content (png/jpeg/gif are registered via the
+	// imports above).
+	if img, _, err := image.Decode(f); err == nil {
+		return img, nil
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	// WebP is not auto-registered with image.Decode — try it explicitly.
+	if img, err := webp.Decode(f); err == nil {
+		return img, nil
+	}
+
+	return nil, fmt.Errorf("unsupported or invalid image format")
+}
+
+// RemoveThumbnail deletes a file's cached thumbnail, if present.
+func (s *Store) RemoveThumbnail(srcSubpath string) error {
+	thumbSubpath := "thumbnails/" + srcSubpath
+	if s.FileExists(thumbSubpath) {
+		return s.DeleteFile(thumbSubpath)
+	}
+	return nil
+}
+
+// ValidateImage checks that data decodes as a known image format.
+func (s *Store) ValidateImage(data []byte) error {
+	_, err := imaging.Decode(bytes.NewReader(data))
+	return err
 }
 
 // ─── DB operations ────────────────────────────────────────────
