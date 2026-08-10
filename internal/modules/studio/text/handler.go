@@ -354,6 +354,18 @@ CRITICAL:
 - Only refine the given prompt.
 - Return ONLY valid JSON, no markdown fences, no extra text.`
 
+const refineModeInstructions = `
+You are REFINING an existing shot breakdown that was generated previously. You receive:
+1. The previous breakdown (episode + scenes + shots JSON) — the current state of the plan.
+2. A change_request — the user's instruction describing what to modify.
+
+Rules:
+- Apply ONLY the changes described in change_request. Everything else must remain IDENTICAL to the previous breakdown: same scene count, same shot ids, same titles, same descriptions, same prompts, same references, same continuity objects, same cumulative start/end timestamps.
+- If change_request adds or removes scenes/shots, adjust ONLY what is necessary and keep the rest untouched.
+- Preserve the script numbering (scriptNumber), the @imageN slot assignments, and the output JSON schema (episode + scenes + shots, each shot with prompt.en and optional prompt.zh).
+- Respond with ONLY a valid JSON object matching the schema — no text before or after, no markdown fences.
+`
+
 // ─── Shot Builder ─────────────────────────────────────────────────
 
 func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
@@ -390,32 +402,7 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 	// Build system prompt: start with the default shot builder schema,
 	// then APPEND the skill's system prompt on top (if any), so Claude
 	// still has the JSON output format and critical rules.
-	systemPrompt := defaultShotBuilderPrompt
-
-	var skillName string
-	if req.SkillID != "" && h.skillSvc != nil {
-		skill, err := h.skillSvc.GetByID(req.SkillID)
-		if err == nil && skill != nil && skill.SystemPrompt != "" {
-			log.Printf("[skill] appending skill %q (%s) to system prompt", skill.Name, skill.ID)
-			skillName = skill.Name
-			systemPrompt += "\n\n## Skill\n" + skill.SystemPrompt
-		} else if err != nil {
-			log.Printf("[skill] error looking up skill %q: %v", req.SkillID, err)
-		}
-	}
-
-	if req.SystemPrompt != "" {
-		systemPrompt += "\n\n## User instructions\n" + req.SystemPrompt
-	}
-
-	// Append zh-generation instruction when Chinese is disabled
-	if !req.GenerateZh {
-		systemPrompt += "\n\nIMPORTANT: Do NOT generate Chinese prompts (prompt.zh). Only generate the English prompt (prompt.en) for each shot. Omit the prompt.zh field entirely from the JSON."
-	}
-
-	// Always generate output in English — titles, descriptions, and all
-	// text fields must be in English regardless of the user's prompt language.
-	systemPrompt += "\n\nLANGUAGE RULE: All output must be in English. Shot titles, descriptions, dialogue, scene context, and all text fields must use English only — even if the user's request is in Spanish or another language. This is a critical rule."
+	systemPrompt, skillName := h.buildShotBuilderSystemPrompt(defaultShotBuilderPrompt, req.SkillID, req.SystemPrompt, req.GenerateZh)
 
 	keyModel := req.Model
 	if keyModel == "" {
@@ -426,6 +413,153 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 		apiModel = keyModel
 	}
 
+	meta := &shotBuilderMeta{
+		Mode:      "generate",
+		ProjectID: req.ProjectID,
+		SceneID:   req.SceneID,
+		SkillID:   req.SkillID,
+		UserID:    req.UserID,
+		UserName:  req.UserName,
+	}
+
+	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "generate shots", "=== ORIGINAL SCRIPT AND INSTRUCTIONS ===")
+	if errMsg != "" {
+		utils.InternalError(c, errMsg)
+		return
+	}
+
+	// ✅ Valid — return clean JSON. Success is NOT logged.
+	utils.Success(c, ClaudeGenerateShotsResponse{
+		TaskID: fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
+		Model:  apiModel,
+		Status: "succeeded",
+		Text:   clean,
+	})
+}
+
+// ─── Shot Builder Refine ─────────────────────────────────────────
+
+// ClaudeRefineShots regenerates an existing shot breakdown. The user iterates
+// on the previous generate-shots response (data.text) with a natural-language
+// change_request, so Claude applies ONLY the requested changes and keeps the
+// rest identical (anti-drift). Shares the retry/validation/logging pipeline
+// with ClaudeGenerateShots.
+func (h *Handler) ClaudeRefineShots(c *gin.Context) {
+	// Capture the raw request body BEFORE binding — it is the ground truth for
+	// reconstructing a failed request. Restore it so ShouldBindJSON still works.
+	rawBody, err := c.GetRawData()
+	if err != nil {
+		utils.BadRequest(c, fmt.Sprintf("failed to read request body: %v", err))
+		return
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(rawBody))
+
+	var req ClaudeRefineShotsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, fmt.Sprintf("invalid request: %v", err))
+		return
+	}
+
+	if req.PreviousResponse == "" {
+		utils.BadRequest(c, "previous_response is required")
+		return
+	}
+	if req.ChangeRequest == "" {
+		utils.BadRequest(c, "change_request is required")
+		return
+	}
+
+	// Anchor on the previous breakdown + the change request. The scene_context
+	// is already embedded in the previous response (references/assetAssignments).
+	originalPrompt := "=== Previous Breakdown ===\n" + req.PreviousResponse +
+		"\n\n=== Change Request ===\n" + req.ChangeRequest
+
+	// Same base schema as generate-shots plus refinement (anti-drift) rules.
+	basePrompt := defaultShotBuilderPrompt + "\n\n## Refinement Mode\n" + refineModeInstructions
+	systemPrompt, skillName := h.buildShotBuilderSystemPrompt(basePrompt, req.SkillID, req.SystemPrompt, req.GenerateZh)
+
+	keyModel := req.Model
+	if keyModel == "" {
+		keyModel = "claude-shot-builder"
+	}
+	apiModel := req.APIModel
+	if apiModel == "" {
+		apiModel = keyModel
+	}
+
+	meta := &shotBuilderMeta{
+		Mode:      "refine",
+		ProjectID: req.ProjectID,
+		SceneID:   req.SceneID,
+		SkillID:   req.SkillID,
+		UserID:    req.UserID,
+		UserName:  req.UserName,
+	}
+
+	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===")
+	if errMsg != "" {
+		utils.InternalError(c, errMsg)
+		return
+	}
+
+	// ✅ Valid — return clean JSON. Success is NOT logged.
+	utils.Success(c, ClaudeRefineShotsResponse{
+		TaskID: fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
+		Model:  apiModel,
+		Status: "succeeded",
+		Text:   clean,
+	})
+}
+
+// ─── Shared Shot Builder pipeline ────────────────────────────────
+
+// buildShotBuilderSystemPrompt composes the final system prompt shared by
+// generate-shots and refine-shots: base prompt (default schema or schema +
+// refinement rules) + skill + user instructions + zh-generation rule +
+// language rule. Returns the composed prompt and the resolved skill name.
+func (h *Handler) buildShotBuilderSystemPrompt(basePrompt, skillID, userSystemPrompt string, generateZh bool) (string, string) {
+	systemPrompt := basePrompt
+
+	var skillName string
+	if skillID != "" && h.skillSvc != nil {
+		skill, err := h.skillSvc.GetByID(skillID)
+		if err == nil && skill != nil && skill.SystemPrompt != "" {
+			log.Printf("[skill] appending skill %q (%s) to system prompt", skill.Name, skill.ID)
+			skillName = skill.Name
+			systemPrompt += "\n\n## Skill\n" + skill.SystemPrompt
+		} else if err != nil {
+			log.Printf("[skill] error looking up skill %q: %v", skillID, err)
+		}
+	}
+
+	if userSystemPrompt != "" {
+		systemPrompt += "\n\n## User instructions\n" + userSystemPrompt
+	}
+
+	// Append zh-generation instruction when Chinese is disabled
+	if !generateZh {
+		systemPrompt += "\n\nIMPORTANT: Do NOT generate Chinese prompts (prompt.zh). Only generate the English prompt (prompt.en) for each shot. Omit the prompt.zh field entirely from the JSON."
+	}
+
+	// Always generate output in English — titles, descriptions, and all
+	// text fields must be in English regardless of the user's prompt language.
+	systemPrompt += "\n\nLANGUAGE RULE: All output must be in English. Shot titles, descriptions, dialogue, scene context, and all text fields must use English only — even if the user's request is in Spanish or another language. This is a critical rule."
+
+	return systemPrompt, skillName
+}
+
+// runClaudeShotBuilder executes the shared Claude retry loop for the shot
+// builder (generate-shots and refine-shots): up to 3 attempts with corrective
+// feedback, JSON extraction + validation, and log-only-failures persistence.
+// On success it returns the clean JSON and an empty message; on failure it
+// persists the log and returns the error message to send to the client.
+func (h *Handler) runClaudeShotBuilder(
+	c *gin.Context,
+	meta *shotBuilderMeta,
+	systemPrompt, originalPrompt string,
+	rawBody []byte,
+	skillName, keyModel, apiModel, actionLabel, correctiveHeader string,
+) (string, string) {
 	// Retry loop: up to 3 attempts with corrective feedback
 	const maxAttempts = 3
 	var lastReply string
@@ -435,6 +569,7 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 	start := time.Now()
 	var attempts []*ShotBuilderAttempt
 	totalInputTokens, totalOutputTokens := 0, 0
+	finalPrompt := originalPrompt
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		reply, usage, duration, callErr := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt)
@@ -449,10 +584,9 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 			// ❌ Claude API error — persist immediately with the attempt in error.
 			a.ErrorMessage = callErr.Error()
 			attempts = append(attempts, a)
-			msg := fmt.Sprintf("failed to generate shots: %v", callErr)
-			h.persistFailure(c, req, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, msg, start)
-			utils.InternalError(c, msg)
-			return
+			msg := fmt.Sprintf("failed to %s: %v", actionLabel, callErr)
+			h.persistFailure(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, msg, start)
+			return "", msg
 		}
 
 		// Extract clean JSON from Claude's response
@@ -471,13 +605,7 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 
 		if a.Valid {
 			// ✅ Valid — return clean JSON. Success is NOT logged.
-			utils.Success(c, ClaudeGenerateShotsResponse{
-				TaskID: fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
-				Model:  apiModel,
-				Status: "succeeded",
-				Text:   clean,
-			})
-			return
+			return clean, ""
 		}
 
 		// ❌ Invalid — store for feedback and retry
@@ -488,16 +616,16 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 		if attempt < maxAttempts-1 {
 			// Do NOT resend the (likely truncated) previous reply — it wastes
 			// context and produces the same oversized output. Instead resend the
-			// ORIGINAL script + instructions with a brevity directive so the
-			// retry converges under max_tokens.
-			finalPrompt = buildCorrectivePrompt(originalPrompt)
+			// ORIGINAL input (script or previous breakdown) with a brevity
+			// directive so the retry converges under max_tokens.
+			finalPrompt = buildCorrectivePromptFrom(originalPrompt, correctiveHeader)
 		}
 	}
 
 	// All attempts exhausted — persist the failure before returning.
 	msg := buildExhaustionError(maxAttempts, lastReply)
-	h.persistFailure(c, req, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, msg, start)
-	utils.InternalError(c, msg)
+	h.persistFailure(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, msg, start)
+	return "", msg
 }
 
 // ─── Shot Builder Logs (failed calls) ─────────────────────────────
@@ -522,7 +650,7 @@ func (h *Handler) ListGenerateShotsLogs(c *gin.Context) {
 		return
 	}
 
-	logs, total, err := h.logStore.ListLogs(req.Page, req.Limit, req.ProjectID, req.SceneID, req.UserID, req.DateFrom, req.DateTo)
+	logs, total, err := h.logStore.ListLogs(req.Page, req.Limit, req.ProjectID, req.SceneID, req.Mode, req.UserID, req.DateFrom, req.DateTo)
 	if err != nil {
 		utils.InternalError(c, err.Error())
 		return
@@ -569,11 +697,12 @@ func (h *Handler) GetGenerateShotsLog(c *gin.Context) {
 }
 
 // persistFailure writes the shot builder log row and all buffered attempts
-// for a failed generate-shots call. A logging error must never mask the real
-// error already sent to the client, so failures are only logged with log.Printf.
+// for a failed generate-shots / refine-shots call. A logging error must never
+// mask the real error already sent to the client, so failures are only logged
+// with log.Printf.
 func (h *Handler) persistFailure(
 	c *gin.Context,
-	req ClaudeGenerateShotsRequest,
+	meta *shotBuilderMeta,
 	systemPrompt, originalPrompt string,
 	rawBody []byte,
 	skillName, keyModel, apiModel string,
@@ -588,22 +717,23 @@ func (h *Handler) persistFailure(
 
 	userID := userIDFromContext(c)
 	if userID == 0 {
-		userID = req.UserID
+		userID = meta.UserID
 	}
 	userName := stringFromContext(c, "username")
 	if userName == "" {
-		userName = req.UserName
+		userName = meta.UserName
 	}
 
 	logEntry := &ShotBuilderLog{
+		Mode:              meta.Mode,
 		UserID:            userID,
 		UserName:          userName,
 		UserEmail:         stringFromContext(c, "user_email"),
-		ProjectID:         req.ProjectID,
-		SceneID:           req.SceneID,
+		ProjectID:         meta.ProjectID,
+		SceneID:           meta.SceneID,
 		KeyModel:          keyModel,
 		APIModel:          apiModel,
-		SkillID:           req.SkillID,
+		SkillID:           meta.SkillID,
 		SkillName:         skillName,
 		RequestPayload:    string(rawBody),
 		SystemPrompt:      systemPrompt,
@@ -918,17 +1048,25 @@ func buildSceneContextBlock(ctx *SceneContext) string {
 
 // ─── JSON extraction & validation ────────────────────────────────
 
-// buildCorrectivePrompt builds the retry prompt. It must resend the ORIGINAL
-// script + instructions (never the truncated previous reply), otherwise Claude
-// answers "No script provided".
+// buildCorrectivePrompt builds the retry prompt for generate-shots. It must
+// resend the ORIGINAL script + instructions (never the truncated previous
+// reply), otherwise Claude answers "No script provided".
 func buildCorrectivePrompt(originalPrompt string) string {
+	return buildCorrectivePromptFrom(originalPrompt, "=== ORIGINAL SCRIPT AND INSTRUCTIONS ===")
+}
+
+// buildCorrectivePromptFrom builds the retry prompt for a shot builder call
+// (generate-shots or refine-shots), resending the original input under the
+// given header. The previous reply is never resent: it is likely truncated
+// and resending it wastes context and reproduces the same oversized output.
+func buildCorrectivePromptFrom(originalPrompt, header string) string {
 	return "Your previous response was not valid JSON (likely truncated or " +
-		"empty). Regenerate the full shot breakdown from the ORIGINAL script below. " +
+		"empty). Regenerate the full shot breakdown from the original input below. " +
 		"Keep EVERY field concise: shot descriptions in one sentence, prompt.en in " +
 		"compact form, max 2 microExpressions, omit empty fields and optional " +
 		"sub-objects. Respond with ONLY valid JSON matching the schema — no extra " +
 		"text, no markdown, no comments.\n\n" +
-		"=== ORIGINAL SCRIPT AND INSTRUCTIONS ===\n" + originalPrompt
+		header + "\n" + originalPrompt
 }
 
 // buildExhaustionError builds the error message when all retry attempts

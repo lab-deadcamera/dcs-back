@@ -37,3 +37,16 @@ Content-Type: application/json
     "take_number": 1,
     "user_id": 2
 }
+
+### REFINAR BREAKDOWN DEL SHOT BUILDER (itera sobre la respuesta previa de generate-shots)
+POST {{BASE_URL}}/api/v1/studio/text/claude/refine-shots
+Content-Type: application/json
+
+{
+    "scene_id": "956729b0-3aa1-4e22-ac56-7e8f66b1f56e",
+    "project_id": "388083eb-3b0c-4321-af47-24bf112086d0",
+    "previous_response": "{ \"episode\": {...}, \"scenes\": [...] }",
+    "change_request": "hacé el tono más oscuro y acortá el shot C",
+    "model": "claude-shot-builder",
+    "generate_zh": false
+}

@@ -215,6 +215,43 @@ type ClaudeGenerateShotsResponse struct {
 	Mode string        `json:"mode,omitempty"`
 }
 
+// ─── Shot Builder Refine ────────────────────────────────────────
+
+// ClaudeRefineShotsRequest is the payload for refining an existing shot
+// breakdown. previous_response is the raw JSON returned by generate-shots
+// (data.text) and change_request is the user's natural-language instruction.
+type ClaudeRefineShotsRequest struct {
+	SceneID          string `json:"scene_id" binding:"required"`
+	ProjectID        string `json:"project_id" binding:"required"`
+	Model            string `json:"model"`
+	APIModel         string `json:"api_model"`
+	PreviousResponse string `json:"previous_response" binding:"required"`
+	ChangeRequest    string `json:"change_request" binding:"required"`
+	SystemPrompt     string `json:"system_prompt"`
+	SkillID          string `json:"skill_id"`
+	UserID           int    `json:"user_id"`
+	UserName         string `json:"user_name"`
+	GenerateZh       bool   `json:"generate_zh"`
+}
+
+type ClaudeRefineShotsResponse struct {
+	TaskID string `json:"taskId"`
+	Model  string `json:"model"`
+	Status string `json:"status"`
+	Text   string `json:"text,omitempty"`
+}
+
+// shotBuilderMeta carries the request fields needed for failure logging,
+// shared by generate-shots and refine-shots.
+type shotBuilderMeta struct {
+	Mode      string // "generate" | "refine"
+	ProjectID string
+	SceneID   string
+	SkillID   string
+	UserID    int
+	UserName  string
+}
+
 // ListShotBuilderLogsRequest holds pagination and filter params for listing
 // failed generate-shots calls.
 type ListShotBuilderLogsRequest struct {
@@ -222,6 +259,7 @@ type ListShotBuilderLogsRequest struct {
 	Limit     int    `form:"limit"`
 	ProjectID string `form:"project_id"`
 	SceneID   string `form:"scene_id"`
+	Mode      string `form:"mode"`
 	UserID    int    `form:"user_id"`
 	DateFrom  string `form:"date_from"`
 	DateTo    string `form:"date_to"`

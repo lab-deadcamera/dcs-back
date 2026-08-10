@@ -261,3 +261,30 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// TestBuildCorrectivePromptFrom verifies the refine retry prompt resends the
+// previous breakdown + change request (never the truncated previous reply).
+func TestBuildCorrectivePromptFrom(t *testing.T) {
+	previous := `{"episode":{"title":"EP16"},"scenes":[]}`
+	original := "=== Previous Breakdown ===\n" + previous + "\n\n=== Change Request ===\nMake it darker"
+	prompt := buildCorrectivePromptFrom(original, "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===")
+
+	if !strings.Contains(prompt, previous) {
+		t.Error("corrective prompt must resend the previous breakdown")
+	}
+	for _, s := range []string{"PREVIOUS BREAKDOWN", "not valid JSON", "Regenerate the full shot breakdown"} {
+		if !strings.Contains(prompt, s) {
+			t.Errorf("corrective prompt missing required part: %q", s)
+		}
+	}
+}
+
+// TestRefineModeInstructions verifies the refinement rules include the
+// anti-drift directives that keep unchanged shots identical.
+func TestRefineModeInstructions(t *testing.T) {
+	for _, s := range []string{"change_request", "IDENTICAL", "previous breakdown", "ONLY a valid JSON object"} {
+		if !strings.Contains(refineModeInstructions, s) {
+			t.Errorf("refine mode instructions missing required keyword: %q", s)
+		}
+	}
+}

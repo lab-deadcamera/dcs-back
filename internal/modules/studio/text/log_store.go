@@ -14,6 +14,7 @@ import (
 // from the JWT), model, skill, tokens and duration.
 type ShotBuilderLog struct {
 	ID               string    `json:"id"`
+	Mode             string    `json:"mode"`
 	UserID           int       `json:"user_id"`
 	UserName         string    `json:"user_name"`
 	UserEmail        string    `json:"user_email"`
@@ -50,6 +51,7 @@ type ShotBuilderLogSummary struct {
 	ProjectID         string    `json:"project_id"`
 	ProjectName       string    `json:"project_name"`
 	SceneID           string    `json:"scene_id"`
+	Mode              string    `json:"mode"`
 	KeyModel          string    `json:"key_model"`
 	APIModel          string    `json:"api_model"`
 	SkillID           string    `json:"skill_id"`
@@ -107,6 +109,7 @@ const shotBuilderLogListCols = `sbl.id, sbl.user_id,
 	COALESCE(sbl.project_id, '') AS project_id,
 	COALESCE(p.name, '') AS project_name,
 	COALESCE(sbl.scene_id, '') AS scene_id,
+	COALESCE(sbl.mode, '') AS mode,
 	COALESCE(sbl.key_model, '') AS key_model,
 	COALESCE(sbl.api_model, '') AS api_model,
 	COALESCE(sbl.skill_id, '') AS skill_id,
@@ -126,6 +129,7 @@ const shotBuilderLogFullCols = `sbl.id, sbl.user_id,
 	COALESCE(sbl.project_id, '') AS project_id,
 	COALESCE(p.name, '') AS project_name,
 	COALESCE(sbl.scene_id, '') AS scene_id,
+	COALESCE(sbl.mode, '') AS mode,
 	COALESCE(sbl.key_model, '') AS key_model,
 	COALESCE(sbl.api_model, '') AS api_model,
 	COALESCE(sbl.skill_id, '') AS skill_id,
@@ -147,15 +151,20 @@ const shotBuilderLogFrom = `FROM shot_builder_logs sbl
 
 // Create inserts a new (failed) shot builder log and fills ID/timestamps.
 func (s *LogStore) Create(log *ShotBuilderLog) error {
+	mode := log.Mode
+	if mode == "" {
+		mode = "generate"
+	}
+
 	query := `INSERT INTO shot_builder_logs
-		(user_id, user_name, user_email, project_id, scene_id, key_model, api_model,
+		(mode, user_id, user_name, user_email, project_id, scene_id, key_model, api_model,
 		 skill_id, skill_name, request_payload, system_prompt, prompt, status,
 		 error_message, response, attempts, total_input_tokens, total_output_tokens, duration_ms)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		RETURNING id, created_at, updated_at`
 
 	err := s.db.QueryRow(query,
-		nullInt(log.UserID), nullIfEmpty(log.UserName), nullIfEmpty(log.UserEmail),
+		mode, nullInt(log.UserID), nullIfEmpty(log.UserName), nullIfEmpty(log.UserEmail),
 		nullIfEmpty(log.ProjectID), nullIfEmpty(log.SceneID),
 		nullIfEmpty(log.KeyModel), nullIfEmpty(log.APIModel),
 		nullIfEmpty(log.SkillID), nullIfEmpty(log.SkillName),
@@ -183,7 +192,7 @@ func (s *LogStore) InsertAttempt(a *ShotBuilderAttempt) error {
 
 // ListLogs returns paginated failed shot builder logs, newest first.
 // Empty filter values are ignored.
-func (s *LogStore) ListLogs(page, limit int, projectID, sceneID string, userID int, dateFrom, dateTo string) ([]ShotBuilderLogSummary, int, error) {
+func (s *LogStore) ListLogs(page, limit int, projectID, sceneID, mode string, userID int, dateFrom, dateTo string) ([]ShotBuilderLogSummary, int, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -204,6 +213,11 @@ func (s *LogStore) ListLogs(page, limit int, projectID, sceneID string, userID i
 	if sceneID != "" {
 		where += fmt.Sprintf(" AND sbl.scene_id = $%d", argIdx)
 		args = append(args, sceneID)
+		argIdx++
+	}
+	if mode != "" {
+		where += fmt.Sprintf(" AND sbl.mode = $%d", argIdx)
+		args = append(args, mode)
 		argIdx++
 	}
 	if userID > 0 {
@@ -244,7 +258,7 @@ func (s *LogStore) ListLogs(page, limit int, projectID, sceneID string, userID i
 		var l ShotBuilderLogSummary
 		if err := rows.Scan(
 			&l.ID, &l.UserID, &l.UserName, &l.UserEmail, &l.ProjectID, &l.ProjectName,
-			&l.SceneID, &l.KeyModel, &l.APIModel, &l.SkillID, &l.SkillName,
+			&l.SceneID, &l.Mode, &l.KeyModel, &l.APIModel, &l.SkillID, &l.SkillName,
 			&l.Status, &l.ErrorMessage, &l.Attempts,
 			&l.TotalInputTokens, &l.TotalOutputTokens, &l.DurationMs, &l.CreatedAt,
 		); err != nil {
@@ -268,7 +282,7 @@ func (s *LogStore) GetLog(id string) (*ShotBuilderLog, []ShotBuilderAttempt, err
 
 	err := s.db.QueryRow(query, id).Scan(
 		&log.ID, &log.UserID, &log.UserName, &log.UserEmail, &log.ProjectID, &log.ProjectName,
-		&log.SceneID, &log.KeyModel, &log.APIModel, &log.SkillID, &log.SkillName,
+		&log.SceneID, &log.Mode, &log.KeyModel, &log.APIModel, &log.SkillID, &log.SkillName,
 		&log.RequestPayload, &log.SystemPrompt, &log.Prompt,
 		&log.Status, &log.ErrorMessage, &log.Response, &log.Attempts,
 		&log.TotalInputTokens, &log.TotalOutputTokens, &log.DurationMs, &log.CreatedAt,
