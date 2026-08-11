@@ -619,7 +619,7 @@ func (s *ProjectStore) GetScenePresets(sceneID string) ([]ScenePresetAssignment,
 }
 
 func (s *ProjectStore) GetSceneCharacters(sceneID string) ([]SceneCharacterAssignment, error) {
-		// Auto-assign @imageN slots to any characters that still have NULL slot
+		// Auto-assign [ImageN] slots to any characters that still have NULL slot
 	// (legacy data created before the slot column migration).
 	var nullCount int
 	_ = s.db.QueryRow(`SELECT COUNT(*) FROM scene_characters WHERE scene_id = $1 AND slot IS NULL`, sceneID).Scan(&nullCount)
@@ -628,7 +628,7 @@ func (s *ProjectStore) GetSceneCharacters(sceneID string) ([]SceneCharacterAssig
 		_ = s.db.QueryRow(`SELECT COUNT(*) FROM scene_characters WHERE scene_id = $1 AND slot IS NOT NULL`, sceneID).Scan(&offset)
 		s.db.Exec(`
 			UPDATE scene_characters sc
-			SET slot = '@image' || (($2::int) + sub.rn)
+			SET slot = '[Image' || (($2::int) + sub.rn) || ']'
 			FROM (
 				SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn
 				FROM scene_characters
@@ -920,7 +920,7 @@ func (s *ProjectStore) GetChapterPresets(chapterID string) ([]ChapterPresetAssig
 }
 
 func (s *ProjectStore) AssignCharacterToChapter(chapterID, characterID, slot string) (string, error) {
-	// Episode assets must always have a @imageN slot so they reach the shot
+	// Episode assets must always have a [ImageN] slot so they reach the shot
 	// builder ordered and labeled — auto-assign the next free one when the
 	// caller doesn't provide one (e.g. free assets uploaded from the panel).
 	if slot == "" {
@@ -942,7 +942,7 @@ func (s *ProjectStore) AssignCharacterToChapter(chapterID, characterID, slot str
 }
 
 func (s *ProjectStore) AssignAssetToChapter(chapterID, fileID, slot string) (string, error) {
-	// See AssignCharacterToChapter — episode assets keep an @imageN slot.
+	// See AssignCharacterToChapter — episode assets keep an [ImageN] slot.
 	if slot == "" {
 		next, err := s.nextFreeChapterSlot(chapterID)
 		if err != nil {
@@ -961,7 +961,7 @@ func (s *ProjectStore) AssignAssetToChapter(chapterID, fileID, slot string) (str
 	return id, nil
 }
 
-// nextFreeChapterSlot returns the lowest @imageN not yet used by any character
+// nextFreeChapterSlot returns the lowest [ImageN] not yet used by any character
 // or asset assigned to the chapter, so auto-assigned slots never collide.
 func (s *ProjectStore) nextFreeChapterSlot(chapterID string) (string, error) {
 	used := map[int]bool{}
@@ -989,10 +989,10 @@ func (s *ProjectStore) nextFreeChapterSlot(chapterID string) (string, error) {
 	for used[n] {
 		n++
 	}
-	return fmt.Sprintf("@image%d", n), nil
+	return fmt.Sprintf("[Image%d]", n), nil
 }
 
-// assignMissingChapterSlots backfills @imageN slots for character/asset
+// assignMissingChapterSlots backfills [ImageN] slots for character/asset
 // assignments created without one (legacy data before auto-assignment), so
 // the assignments endpoint always returns a slot. Same pattern as the
 // scene_characters backfill in GetSceneCharacters.
@@ -1085,7 +1085,7 @@ func (s *ProjectStore) RemoveChapterPreset(assignmentID string) error {
 	return nil
 }
 
-// chapterSlotNum extracts the trailing number of a slot like "@image5" (→ 5);
+// chapterSlotNum extracts the trailing number of a slot like "[Image5]" (→ 5);
 // 0 when the slot has no numeric suffix.
 func chapterSlotNum(slot string) int {
 	n := 0

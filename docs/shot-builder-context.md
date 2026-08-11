@@ -147,7 +147,7 @@ DB: shots + output format → sesión del primer shot
 
 **Cómo funciona:**
 - El prompt del usuario se compone como `=== Previous Breakdown ===` + JSON previo + `=== Change Request ===` + instrucción. El `scene_context` NO se reenvía (ya está embebido en el breakdown previo vía references/assetAssignments).
-- System prompt = `defaultShotBuilderPrompt` + `## Refinement Mode` con `refineModeInstructions` (reglas anti-drift: aplicar solo el cambio pedido, conservar IDs, timestamps, slots `@imageN` y continuidad) + skill/instrucciones/reglas ZH/inglés igual que generate.
+- System prompt = `defaultShotBuilderPrompt` + `## Refinement Mode` con `refineModeInstructions` (reglas anti-drift: aplicar solo el cambio pedido, conservar IDs, timestamps, slots `[ImageN]` y continuidad) + skill/instrucciones/reglas ZH/inglés igual que generate.
 - Reutiliza el mismo pipeline: `runClaudeShotBuilder()` (retry 3 intentos, `extractJSON` + `validateShotJSON`), y `persistFailure()` con `mode='refine'`.
 - El retry correctivo reenvía el breakdown previo + instrucción (nunca la respuesta truncada).
 
@@ -208,7 +208,7 @@ Puntos clave del `defaultShotBuilderPrompt`:
 - **Misión DCS-DIRECTION**: convertir guiones literarios en prompts Seedance con actuación humana real (nada de caricatura).
 - **Filosofía**: realismo analógico, actuación física (verbos transitivos, nunca adjetivos de emoción tipo "angry"), composición bloqueada, golden rule of diffusion (referencias `@Image`/`@Video`).
 - **Parseo de guion**: bloques `NN. INT/EXT. LOCACIÓN — TIEMPO` → `scriptNumber`, `scriptLocation`, tipo de escena (present/flashback/fantasy/dream/montage).
-- **Asignación de assets a nivel de episodio**: `episode.assetAssignments` con slots `@imageN` y tipos `character | location | prop | audio`.
+- **Asignación de assets a nivel de episodio**: `episode.assetAssignments` con slots `[ImageN]` y tipos `character | location | prop | audio`.
 - **Continuity Engine**: rastrea locación, tiempo, personajes, estado emocional/físico, vestuario, props entre escenas.
 - **4 fases**: análisis de subtexto (Weston) → física (Mamet) → cinematografía → ensamblaje multimodal.
 - **Anatomy Library**: diccionario de emociones en términos musculares + micro-fidgeting (eye darts, nostril flares...).
@@ -278,7 +278,7 @@ Antepone al prompt del usuario un bloque con este formato (lo usan Shot Builder 
 === Scene Context ===
 Description: ...
 Characters (use the id field as assetId):
-  - Nombre [slot: @image1] [id: uuid]
+  - Nombre [slot: [Image1]] [id: uuid]
 Cinematography presets:
   - Label (code): prompt
 Reference assets:
