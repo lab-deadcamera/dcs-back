@@ -74,6 +74,52 @@ func (s *Service) GetByIDWithFiles(id string) (*CharacterWithFiles, error) {
 	return &CharacterWithFiles{Character: *ch, Files: files}, nil
 }
 
+func (s *Service) ListPage(page, pageSize int, search string) (*PaginatedCharacters, error) {
+	chars, total, err := s.store.ListPage(page, pageSize, search)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(chars) == 0 {
+		return &PaginatedCharacters{
+			Items:      []CharacterWithFiles{},
+			Total:      0,
+			Page:       page,
+			PageSize:   pageSize,
+			TotalPages: 0,
+		}, nil
+	}
+
+	ids := make([]string, len(chars))
+	for i, ch := range chars {
+		ids[i] = ch.ID
+	}
+
+	filesMap, err := s.store.ListFilesForCharacters(ids)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]CharacterWithFiles, len(chars))
+	for i, ch := range chars {
+		files := filesMap[ch.ID]
+		if files == nil {
+			files = []CharacterFile{}
+		}
+		s.enrichFileURLs(files)
+		items[i] = CharacterWithFiles{Character: ch, Files: files}
+	}
+
+	totalPages := (total + pageSize - 1) / pageSize
+	return &PaginatedCharacters{
+		Items:      items,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}, nil
+}
+
 func (s *Service) List() ([]CharacterWithFiles, error) {
 	chars, err := s.store.List()
 	if err != nil {

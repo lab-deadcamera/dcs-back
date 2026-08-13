@@ -73,6 +73,18 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, adminMw gin.HandlerFunc) 
 		takes.POST("/:takeId/download", m.hdl.DownloadTake)
 	}
 
+	// ── Shot Resources ──────────────────────────────────────
+	shotRes := g.Group("/:id/chapters/:chapterId/scenes/:sceneId/shots/:shotId/resources")
+	{
+		shotRes.POST("/characters", m.hdl.AssignCharacterToShot)
+		shotRes.DELETE("/characters/:assignmentId", m.hdl.RemoveShotCharacter)
+		shotRes.POST("/assets", m.hdl.AssignAssetToShot)
+		shotRes.DELETE("/assets/:assignmentId", m.hdl.RemoveShotAsset)
+		shotRes.POST("/presets", m.hdl.AssignPresetToShot)
+		shotRes.DELETE("/presets/:assignmentId", m.hdl.RemoveShotPreset)
+		shotRes.PATCH("/model", m.hdl.UpdateShotModel)
+	}
+
 	// ── Scene Assignments (GET anyone auth'd, POST/DELETE admin+director) ──
 	assignments := g.Group("/:id/chapters/:chapterId/scenes/:sceneId/assignments")
 	{
@@ -104,4 +116,16 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, adminMw gin.HandlerFunc) 
 		assignmentsFlat.DELETE("/characters/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveSceneCharacter)
 		assignmentsFlat.DELETE("/assets/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveSceneAsset)
 	}
+
+		// ── Chapter Assignments ──
+		chapterAssignments := g.Group("/:id/chapters/:chapterId/assignments")
+		{
+			chapterAssignments.GET("", m.hdl.GetChapterAssignments)
+			chapterAssignments.POST("/characters", middleware.RequireRole(2), m.hdl.AssignCharacterToChapter)
+			chapterAssignments.POST("/assets", middleware.RequireRole(2), m.hdl.AssignAssetToChapter)
+			chapterAssignments.POST("/presets", middleware.RequireRole(2), m.hdl.AssignPresetToChapter)
+			chapterAssignments.DELETE("/characters/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveChapterCharacter)
+			chapterAssignments.DELETE("/assets/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveChapterAsset)
+			chapterAssignments.DELETE("/presets/:assignmentId", middleware.RequireRole(2), m.hdl.RemoveChapterPreset)
+		}
 }

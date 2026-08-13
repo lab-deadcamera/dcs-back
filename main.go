@@ -15,6 +15,7 @@ import (
 	"dcs-back-v0/internal/modules/preset"
 	"dcs-back-v0/internal/modules/project"
 	"dcs-back-v0/internal/modules/provider"
+	"dcs-back-v0/internal/modules/skill"
 	"dcs-back-v0/internal/modules/studio"
 	studioaudio "dcs-back-v0/internal/modules/studio/audio"
 	calculators "dcs-back-v0/internal/modules/studio/calculators"
@@ -116,6 +117,7 @@ func main() {
 	studioSvc.SetAssetSyncStore(assetSyncStore)
 	studioSvc.SetCharacterService(charSvc)
 	studioSvc.SetAssetCredentials(cfg.AssetAccessKeyID, cfg.AssetSecretAccessKey, cfg.AssetDefaultGroupID)
+	studioSvc.SetAssetFixOptions(cfg.AssetAutoNormalize, cfg.AssetAspectFix, cfg.AssetAIRepair, cfg.AssetImageModel)
 	genLogStore := studio.NewGenerationLogStore(database)
 	studioSvc.SetLogStore(genLogStore)
 	studioSvc.SetCommStore(studio.NewServerCommunicationStore(database))
@@ -140,7 +142,13 @@ func main() {
 	projectStore := project.NewStore(database)
 	studioImageHdl := studioimage.NewHandler(imgSvc)
 	studioAudioHdl := studioaudio.NewHandler(studioSvc)
-	studioTextHdl := studiotext.NewHandler(studioSvc)
+
+	skillStore := skill.NewStore(database)
+	skillSvc := skill.NewService(skillStore)
+	skillHdl := skill.NewHandler(skillSvc)
+
+	shotBuilderLogStore := studiotext.NewLogStore(database)
+	studioTextHdl := studiotext.NewHandler(studioSvc.GetProviderStore(), skillSvc, shotBuilderLogStore)
 	projectSvc := project.NewService(projectStore)
 	projectSvc.SetTaskLookup(func(taskID string) string {
 		sr, err := studioSvc.GetStatus(taskID)
@@ -203,6 +211,7 @@ func main() {
 	registry.Register(provider.NewModule(providerHdl))
 	registry.Register(preset.NewModule(presetHdl))
 	registry.Register(project.NewModule(projectHdl))
+	registry.Register(skill.NewModule(skillHdl))
 	registry.Register(studio.NewModule(studioHdl, studioVideoHdl, studioImageHdl, studioAudioHdl, studioTextHdl))
 	registry.Setup(v1, authMw, adminMw)
 

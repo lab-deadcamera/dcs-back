@@ -1,6 +1,7 @@
 package file
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"image"
@@ -128,19 +129,62 @@ func decodeImage(path string) (image.Image, error) {
 	}
 	defer f.Close()
 
+	// The extension is only a hint — the stored bytes are authoritative. Files
+	// can carry a wrong extension (e.g. a JPEG saved as ".png"), which makes
+	// extension-based decoders fail. Try the extension first, then fall back to
+	// sniffing the magic bytes so thumbnails still work.
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".jpg", ".jpeg":
-		return jpeg.Decode(f)
+		if img, err := jpeg.Decode(f); err == nil {
+			return img, nil
+		}
 	case ".png":
-		return png.Decode(f)
+		if img, err := png.Decode(f); err == nil {
+			return img, nil
+		}
 	case ".gif":
-		return gif.Decode(f)
+		if img, err := gif.Decode(f); err == nil {
+			return img, nil
+		}
 	case ".webp":
-		return webp.Decode(f)
-	default:
-		return imaging.Open(path)
+		if img, err := webp.Decode(f); err == nil {
+			return img, nil
+		}
 	}
+
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	// image.Decode sniffs the content (png/jpeg/gif are registered via the
+	// imports above).
+	if img, _, err := image.Decode(f); err == nil {
+		return img, nil
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	// WebP is not auto-registered with image.Decode — try it explicitly.
+	if img, err := webp.Decode(f); err == nil {
+		return img, nil
+	}
+
+	return nil, fmt.Errorf("unsupported or invalid image format")
+}
+
+// RemoveThumbnail deletes a file's cached thumbnail, if present.
+func (s *Store) RemoveThumbnail(srcSubpath string) error {
+	thumbSubpath := "thumbnails/" + srcSubpath
+	if s.FileExists(thumbSubpath) {
+		return s.DeleteFile(thumbSubpath)
+	}
+	return nil
+}
+
+// ValidateImage checks that data decodes as a known image format.
+func (s *Store) ValidateImage(data []byte) error {
+	_, err := imaging.Decode(bytes.NewReader(data))
+	return err
 }
 
 // ─── DB operations ────────────────────────────────────────────
@@ -169,6 +213,79 @@ func (s *Store) GetFileByID(id string) (*File, error) {
 		return nil, err
 	}
 	return f, nil
+}
+
+func (s *Store) ListFilesPage(page, pageSize int, category, storage, search string) (*PaginatedFiles, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 20
+	}
+
+	where := "WHERE trashed = false AND deleted_at IS NULL"
+	args := []interface{}{}
+	argIdx := 1
+
+	if category != "" {
+		where += fmt.Sprintf(" AND category = $%d", argIdx)
+		args = append(args, category)
+		argIdx++
+	}
+	if storage != "" {
+		where += fmt.Sprintf(" AND storage = $%d", argIdx)
+		args = append(args, storage)
+		argIdx++
+	}
+	if search != "" {
+		where += fmt.Sprintf(" AND filename ILIKE $%d", argIdx)
+		args = append(args, "%"+search+"%")
+		argIdx++
+	}
+
+	// Count total
+	var total int
+	countQuery := "SELECT COUNT(*) FROM files " + where
+	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, err
+	}
+
+	// Fetch page
+	offset := (page - 1) * pageSize
+	query := `SELECT id, filename, path, size, mime_type, category, format, storage, duration, trashed, created_at, updated_at, deleted_at
+		FROM files ` + where + ` ORDER BY created_at DESC LIMIT $` + fmt.Sprintf("%d", argIdx) + ` OFFSET $` + fmt.Sprintf("%d", argIdx+1)
+	args = append(args, pageSize, offset)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []File
+	for rows.Next() {
+		var f File
+		if err := rows.Scan(
+			&f.ID, &f.Filename, &f.Path, &f.Size, &f.MimeType,
+			&f.Category, &f.Format, &f.Storage, &f.Duration, &f.Trashed,
+			&f.CreatedAt, &f.UpdatedAt, &f.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	if files == nil {
+		files = []File{}
+	}
+
+	totalPages := (total + pageSize - 1) / pageSize
+	return &PaginatedFiles{
+		Items:      files,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}, nil
 }
 
 func (s *Store) ListFiles(category, storage string, trashed bool) ([]File, error) {
@@ -253,3 +370,4 @@ func (s *Store) ListExpiredTemp(maxAge time.Duration) ([]File, error) {
 	}
 	return files, nil
 }
+

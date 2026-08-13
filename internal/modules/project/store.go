@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// ─── Project Store ──────────────────────────────────────────────
+// ????????? Project Store ??????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
 type ProjectStore struct {
 	db *sql.DB
@@ -123,7 +123,7 @@ func (s *ProjectStore) SoftDelete(id string) error {
 	return nil
 }
 
-// ─── Chapter Store ──────────────────────────────────────────────
+// ????????? Chapter Store ??????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
 const chapterCols = `id, project_id, number, COALESCE(name, '') AS name,
 	COALESCE(description, '') AS description, active,
@@ -212,17 +212,18 @@ func (s *ProjectStore) SoftDeleteChapter(id string) error {
 	return nil
 }
 
-// ─── Scene Store ────────────────────────────────────────────────
+// ????????? Scene Store ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
 const sceneCols = `id, project_id, COALESCE(chapter_id::text, '') AS chapter_id, number,
 	COALESCE(name, '') AS name, COALESCE(description, '') AS description, active,
 		(SELECT COUNT(*) FROM shots WHERE scene_id IS NOT NULL AND scene_id = scenes.id AND deleted_at IS NULL) AS shot_count,
+		(SELECT COUNT(*) FROM takes WHERE scene_id IS NOT NULL AND scene_id = scenes.id AND deleted_at IS NULL) AS take_count,
 	created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanScene(sc *Scene, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(&sc.ID, &sc.ProjectID, &sc.ChapterID, &sc.Number, &sc.Name, &sc.Description, &sc.Active, &sc.ShotCount, &sc.CreatedAt, &sc.UpdatedAt, &sc.DeletedAt)
+	return scanner.Scan(&sc.ID, &sc.ProjectID, &sc.ChapterID, &sc.Number, &sc.Name, &sc.Description, &sc.Active, &sc.ShotCount, &sc.TakeCount, &sc.CreatedAt, &sc.UpdatedAt, &sc.DeletedAt)
 }
 
 func (s *ProjectStore) CreateScene(sc *Scene) error {
@@ -301,24 +302,24 @@ func (s *ProjectStore) SoftDeleteScene(id string) error {
 	return nil
 }
 
-// ─── Shot Store ─────────────────────────────────────────────────
+// ????????? Shot Store ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
 const shotCols = `id, scene_id, number, COALESCE(name, '') AS name,
 	COALESCE(description, '') AS description, active,
 		(SELECT COUNT(*) FROM takes WHERE shot_id IS NOT NULL AND shot_id = shots.id AND deleted_at IS NULL) AS take_count,
-	created_at, updated_at, deleted_at`
+	aspect_ratio, duration_seconds, created_at, updated_at, deleted_at`
 
 func (s *ProjectStore) scanShot(sh *Shot, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(&sh.ID, &sh.SceneID, &sh.Number, &sh.Name, &sh.Description, &sh.Active, &sh.TakeCount, &sh.CreatedAt, &sh.UpdatedAt, &sh.DeletedAt)
+	return scanner.Scan(&sh.ID, &sh.SceneID, &sh.Number, &sh.Name, &sh.Description, &sh.Active, &sh.TakeCount, &sh.AspectRatio, &sh.DurationSeconds, &sh.CreatedAt, &sh.UpdatedAt, &sh.DeletedAt)
 }
 
 func (s *ProjectStore) CreateShot(sh *Shot) error {
-	query := `INSERT INTO shots (id, scene_id, number, name, description, active)
-		VALUES ($1, $2, $3, $4, $5, $6)
+	query := `INSERT INTO shots (id, scene_id, number, name, description, active, aspect_ratio, duration_seconds)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at, updated_at`
-	return s.db.QueryRow(query, sh.ID, sh.SceneID, sh.Number, sh.Name, sh.Description, sh.Active).
+	return s.db.QueryRow(query, sh.ID, sh.SceneID, sh.Number, sh.Name, sh.Description, sh.Active, sh.AspectRatio, sh.DurationSeconds).
 		Scan(&sh.CreatedAt, &sh.UpdatedAt)
 }
 
@@ -335,7 +336,7 @@ func (s *ProjectStore) GetShotByID(id string) (*Shot, error) {
 }
 
 func (s *ProjectStore) ListShots(sceneID string) ([]Shot, error) {
-	query := `SELECT ` + shotCols + ` FROM shots WHERE scene_id = $1 AND deleted_at IS NULL ORDER BY number ASC`
+	query := `SELECT ` + shotCols + ` FROM shots WHERE scene_id = $1 AND deleted_at IS NULL ORDER BY number ASC, created_at ASC`
 	rows, err := s.db.Query(query, sceneID)
 	if err != nil {
 		return nil, err
@@ -390,12 +391,13 @@ func (s *ProjectStore) SoftDeleteShot(id string) error {
 	return nil
 }
 
-// ─── Take Store ─────────────────────────────────────────────────
+// ????????? Take Store ???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
 const takeCols = `t.id, t.scene_id, COALESCE(t.shot_id::text, '') AS shot_id, t.number, COALESCE(t.video_url, '') AS video_url,
 	COALESCE(t.video_local_url, '') AS video_local_url,
 	COALESCE(t.status, 'pending') AS status, t.active, t.final,
 	COALESCE(t.task_id, '') AS task_id,
+		COALESCE(t.rating, 0) AS rating,
 	t.created_at, t.updated_at, t.deleted_at`
 
 const takeListCols = takeCols + `,
@@ -413,7 +415,7 @@ func (s *ProjectStore) scanTake(t *Take, scanner interface {
 func (s *ProjectStore) scanTakeWithPayload(t *Take, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(&t.ID, &t.SceneID, &t.ShotID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.Final, &t.TaskID, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt, &t.RequestPayload)
+	return scanner.Scan(&t.ID, &t.SceneID, &t.ShotID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.Final, &t.TaskID, &t.Rating, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt, &t.RequestPayload)
 }
 
 func (s *ProjectStore) CreateTake(t *Take) error {
@@ -556,7 +558,7 @@ func (s *ProjectStore) GetTakeByVideoURL(shotID string, videoURL string) (*Take,
 
 // GetPendingTakeByNumber returns the most recent pending take for a
 // shot+number pair, or nil if none exists. Unlike GetActiveTakeByNumber
-// it does NOT filter by active — it finds the pending take regardless of
+// it does NOT filter by active ??? it finds the pending take regardless of
 // whether something else already deactivated it.
 func (s *ProjectStore) GetPendingTakeByNumber(shotID string, number int) (*Take, error) {
 	t := &Take{}
@@ -581,7 +583,7 @@ func (s *ProjectStore) SoftDeleteTake(id string) error {
 	return nil
 }
 
-// ─── Helpers ────────────────────────────────────────────────────
+// ????????? Helpers ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
 func nullIfEmpty(s string) interface{} {
 	if s == "" {
@@ -590,7 +592,7 @@ func nullIfEmpty(s string) interface{} {
 	return s
 }
 
-// ─── Scene Assignment Store ─────────────────────────────────────
+// ????????? Scene Assignment Store ???????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
 func (s *ProjectStore) GetScenePresets(sceneID string) ([]ScenePresetAssignment, error) {
 	query := `SELECT sp.id, sp.scene_id, sp.preset_id, p.code, p.label, pg.slug AS group_slug, sp.created_at
@@ -617,9 +619,33 @@ func (s *ProjectStore) GetScenePresets(sceneID string) ([]ScenePresetAssignment,
 }
 
 func (s *ProjectStore) GetSceneCharacters(sceneID string) ([]SceneCharacterAssignment, error) {
-	query := `SELECT sc.id, sc.scene_id, sc.character_id, c.name, sc.created_at
+		// Auto-assign [ImageN] slots to any characters that still have NULL slot
+	// (legacy data created before the slot column migration).
+	var nullCount int
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM scene_characters WHERE scene_id = $1 AND slot IS NULL`, sceneID).Scan(&nullCount)
+	if nullCount > 0 {
+		var offset int
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM scene_characters WHERE scene_id = $1 AND slot IS NOT NULL`, sceneID).Scan(&offset)
+		s.db.Exec(`
+			UPDATE scene_characters sc
+			SET slot = '[Image' || (($2::int) + sub.rn) || ']'
+			FROM (
+				SELECT id, ROW_NUMBER() OVER (ORDER BY created_at) AS rn
+				FROM scene_characters
+				WHERE scene_id = $1 AND slot IS NULL
+			) sub
+			WHERE sc.id = sub.id`, sceneID, offset)
+	}
+
+query := `SELECT sc.id, sc.scene_id, sc.character_id, c.name, COALESCE(sc.slot, ''),
+				COALESCE(cf.file_id::text, '') AS file_id, sc.created_at
 			FROM scene_characters sc
 			JOIN characters c ON c.id = sc.character_id
+			LEFT JOIN LATERAL (
+				SELECT cf2.file_id FROM character_files cf2
+				WHERE cf2.character_id = c.id
+				ORDER BY cf2.created_at LIMIT 1
+			) cf ON true
 			WHERE sc.scene_id = $1
 			ORDER BY c.name`
 	rows, err := s.db.Query(query, sceneID)
@@ -631,7 +657,7 @@ func (s *ProjectStore) GetSceneCharacters(sceneID string) ([]SceneCharacterAssig
 	var items []SceneCharacterAssignment
 	for rows.Next() {
 		var a SceneCharacterAssignment
-		if err := rows.Scan(&a.ID, &a.SceneID, &a.CharacterID, &a.Name, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.SceneID, &a.CharacterID, &a.Name, &a.Slot, &a.FileID, &a.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, a)
@@ -674,12 +700,12 @@ func (s *ProjectStore) AssignPresetToScene(sceneID, presetID string) (string, er
 	return id, nil
 }
 
-func (s *ProjectStore) AssignCharacterToScene(sceneID, characterID string) (string, error) {
+func (s *ProjectStore) AssignCharacterToScene(sceneID, characterID, slot string) (string, error) {
 	var id string
-	query := `INSERT INTO scene_characters (id, scene_id, character_id)
-		VALUES (gen_random_uuid(), $1, $2)
+	query := `INSERT INTO scene_characters (id, scene_id, character_id, slot)
+		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''))
 		RETURNING id`
-	err := s.db.QueryRow(query, sceneID, characterID).Scan(&id)
+	err := s.db.QueryRow(query, sceneID, characterID, slot).Scan(&id)
 	if err != nil {
 		return "", err
 	}
@@ -729,4 +755,344 @@ func (s *ProjectStore) RemoveSceneAsset(assignmentID string) error {
 		return fmt.Errorf("assignment not found")
 	}
 	return nil
+}
+
+
+func (s *ProjectStore) AssignCharacterToShot(shotID, characterID, slot string) (string, error) {
+	var id string
+	query := `INSERT INTO shot_characters (id, shot_id, character_id, slot)
+		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''))
+		RETURNING id`
+	err := s.db.QueryRow(query, shotID, characterID, slot).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) AssignAssetToShot(shotID, fileID, slot string) (string, error) {
+	var id string
+	query := `INSERT INTO shot_assets (id, shot_id, file_id, slot)
+		VALUES (gen_random_uuid(), $1, $2, $3)
+		RETURNING id`
+	err := s.db.QueryRow(query, shotID, fileID, slot).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) AssignPresetToShot(shotID, presetID string) (string, error) {
+	var id string
+	query := `INSERT INTO shot_presets (id, shot_id, preset_id)
+		VALUES (gen_random_uuid(), $1, $2)
+		RETURNING id`
+	err := s.db.QueryRow(query, shotID, presetID).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) RemoveShotCharacter(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM shot_characters WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) RemoveShotAsset(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM shot_assets WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) RemoveShotPreset(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM shot_presets WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) UpdateShotModel(shotID, modelID string) error {
+	_, err := s.db.Exec(`UPDATE shots SET model_id = $2 WHERE id = $1`, shotID, modelID)
+	return err
+}
+
+// ─── Chapter Assignment Store Methods ─────────────────────────────
+
+func (s *ProjectStore) GetChapterCharacters(chapterID string) ([]ChapterCharacterAssignment, error) {
+	// Backfill slots for legacy assignments so the response always carries one.
+	if err := s.assignMissingChapterSlots(chapterID); err != nil {
+		return nil, err
+	}
+	query := `SELECT cc.id, cc.chapter_id, cc.character_id, c.name, COALESCE(cc.slot, ''),
+			COALESCE(cf.file_id::text, '') AS file_id, cc.created_at
+		FROM chapter_characters cc
+		JOIN characters c ON c.id = cc.character_id
+		LEFT JOIN LATERAL (
+			SELECT cf2.file_id FROM character_files cf2
+			WHERE cf2.character_id = c.id
+			ORDER BY cf2.created_at LIMIT 1
+		) cf ON true
+		WHERE cc.chapter_id = $1
+		ORDER BY c.name`
+	rows, err := s.db.Query(query, chapterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ChapterCharacterAssignment
+	for rows.Next() {
+		var a ChapterCharacterAssignment
+		if err := rows.Scan(&a.ID, &a.ChapterID, &a.CharacterID, &a.Name, &a.Slot, &a.FileID, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (s *ProjectStore) GetChapterAssets(chapterID string) ([]ChapterAssetAssignment, error) {
+	// Backfill slots for legacy assignments so the response always carries one.
+	if err := s.assignMissingChapterSlots(chapterID); err != nil {
+		return nil, err
+	}
+	query := `SELECT ca.id, ca.chapter_id, ca.file_id, f.filename, f.mime_type,
+			COALESCE(ca.slot, '') AS slot, ca.created_at
+		FROM chapter_assets ca
+		JOIN files f ON f.id = ca.file_id
+		WHERE ca.chapter_id = $1
+		ORDER BY f.filename`
+	rows, err := s.db.Query(query, chapterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ChapterAssetAssignment
+	for rows.Next() {
+		var a ChapterAssetAssignment
+		if err := rows.Scan(&a.ID, &a.ChapterID, &a.FileID, &a.Filename, &a.MimeType, &a.Slot, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (s *ProjectStore) GetChapterPresets(chapterID string) ([]ChapterPresetAssignment, error) {
+	query := `SELECT cp.id, cp.chapter_id, cp.preset_id, p.code, p.label, pg.slug AS group_slug, cp.created_at
+		FROM chapter_presets cp
+		JOIN presets p ON p.id = cp.preset_id
+		JOIN preset_groups pg ON pg.id = p.group_id
+		WHERE cp.chapter_id = $1
+		ORDER BY pg.slug, p.code`
+	rows, err := s.db.Query(query, chapterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []ChapterPresetAssignment
+	for rows.Next() {
+		var a ChapterPresetAssignment
+		if err := rows.Scan(&a.ID, &a.ChapterID, &a.PresetID, &a.Code, &a.Label, &a.GroupSlug, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, a)
+	}
+	return items, rows.Err()
+}
+
+func (s *ProjectStore) AssignCharacterToChapter(chapterID, characterID, slot string) (string, error) {
+	// Episode assets must always have a [ImageN] slot so they reach the shot
+	// builder ordered and labeled — auto-assign the next free one when the
+	// caller doesn't provide one (e.g. free assets uploaded from the panel).
+	if slot == "" {
+		next, err := s.nextFreeChapterSlot(chapterID)
+		if err != nil {
+			return "", err
+		}
+		slot = next
+	}
+	var id string
+	query := `INSERT INTO chapter_characters (id, chapter_id, character_id, slot)
+		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''))
+		RETURNING id`
+	err := s.db.QueryRow(query, chapterID, characterID, slot).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) AssignAssetToChapter(chapterID, fileID, slot string) (string, error) {
+	// See AssignCharacterToChapter — episode assets keep an [ImageN] slot.
+	if slot == "" {
+		next, err := s.nextFreeChapterSlot(chapterID)
+		if err != nil {
+			return "", err
+		}
+		slot = next
+	}
+	var id string
+	query := `INSERT INTO chapter_assets (id, chapter_id, file_id, slot)
+		VALUES (gen_random_uuid(), $1, $2, NULLIF($3, ''))
+		RETURNING id`
+	err := s.db.QueryRow(query, chapterID, fileID, slot).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// nextFreeChapterSlot returns the lowest [ImageN] not yet used by any character
+// or asset assigned to the chapter, so auto-assigned slots never collide.
+func (s *ProjectStore) nextFreeChapterSlot(chapterID string) (string, error) {
+	used := map[int]bool{}
+	rows, err := s.db.Query(`
+		SELECT slot FROM chapter_characters WHERE chapter_id = $1 AND slot IS NOT NULL
+		UNION ALL
+		SELECT slot FROM chapter_assets WHERE chapter_id = $1 AND slot IS NOT NULL`, chapterID)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var slot string
+		if err := rows.Scan(&slot); err != nil {
+			return "", err
+		}
+		if n := chapterSlotNum(slot); n > 0 {
+			used[n] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	n := 1
+	for used[n] {
+		n++
+	}
+	return fmt.Sprintf("[Image%d]", n), nil
+}
+
+// assignMissingChapterSlots backfills [ImageN] slots for character/asset
+// assignments created without one (legacy data before auto-assignment), so
+// the assignments endpoint always returns a slot. Same pattern as the
+// scene_characters backfill in GetSceneCharacters.
+func (s *ProjectStore) assignMissingChapterSlots(chapterID string) error {
+	type target struct {
+		id   string
+		kind string // "character" | "asset"
+	}
+	var targets []target
+	rows, err := s.db.Query(`
+		SELECT 'character' AS kind, id, created_at FROM chapter_characters WHERE chapter_id = $1 AND slot IS NULL
+		UNION ALL
+		SELECT 'asset' AS kind, id, created_at FROM chapter_assets WHERE chapter_id = $1 AND slot IS NULL
+		ORDER BY kind, created_at`, chapterID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var t target
+		var _createdAt string // only used for the deterministic ORDER BY
+		if err := rows.Scan(&t.kind, &t.id, &_createdAt); err != nil {
+			rows.Close()
+			return err
+		}
+		targets = append(targets, t)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, t := range targets {
+		slot, err := s.nextFreeChapterSlot(chapterID)
+		if err != nil {
+			return err
+		}
+		table := "chapter_characters"
+		if t.kind == "asset" {
+			table = "chapter_assets"
+		}
+		if _, err := s.db.Exec(`UPDATE `+table+` SET slot = $2 WHERE id = $1`, t.id, slot); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *ProjectStore) AssignPresetToChapter(chapterID, presetID string) (string, error) {
+	var id string
+	query := `INSERT INTO chapter_presets (id, chapter_id, preset_id)
+		VALUES (gen_random_uuid(), $1, $2)
+		RETURNING id`
+	err := s.db.QueryRow(query, chapterID, presetID).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *ProjectStore) RemoveChapterCharacter(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM chapter_characters WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) RemoveChapterAsset(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM chapter_assets WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+func (s *ProjectStore) RemoveChapterPreset(assignmentID string) error {
+	result, err := s.db.Exec(`DELETE FROM chapter_presets WHERE id = $1`, assignmentID)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return fmt.Errorf("assignment not found")
+	}
+	return nil
+}
+
+// chapterSlotNum extracts the trailing number of a slot like "[Image5]" (→ 5);
+// 0 when the slot has no numeric suffix.
+func chapterSlotNum(slot string) int {
+	n := 0
+	mult := 1
+	for i := len(slot) - 1; i >= 0 && slot[i] >= '0' && slot[i] <= '9'; i-- {
+		n += int(slot[i]-'0') * mult
+		mult *= 10
+	}
+	return n
 }

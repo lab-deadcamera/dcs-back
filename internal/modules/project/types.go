@@ -68,6 +68,7 @@ type Scene struct {
 	Description string     `json:"description"`
 	Active      bool       `json:"active"`
 	ShotCount   int        `json:"shot_count"`
+	TakeCount   int        `json:"take_count"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
@@ -89,29 +90,35 @@ type UpdateSceneRequest struct {
 // ─── Shot ───────────────────────────────────────────────────────
 
 type Shot struct {
-	ID          string     `json:"id"`
-	SceneID     string     `json:"scene_id"`
-	Number      int        `json:"number"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	Active      bool       `json:"active"`
-	TakeCount   int        `json:"take_count"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+	ID              string     `json:"id"`
+	SceneID         string     `json:"scene_id"`
+	Number          int        `json:"number"`
+	Name            string     `json:"name"`
+	Description     string     `json:"description"`
+	Active          bool       `json:"active"`
+	TakeCount       int        `json:"take_count"`
+	AspectRatio     *string    `json:"aspect_ratio,omitempty"`
+	DurationSeconds *int       `json:"duration_seconds,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
 }
 
 type CreateShotRequest struct {
-	Number      int    `json:"number" binding:"required"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Number          int     `json:"number" binding:"required"`
+	Name            string  `json:"name"`
+	Description     string  `json:"description"`
+	AspectRatio     *string `json:"aspect_ratio,omitempty"`
+	DurationSeconds *int    `json:"duration_seconds,omitempty"`
 }
 
 type UpdateShotRequest struct {
-	Number      *int    `json:"number"`
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
-	Active      *bool   `json:"active"`
+	Number          *int    `json:"number"`
+	Name            *string `json:"name"`
+	Description     *string `json:"description"`
+	Active          *bool   `json:"active"`
+	AspectRatio     *string `json:"aspect_ratio,omitempty"`
+	DurationSeconds *int    `json:"duration_seconds,omitempty"`
 }
 
 // ─── Take ───────────────────────────────────────────────────────
@@ -129,6 +136,7 @@ type Take struct {
 	FinalizedAt    *time.Time `json:"finalized_at"`
 	TaskID         string     `json:"task_id,omitempty"`
 	RequestPayload string     `json:"request_payload,omitempty"`
+	Rating         int        `json:"rating"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
@@ -146,6 +154,7 @@ type UpdateTakeRequest struct {
 	Active        *bool   `json:"active"`
 	Final         *bool   `json:"final"`
 	TaskID        *string `json:"task_id"`
+	Rating        *int    `json:"rating"`
 }
 
 // ─── Combined responses ─────────────────────────────────────────
@@ -199,6 +208,8 @@ type SceneCharacterAssignment struct {
 	SceneID     string    `json:"scene_id"`
 	CharacterID string    `json:"character_id"`
 	Name        string    `json:"name"`
+	Slot        string    `json:"slot"`
+	FileID      string    `json:"file_id"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -216,3 +227,44 @@ type SceneAssignments struct {
 	Characters []SceneCharacterAssignment `json:"characters"`
 	Assets     []SceneAssetAssignment     `json:"assets"`
 }
+
+// ─── Chapter Assignments ───────────────────────────────────────
+
+type ChapterCharacterAssignment struct {
+	ID          string    `json:"id"`
+	ChapterID   string    `json:"chapter_id"`
+	CharacterID string    `json:"character_id"`
+	Name        string    `json:"name"`
+	Slot        string    `json:"slot"`
+	FileID      string    `json:"file_id"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type ChapterAssetAssignment struct {
+	ID        string    `json:"id"`
+	ChapterID string    `json:"chapter_id"`
+	FileID    string    `json:"file_id"`
+	Filename  string    `json:"filename"`
+	MimeType  string    `json:"mime_type"`
+	Slot      string    `json:"slot,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ChapterPresetAssignment struct {
+	ID        string    `json:"id"`
+	ChapterID string    `json:"chapter_id"`
+	PresetID  string    `json:"preset_id"`
+	Code      string    `json:"code"`
+	Label     string    `json:"label"`
+	GroupSlug string    `json:"group_slug"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ChapterAssignments struct {
+	Characters []ChapterCharacterAssignment `json:"characters"`
+	Assets     []ChapterAssetAssignment     `json:"assets"`
+	Presets    []ChapterPresetAssignment    `json:"presets"`
+}
+
+
+

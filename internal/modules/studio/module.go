@@ -38,6 +38,11 @@ type textHandler interface {
 	GetStatus(c *gin.Context)
 	CancelTask(c *gin.Context)
 	PreviewPayload(c *gin.Context)
+	ClaudeGenerateShots(c *gin.Context)
+	ClaudeRefineShots(c *gin.Context)
+	ClaudeOptimizePrompt(c *gin.Context)
+	ListGenerateShotsLogs(c *gin.Context)
+	GetGenerateShotsLog(c *gin.Context)
 }
 
 func NewModule(hdl *Handler, videoHdl videoHandler, imageHdl imageHandler, audioHdl audioHandler, textHdl textHandler) *Module {
@@ -52,7 +57,7 @@ func NewModule(hdl *Handler, videoHdl videoHandler, imageHdl imageHandler, audio
 
 func (m *Module) Name() string { return "studio" }
 
-func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
+func (m *Module) Register(rg *gin.RouterGroup, authMw, adminMw gin.HandlerFunc) {
 	g := rg.Group("/studio")
 	g.Use(authMw)
 	{
@@ -62,6 +67,16 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 		g.GET("/files-with-sync", m.hdl.ListFilesWithSync)
 		g.GET("/characters/:id/files-with-sync", m.hdl.ListCharacterFilesWithSync)
 		g.POST("/sync-character-assets", m.hdl.SyncCharacterAssets)
+
+		// External gallery admin view
+		gallery := g.Group("/gallery")
+		gallery.Use(adminMw)
+		{
+			gallery.GET("/models", m.hdl.ListGalleryModels)
+			gallery.GET("/models/:modelId/assets", m.hdl.ListGalleryModelAssets)
+			gallery.GET("/errors", m.hdl.ListGalleryErrors)
+			gallery.POST("/fix-asset", m.hdl.FixAsset)
+		}
 
 		// Logs
 		g.GET("/logs/generation", m.hdl.ListGenerationLogs)
@@ -104,6 +119,15 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 			text.GET("/status/:taskId", m.textHdl.GetStatus)
 			text.DELETE("/task/:taskId", m.textHdl.CancelTask)
 			text.POST("/preview", m.textHdl.PreviewPayload)
+
+			claude := text.Group("/claude")
+			{
+				claude.POST("/generate-shots", m.textHdl.ClaudeGenerateShots)
+				claude.POST("/refine-shots", m.textHdl.ClaudeRefineShots)
+				claude.POST("/optimize-prompt", m.textHdl.ClaudeOptimizePrompt)
+				claude.GET("/generate-shots-logs", m.textHdl.ListGenerateShotsLogs)
+				claude.GET("/generate-shots-logs/:id", m.textHdl.GetGenerateShotsLog)
+			}
 		}
 	}
 }

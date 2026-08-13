@@ -1,6 +1,7 @@
 package project
 
 import (
+	"errors"
 	"strings"
 
 	"dcs-back-v0/internal/utils"
@@ -342,6 +343,10 @@ func (h *Handler) SoftDeleteScene(c *gin.Context) {
 	}
 
 	if err := h.svc.SoftDeleteScene(sceneID); err != nil {
+		if errors.Is(err, ErrSceneHasTakes) {
+			utils.BadRequest(c, err.Error())
+			return
+		}
 		if err.Error() == "scene not found" {
 			utils.NotFound(c, err.Error())
 			return
@@ -459,6 +464,10 @@ func (h *Handler) SoftDeleteShot(c *gin.Context) {
 	}
 
 	if err := h.svc.SoftDeleteShot(shotID); err != nil {
+		if errors.Is(err, ErrShotHasTakes) {
+			utils.BadRequest(c, err.Error())
+			return
+		}
 		if err.Error() == "shot not found" {
 			utils.NotFound(c, err.Error())
 			return
@@ -694,12 +703,13 @@ func (h *Handler) AssignCharacterToScene(c *gin.Context) {
 	sceneID := c.Param("sceneId")
 	var req struct {
 		CharacterID string `json:"character_id" binding:"required"`
+		Slot        string `json:"slot"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.BadRequest(c, err.Error())
 		return
 	}
-	id, err := h.svc.AssignCharacterToScene(sceneID, req.CharacterID)
+	id, err := h.svc.AssignCharacterToScene(sceneID, req.CharacterID, req.Slot)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
 			utils.BadRequest(c, "character already assigned to this scene")
@@ -769,4 +779,250 @@ func (h *Handler) RemoveSceneAsset(c *gin.Context) {
 		return
 	}
 	utils.Message(c, "asset unassigned")
+}
+
+// ─── Shot Resources ────────────────────────────────────────────────
+
+
+func (h *Handler) AssignCharacterToShot(c *gin.Context) {
+	shotID := c.Param("shotId")
+	var req struct {
+		CharacterID string `json:"character_id" binding:"required"`
+		Slot        string `json:"slot"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+	id, err := h.svc.AssignCharacterToShot(shotID, req.CharacterID, req.Slot)
+	if err != nil {
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			utils.BadRequest(c, "character already assigned to this shot")
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Created(c, map[string]string{"id": id})
+}
+
+func (h *Handler) AssignAssetToShot(c *gin.Context) {
+	shotID := c.Param("shotId")
+	var req struct {
+		FileID string `json:"file_id" binding:"required"`
+		Slot   string `json:"slot"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+	if req.Slot == "" {
+		req.Slot = "free"
+	}
+	id, err := h.svc.AssignAssetToShot(shotID, req.FileID, req.Slot)
+	if err != nil {
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			utils.BadRequest(c, "asset already assigned to this shot")
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Created(c, map[string]string{"id": id})
+}
+
+func (h *Handler) AssignPresetToShot(c *gin.Context) {
+	shotID := c.Param("shotId")
+	var req struct {
+		PresetID string `json:"preset_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+	id, err := h.svc.AssignPresetToShot(shotID, req.PresetID)
+	if err != nil {
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			utils.BadRequest(c, "preset already assigned to this shot")
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Created(c, map[string]string{"id": id})
+}
+
+func (h *Handler) RemoveShotCharacter(c *gin.Context) {
+	assignmentID := c.Param("assignmentId")
+	if err := h.svc.RemoveShotCharacter(assignmentID); err != nil {
+		if err.Error() == "assignment not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Message(c, "character unassigned")
+}
+
+func (h *Handler) RemoveShotAsset(c *gin.Context) {
+	assignmentID := c.Param("assignmentId")
+	if err := h.svc.RemoveShotAsset(assignmentID); err != nil {
+		if err.Error() == "assignment not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Message(c, "asset unassigned")
+}
+
+func (h *Handler) RemoveShotPreset(c *gin.Context) {
+	assignmentID := c.Param("assignmentId")
+	if err := h.svc.RemoveShotPreset(assignmentID); err != nil {
+		if err.Error() == "assignment not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Message(c, "preset unassigned")
+}
+
+func (h *Handler) UpdateShotModel(c *gin.Context) {
+	shotID := c.Param("shotId")
+	var req struct {
+		ModelID string `json:"model_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+	if err := h.svc.UpdateShotModel(shotID, req.ModelID); err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Message(c, "model updated")
+}
+
+// ─── Chapter Assignments ────────────────────────────────────────
+
+func (h *Handler) GetChapterAssignments(c *gin.Context) {
+	chapterID := c.Param("chapterId")
+	if chapterID == "" {
+		utils.BadRequest(c, "chapterId is required")
+		return
+	}
+	result, err := h.svc.GetChapterAssignments(chapterID)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Success(c, result)
+}
+
+func (h *Handler) AssignCharacterToChapter(c *gin.Context) {
+	chapterID := c.Param("chapterId")
+	var req struct {
+		CharacterID string `json:"character_id" binding:"required"`
+		Slot        string `json:"slot"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+	id, err := h.svc.AssignCharacterToChapter(chapterID, req.CharacterID, req.Slot)
+	if err != nil {
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			utils.BadRequest(c, "character already assigned to this chapter")
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Created(c, map[string]string{"id": id})
+}
+
+func (h *Handler) AssignAssetToChapter(c *gin.Context) {
+	chapterID := c.Param("chapterId")
+	var req struct {
+		FileID string `json:"file_id" binding:"required"`
+		Slot   string `json:"slot"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+	id, err := h.svc.AssignAssetToChapter(chapterID, req.FileID, req.Slot)
+	if err != nil {
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			utils.BadRequest(c, "asset already assigned to this chapter")
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Created(c, map[string]string{"id": id})
+}
+
+func (h *Handler) AssignPresetToChapter(c *gin.Context) {
+	chapterID := c.Param("chapterId")
+	var req struct {
+		PresetID string `json:"preset_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+	id, err := h.svc.AssignPresetToChapter(chapterID, req.PresetID)
+	if err != nil {
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			utils.BadRequest(c, "preset already assigned to this chapter")
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Created(c, map[string]string{"id": id})
+}
+
+func (h *Handler) RemoveChapterCharacter(c *gin.Context) {
+	assignmentID := c.Param("assignmentId")
+	if err := h.svc.RemoveChapterCharacter(assignmentID); err != nil {
+		if err.Error() == "assignment not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Message(c, "character unassigned from chapter")
+}
+
+func (h *Handler) RemoveChapterAsset(c *gin.Context) {
+	assignmentID := c.Param("assignmentId")
+	if err := h.svc.RemoveChapterAsset(assignmentID); err != nil {
+		if err.Error() == "assignment not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Message(c, "asset unassigned from chapter")
+}
+
+func (h *Handler) RemoveChapterPreset(c *gin.Context) {
+	assignmentID := c.Param("assignmentId")
+	if err := h.svc.RemoveChapterPreset(assignmentID); err != nil {
+		if err.Error() == "assignment not found" {
+			utils.NotFound(c, err.Error())
+			return
+		}
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Message(c, "preset unassigned from chapter")
 }

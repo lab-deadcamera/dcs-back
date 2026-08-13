@@ -184,6 +184,35 @@ type SyncResultSummary struct {
 	Results    []SyncAssetResponse `json:"results"`
 }
 
+// ─── Galería externa (admin) ────────────────────────────────────
+
+// GalleryModel resume el estado de sync de un modelo — usado por la vista
+// admin "Galerías Externas" para listar modelos con datos en model_assets.
+type GalleryModel struct {
+	ModelID   string     `json:"model_id"`
+	ModelName string     `json:"model_name"`
+	Total     int        `json:"total"`
+	Active    int        `json:"active"`
+	Failed    int        `json:"failed"`
+	Syncing   int        `json:"syncing"`
+	LastSync  *time.Time `json:"last_sync,omitempty"`
+}
+
+// GalleryCharacter es un personaje interno que usa el archivo sincronizado.
+type GalleryCharacter struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// GalleryAsset es un registro de model_assets enriquecido con el archivo
+// interno (galería interna) y los personajes que lo referencian.
+type GalleryAsset struct {
+	ModelAsset
+	FileName   string             `json:"file_name"`
+	MimeType   string             `json:"mime_type"`
+	Characters []GalleryCharacter `json:"characters"`
+}
+
 // ─── Asset sync ─────────────────────────────────────────────────
 
 type SyncAssetRequest struct {
@@ -200,6 +229,30 @@ type SyncAssetResponse struct {
 	Status       string `json:"status"`
 	ErrorMessage string `json:"error_message,omitempty"`
 	ReferenceURI string `json:"reference_uri,omitempty"`
+	// Normalized reports whether a geometric fix (resize/pad/crop) was applied
+	// before uploading because the image violated BytePlus dimension limits.
+	Normalized bool `json:"normalized,omitempty"`
+}
+
+// FixAssetRequest is the payload for retrying/reparing a failed asset sync.
+type FixAssetRequest struct {
+	ModelID string `json:"model_id" binding:"required"`
+	FileID  string `json:"file_id" binding:"required"`
+	// Mode: "auto" (default, normalize then AI fallback) | "normalize" | "ai".
+	Mode  string `json:"mode"`
+	Ratio string `json:"ratio"`
+	// Model is the image generator model name used by the AI repair
+	// (overrides ASSET_IMAGE_MODEL when provided).
+	Model string `json:"model"`
+}
+
+// FixAssetResult reports how a fix/sync ended.
+type FixAssetResult struct {
+	FileID       string `json:"file_id"`
+	Status       string `json:"status"`
+	ErrorMessage string `json:"error_message,omitempty"`
+	// UsedFix: "normalize" | "ai" | "none".
+	UsedFix string `json:"used_fix"`
 }
 
 // ─── In-memory task tracking ────────────────────────────────────

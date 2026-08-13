@@ -1,6 +1,7 @@
 package project
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,12 @@ import (
 // TaskLookup resolves a completed generation task to its local video URL.
 // Returns empty string if the task is not found or not yet completed.
 type TaskLookup func(taskID string) string
+
+// Sentinel errors for delete protections (scenes/shots with existing takes).
+var (
+	ErrSceneHasTakes = errors.New("scene has existing takes")
+	ErrShotHasTakes  = errors.New("shot has existing takes")
+)
 
 // projectStore defines the storage interface needed by Service.
 type projectStore interface {
@@ -61,11 +68,28 @@ type projectStore interface {
 	GetSceneCharacters(sceneID string) ([]SceneCharacterAssignment, error)
 	GetSceneAssets(sceneID string) ([]SceneAssetAssignment, error)
 	AssignPresetToScene(sceneID, presetID string) (string, error)
-	AssignCharacterToScene(sceneID, characterID string) (string, error)
+	AssignCharacterToScene(sceneID, characterID, slot string) (string, error)
 	AssignAssetToScene(sceneID, fileID string) (string, error)
 	RemoveScenePreset(assignmentID string) error
 	RemoveSceneCharacter(assignmentID string) error
 	RemoveSceneAsset(assignmentID string) error
+
+	AssignCharacterToShot(shotID, characterID, slot string) (string, error)
+	AssignAssetToShot(shotID, fileID, slot string) (string, error)
+	AssignPresetToShot(shotID, presetID string) (string, error)
+	RemoveShotCharacter(assignmentID string) error
+	RemoveShotAsset(assignmentID string) error
+	RemoveShotPreset(assignmentID string) error
+	UpdateShotModel(shotID, modelID string) error
+		GetChapterCharacters(chapterID string) ([]ChapterCharacterAssignment, error)
+		GetChapterAssets(chapterID string) ([]ChapterAssetAssignment, error)
+		GetChapterPresets(chapterID string) ([]ChapterPresetAssignment, error)
+		AssignCharacterToChapter(chapterID, characterID, slot string) (string, error)
+		AssignAssetToChapter(chapterID, fileID, slot string) (string, error)
+		AssignPresetToChapter(chapterID, presetID string) (string, error)
+		RemoveChapterCharacter(assignmentID string) error
+		RemoveChapterAsset(assignmentID string) error
+		RemoveChapterPreset(assignmentID string) error
 }
 
 type Service struct {
@@ -316,6 +340,16 @@ func (s *Service) UpdateScene(id string, req *UpdateSceneRequest) (*Scene, error
 }
 
 func (s *Service) SoftDeleteScene(id string) error {
+	sc, err := s.store.GetSceneByID(id)
+	if err != nil {
+		return err
+	}
+	if sc == nil {
+		return fmt.Errorf("scene not found")
+	}
+	if sc.TakeCount > 0 {
+		return ErrSceneHasTakes
+	}
 	return s.store.SoftDeleteScene(id)
 }
 
@@ -338,6 +372,8 @@ func (s *Service) CreateShot(sceneID string, req *CreateShotRequest) (*Shot, err
 		Name:        req.Name,
 		Description: req.Description,
 		Active:      true,
+		AspectRatio:     req.AspectRatio,
+		DurationSeconds: req.DurationSeconds,
 	}
 	if err := s.store.CreateShot(sh); err != nil {
 		return nil, err
@@ -389,6 +425,12 @@ func (s *Service) UpdateShot(id string, req *UpdateShotRequest) (*Shot, error) {
 	if req.Active != nil {
 		updates["active"] = *req.Active
 	}
+	if req.AspectRatio != nil {
+		updates["aspect_ratio"] = *req.AspectRatio
+	}
+	if req.DurationSeconds != nil {
+		updates["duration_seconds"] = *req.DurationSeconds
+	}
 
 	if err := s.store.UpdateShot(id, updates); err != nil {
 		return nil, err
@@ -397,6 +439,16 @@ func (s *Service) UpdateShot(id string, req *UpdateShotRequest) (*Shot, error) {
 }
 
 func (s *Service) SoftDeleteShot(id string) error {
+	sh, err := s.store.GetShotByID(id)
+	if err != nil {
+		return err
+	}
+	if sh == nil {
+		return fmt.Errorf("shot not found")
+	}
+	if sh.TakeCount > 0 {
+		return ErrShotHasTakes
+	}
 	return s.store.SoftDeleteShot(id)
 }
 
@@ -491,6 +543,9 @@ func (s *Service) UpdateTake(id string, req *UpdateTakeRequest) (*Take, error) {
 	}
 	if req.TaskID != nil {
 		updates["task_id"] = *req.TaskID
+	}
+	if req.Rating != nil {
+		updates["rating"] = *req.Rating
 	}
 
 	if err := s.store.UpdateTake(id, updates); err != nil {
@@ -793,8 +848,8 @@ func (s *Service) AssignPresetToScene(sceneID, presetID string) (string, error) 
 	return s.store.AssignPresetToScene(sceneID, presetID)
 }
 
-func (s *Service) AssignCharacterToScene(sceneID, characterID string) (string, error) {
-	return s.store.AssignCharacterToScene(sceneID, characterID)
+func (s *Service) AssignCharacterToScene(sceneID, characterID, slot string) (string, error) {
+	return s.store.AssignCharacterToScene(sceneID, characterID, slot)
 }
 
 func (s *Service) AssignAssetToScene(sceneID, fileID string) (string, error) {
@@ -811,6 +866,37 @@ func (s *Service) RemoveSceneCharacter(assignmentID string) error {
 
 func (s *Service) RemoveSceneAsset(assignmentID string) error {
 	return s.store.RemoveSceneAsset(assignmentID)
+}
+
+// ─── Shot Resources ────────────────────────────────────────────
+
+
+func (s *Service) AssignCharacterToShot(shotID, characterID, slot string) (string, error) {
+	return s.store.AssignCharacterToShot(shotID, characterID, slot)
+}
+
+func (s *Service) AssignAssetToShot(shotID, fileID, slot string) (string, error) {
+	return s.store.AssignAssetToShot(shotID, fileID, slot)
+}
+
+func (s *Service) AssignPresetToShot(shotID, presetID string) (string, error) {
+	return s.store.AssignPresetToShot(shotID, presetID)
+}
+
+func (s *Service) RemoveShotCharacter(assignmentID string) error {
+	return s.store.RemoveShotCharacter(assignmentID)
+}
+
+func (s *Service) RemoveShotAsset(assignmentID string) error {
+	return s.store.RemoveShotAsset(assignmentID)
+}
+
+func (s *Service) RemoveShotPreset(assignmentID string) error {
+	return s.store.RemoveShotPreset(assignmentID)
+}
+
+func (s *Service) UpdateShotModel(shotID, modelID string) error {
+	return s.store.UpdateShotModel(shotID, modelID)
 }
 
 // DownloadTakeVideo downloads the external video for a take and saves it
@@ -904,4 +990,50 @@ func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 	t.VideoURL = localURL
 	t.VideoLocalURL = localURL
 	return t, nil
+}
+
+// ─── Chapter Assignment Service Methods ──────────────────────────
+
+func (s *Service) GetChapterAssignments(chapterID string) (*ChapterAssignments, error) {
+	characters, err := s.store.GetChapterCharacters(chapterID)
+	if err != nil {
+		return nil, err
+	}
+	assets, err := s.store.GetChapterAssets(chapterID)
+	if err != nil {
+		return nil, err
+	}
+	presets, err := s.store.GetChapterPresets(chapterID)
+	if err != nil {
+		return nil, err
+	}
+	return &ChapterAssignments{
+		Characters: characters,
+		Assets:     assets,
+		Presets:    presets,
+	}, nil
+}
+
+func (s *Service) AssignCharacterToChapter(chapterID, characterID, slot string) (string, error) {
+	return s.store.AssignCharacterToChapter(chapterID, characterID, slot)
+}
+
+func (s *Service) AssignAssetToChapter(chapterID, fileID, slot string) (string, error) {
+	return s.store.AssignAssetToChapter(chapterID, fileID, slot)
+}
+
+func (s *Service) AssignPresetToChapter(chapterID, presetID string) (string, error) {
+	return s.store.AssignPresetToChapter(chapterID, presetID)
+}
+
+func (s *Service) RemoveChapterCharacter(assignmentID string) error {
+	return s.store.RemoveChapterCharacter(assignmentID)
+}
+
+func (s *Service) RemoveChapterAsset(assignmentID string) error {
+	return s.store.RemoveChapterAsset(assignmentID)
+}
+
+func (s *Service) RemoveChapterPreset(assignmentID string) error {
+	return s.store.RemoveChapterPreset(assignmentID)
 }

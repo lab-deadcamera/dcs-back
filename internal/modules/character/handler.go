@@ -1,6 +1,8 @@
 package character
 
 import (
+	"strconv"
+
 	"dcs-back-v0/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -40,6 +42,19 @@ func (h *Handler) GetByID(c *gin.Context) {
 		return
 	}
 	utils.Success(c, ch)
+}
+
+func (h *Handler) ListPage(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
+	search := c.Query("q")
+
+	result, err := h.svc.ListPage(page, pageSize, search)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	utils.Success(c, result)
 }
 
 func (h *Handler) List(c *gin.Context) {

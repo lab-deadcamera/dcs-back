@@ -52,3 +52,11 @@ type AddFileRequest struct {
 	FileID string `json:"file_id" binding:"required"`
 	Role   string `json:"role"`
 }
+
+type PaginatedCharacters struct {
+	Items      []CharacterWithFiles `json:"items"`
+	Total      int                  `json:"total"`
+	Page       int                  `json:"page"`
+	PageSize   int                  `json:"pageSize"`
+	TotalPages int                  `json:"totalPages"`
+}
