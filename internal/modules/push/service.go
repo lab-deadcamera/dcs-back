@@ -61,6 +61,10 @@ func (s *Service) SendTest(userID int64, message string) (int, error) {
 		return 0, fmt.Errorf("push not configured: set PUSH_VAPID_PUBLIC_KEY, PUSH_VAPID_PRIVATE_KEY and PUSH_VAPID_SUBJECT")
 	}
 
+	// Log the VAPID public key in use so a failing test can be matched against
+	// the frontend's PUSH_VAPID_PUBLIC_KEY.
+	log.Printf("[push] test user=%d vapid_public_key=%s", userID, s.vapidPublicKey)
+
 	subs, err := s.store.ListByUser(userID)
 	if err != nil {
 		return 0, err
