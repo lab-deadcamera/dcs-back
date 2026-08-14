@@ -59,6 +59,27 @@ func (h *Handler) Unregister(c *gin.Context) {
 	utils.Message(c, "unsubscribed")
 }
 
+// Test handles POST /api/v1/push/test — sends a test notification to the
+// authenticated user's devices (diagnostic helper).
+func (h *Handler) Test(c *gin.Context) {
+	userID := userIDFromContext(c)
+	if userID <= 0 {
+		utils.Unauthorized(c, "missing user id")
+		return
+	}
+
+	n, err := h.svc.SendTest(userID)
+	if err != nil {
+		utils.InternalError(c, err.Error())
+		return
+	}
+	if n == 0 {
+		utils.Message(c, "no push subscriptions registered for this user")
+		return
+	}
+	utils.Success(c, gin.H{"sent_to": n})
+}
+
 // userIDFromContext reads the JWT user id set by the auth middleware.
 func userIDFromContext(c *gin.Context) int64 {
 	if v, ok := c.Get("userID"); ok {

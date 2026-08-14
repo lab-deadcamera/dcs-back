@@ -19,5 +19,6 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw gin.HandlerFunc, adminMw g
 	{
 		protected.POST("/subscriptions", m.hdl.Register)
 		protected.DELETE("/subscriptions", m.hdl.Unregister)
+		protected.POST("/test", m.hdl.Test)
 	}
 }

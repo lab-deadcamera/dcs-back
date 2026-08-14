@@ -3,6 +3,7 @@ package push
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -50,6 +51,35 @@ func (s *Service) Register(userID int64, req *SubscriptionRequest, userAgent str
 // Unregister removes one device subscription for the user.
 func (s *Service) Unregister(userID int64, endpoint string) error {
 	return s.store.DeleteByEndpoint(userID, endpoint)
+}
+
+// SendTest delivers a test notification to every device subscribed by the
+// user (diagnostic helper for the /push/test endpoint). Returns how many
+// subscriptions were targeted.
+func (s *Service) SendTest(userID int64) (int, error) {
+	if !s.Enabled() {
+		return 0, fmt.Errorf("push not configured: set PUSH_VAPID_PUBLIC_KEY, PUSH_VAPID_PRIVATE_KEY and PUSH_VAPID_SUBJECT")
+	}
+
+	subs, err := s.store.ListByUser(userID)
+	if err != nil {
+		return 0, err
+	}
+	if len(subs) == 0 {
+		return 0, nil
+	}
+
+	payload, err := buildPayload("🔔 Push test", "If you see this, the whole chain works.", map[string]string{
+		"type": "push-test",
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	for _, sub := range subs {
+		s.sendOne(&sub, payload)
+	}
+	return len(subs), nil
 }
 
 // SendToUser pushes a notification to every device subscribed by the user.
