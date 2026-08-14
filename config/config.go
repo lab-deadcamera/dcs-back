@@ -36,6 +36,11 @@ type Config struct {
 	AssetAspectFix     string // "pad" (barras, conserva contenido) | "crop" (recorta)
 	AssetAIRepair      bool   // reparar con IA en el retry si la normalización no basta
 	AssetImageModel    string // modelo de imagen usado por el repair con IA
+
+	// Web Push (VAPID)
+	PushVapidPublicKey  string
+	PushVapidPrivateKey string
+	PushVapidSubject    string
 }
 
 var AppConfig *Config
@@ -101,6 +106,13 @@ func Load() *Config {
 		assetImageModel = "dreamina-seedream-4-pro-251224"
 	}
 
+	pushVapidPublicKey := os.Getenv("PUSH_VAPID_PUBLIC_KEY")
+	pushVapidPrivateKey := os.Getenv("PUSH_VAPID_PRIVATE_KEY")
+	pushVapidSubject := os.Getenv("PUSH_VAPID_SUBJECT")
+	if pushVapidSubject == "" {
+		pushVapidSubject = "mailto:admin@road2theoscars.tech"
+	}
+
 	log.Printf("[config] ASSET_ACCESS_KEY_ID=%s", tern(assetAccessKeyID != "", "set", "EMPTY"))
 	log.Printf("[config] ASSET_SECRET_ACCESS_KEY=%s", tern(assetSecretAccessKey != "", "set", "EMPTY"))
 	log.Printf("[config] ASSET_DEFAULT_GROUP_ID=%s", tern(assetDefaultGroupID != "", "set", "EMPTY"))
@@ -137,6 +149,10 @@ func Load() *Config {
 		AssetAspectFix:     assetAspectFix,
 		AssetAIRepair:      assetAIRepair == "true",
 		AssetImageModel:    assetImageModel,
+
+		PushVapidPublicKey:  pushVapidPublicKey,
+		PushVapidPrivateKey: pushVapidPrivateKey,
+		PushVapidSubject:    pushVapidSubject,
 	}
 	return AppConfig
 }

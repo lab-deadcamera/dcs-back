@@ -14,6 +14,7 @@ import (
 	"dcs-back-v0/internal/modules/image"
 	"dcs-back-v0/internal/modules/preset"
 	"dcs-back-v0/internal/modules/project"
+	"dcs-back-v0/internal/modules/push"
 	"dcs-back-v0/internal/modules/provider"
 	"dcs-back-v0/internal/modules/skill"
 	"dcs-back-v0/internal/modules/studio"
@@ -147,8 +148,14 @@ func main() {
 	skillSvc := skill.NewService(skillStore)
 	skillHdl := skill.NewHandler(skillSvc)
 
+	pushStore := push.NewStore(database)
+	pushSvc := push.NewService(pushStore, cfg.PushVapidPublicKey, cfg.PushVapidPrivateKey, cfg.PushVapidSubject)
+	pushHdl := push.NewHandler(pushSvc)
+
+	studioSvc.SetPushNotifier(pushSvc)
+
 	shotBuilderLogStore := studiotext.NewLogStore(database)
-	studioTextHdl := studiotext.NewHandler(studioSvc.GetProviderStore(), skillSvc, shotBuilderLogStore)
+	studioTextHdl := studiotext.NewHandler(studioSvc.GetProviderStore(), skillSvc, shotBuilderLogStore, pushSvc)
 	projectSvc := project.NewService(projectStore)
 	projectSvc.SetTaskLookup(func(taskID string) string {
 		sr, err := studioSvc.GetStatus(taskID)
@@ -212,6 +219,7 @@ func main() {
 	registry.Register(preset.NewModule(presetHdl))
 	registry.Register(project.NewModule(projectHdl))
 	registry.Register(skill.NewModule(skillHdl))
+	registry.Register(push.NewModule(pushHdl))
 	registry.Register(studio.NewModule(studioHdl, studioVideoHdl, studioImageHdl, studioAudioHdl, studioTextHdl))
 	registry.Setup(v1, authMw, adminMw)
 
