@@ -60,7 +60,8 @@ func (h *Handler) Unregister(c *gin.Context) {
 }
 
 // Test handles POST /api/v1/push/test — sends a test notification to the
-// authenticated user's devices (diagnostic helper).
+// authenticated user's devices (diagnostic helper). Optional body:
+// { "message": "..." } to customise the notification body.
 func (h *Handler) Test(c *gin.Context) {
 	userID := userIDFromContext(c)
 	if userID <= 0 {
@@ -68,7 +69,12 @@ func (h *Handler) Test(c *gin.Context) {
 		return
 	}
 
-	n, err := h.svc.SendTest(userID)
+	var req struct {
+		Message string `json:"message"`
+	}
+	_ = c.ShouldBindJSON(&req) // body is optional
+
+	n, err := h.svc.SendTest(userID, req.Message)
 	if err != nil {
 		utils.InternalError(c, err.Error())
 		return

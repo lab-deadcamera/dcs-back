@@ -56,7 +56,7 @@ func (s *Service) Unregister(userID int64, endpoint string) error {
 // SendTest delivers a test notification to every device subscribed by the
 // user (diagnostic helper for the /push/test endpoint). Returns how many
 // subscriptions were targeted.
-func (s *Service) SendTest(userID int64) (int, error) {
+func (s *Service) SendTest(userID int64, message string) (int, error) {
 	if !s.Enabled() {
 		return 0, fmt.Errorf("push not configured: set PUSH_VAPID_PUBLIC_KEY, PUSH_VAPID_PRIVATE_KEY and PUSH_VAPID_SUBJECT")
 	}
@@ -69,7 +69,10 @@ func (s *Service) SendTest(userID int64) (int, error) {
 		return 0, nil
 	}
 
-	payload, err := buildPayload("🔔 Push test", "If you see this, the whole chain works.", map[string]string{
+	if message == "" {
+		message = "If you see this, the whole chain works."
+	}
+	payload, err := buildPayload("🔔 Push test", message, map[string]string{
 		"type": "push-test",
 	})
 	if err != nil {
