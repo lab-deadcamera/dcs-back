@@ -192,6 +192,7 @@ type SceneContext struct {
 type ClaudeGenerateShotsRequest struct {
 	SceneID      string        `json:"scene_id" binding:"required"`
 	ProjectID    string        `json:"project_id" binding:"required"`
+	ProjectName  string        `json:"project_name"`
 	Model        string        `json:"model"`
 	APIModel     string        `json:"api_model"`
 	Prompt       string        `json:"prompt" binding:"required"`
@@ -223,6 +224,7 @@ type ClaudeGenerateShotsResponse struct {
 type ClaudeRefineShotsRequest struct {
 	SceneID          string `json:"scene_id" binding:"required"`
 	ProjectID        string `json:"project_id" binding:"required"`
+	ProjectName      string `json:"project_name"`
 	Model            string `json:"model"`
 	APIModel         string `json:"api_model"`
 	PreviousResponse string `json:"previous_response" binding:"required"`

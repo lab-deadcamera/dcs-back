@@ -20,14 +20,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// PushNotifier is satisfied by the push module's service. Injected via the
+// constructor so the shot builder can alert the requesting user when a
+// breakdown finishes generating.
+type PushNotifier interface {
+	SendToUser(userID int64, title, body string, data map[string]string)
+}
+
 type Handler struct {
 	providerStore *provider.Store
 	skillSvc      *skillmodule.Service
 	logStore      *LogStore
+	pushSvc       PushNotifier
 }
 
-func NewHandler(providerStore *provider.Store, skillSvc *skillmodule.Service, logStore *LogStore) *Handler {
-	return &Handler{providerStore: providerStore, skillSvc: skillSvc, logStore: logStore}
+func NewHandler(providerStore *provider.Store, skillSvc *skillmodule.Service, logStore *LogStore, pushSvc PushNotifier) *Handler {
+	return &Handler{providerStore: providerStore, skillSvc: skillSvc, logStore: logStore, pushSvc: pushSvc}
 }
 
 func (h *Handler) Generate(c *gin.Context) {
@@ -428,7 +436,8 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 		return
 	}
 
-	// ✅ Valid — return clean JSON. Success is NOT logged.
+	// ✅ Valid — notify the requesting user and return clean JSON. Success is NOT logged.
+	h.notifyShotsReady(c, clean, req.ProjectName)
 	utils.Success(c, ClaudeGenerateShotsResponse{
 		TaskID: fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
 		Model:  apiModel,
@@ -502,7 +511,8 @@ func (h *Handler) ClaudeRefineShots(c *gin.Context) {
 		return
 	}
 
-	// ✅ Valid — return clean JSON. Success is NOT logged.
+	// ✅ Valid — notify the requesting user and return clean JSON. Success is NOT logged.
+	h.notifyShotsReady(c, clean, req.ProjectName)
 	utils.Success(c, ClaudeRefineShotsResponse{
 		TaskID: fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
 		Model:  apiModel,
@@ -779,6 +789,44 @@ func stringFromContext(c *gin.Context, key string) string {
 		}
 	}
 	return ""
+}
+
+// notifyShotsReady sends a push to the requesting user when a shot breakdown
+// finishes generating or refining. Fire-and-forget — never blocks the response.
+func (h *Handler) notifyShotsReady(c *gin.Context, clean, projectName string) {
+	userID := userIDFromContext(c)
+	if h.pushSvc == nil || userID == 0 {
+		return
+	}
+
+	body := "Shot breakdown ready"
+	if scenes, shots := countShots(clean); scenes > 0 {
+		body = fmt.Sprintf("%d scenes · %d shots", scenes, shots)
+	}
+	if projectName != "" {
+		body = projectName + "\n" + body
+	}
+
+	go h.pushSvc.SendToUser(int64(userID), "📋 Breakdown ready", body, map[string]string{
+		"type": "shots-ready",
+	})
+}
+
+// countShots parses a shot-builder JSON response to extract scene/shot counts.
+// Returns 0s when the payload does not have the scenes[] shape.
+func countShots(clean string) (scenes, shots int) {
+	var parsed struct {
+		Scenes []struct {
+			Shots []struct{} `json:"shots"`
+		} `json:"scenes"`
+	}
+	if json.Unmarshal([]byte(clean), &parsed) == nil {
+		scenes = len(parsed.Scenes)
+		for _, sc := range parsed.Scenes {
+			shots += len(sc.Shots)
+		}
+	}
+	return scenes, shots
 }
 
 // ─── Proncer ──────────────────────────────────────────────────────

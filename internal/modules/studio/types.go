@@ -269,6 +269,10 @@ type TaskRecord struct {
 	SceneCode   string
 	TakeNumber  int
 	UserHandle  string
+	// Push notification
+	UserID       int    // owner of the task (0 when not known)
+	PushNotified bool   // true once a completion push was sent for this task
+	ResourceType string // "video", "image", ... — gates the completion push
 }
 
 // TakeSaver is a callback to persist completed generation outputs

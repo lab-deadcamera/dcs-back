@@ -33,6 +33,14 @@ type PipelineRunner interface {
 }
 
 	type ShotLookup func(sceneID string) string
+
+// PushNotifier is satisfied by the push module's service. It is wired via
+// SetPushNotifier so the studio core can alert a user when an async task
+// completes without depending on the push package directly.
+type PushNotifier interface {
+	SendToUser(userID int64, title, body string, data map[string]string)
+}
+
 type Service struct {
 	providerStore        *provider.Store
 	fileService          *file.Service
@@ -55,6 +63,7 @@ type Service struct {
 	assetAspectFix       string
 	assetAIRepair        bool
 	assetImageModel      string
+	pushNotifier         PushNotifier
 	mu                   sync.RWMutex
 }
 
@@ -110,6 +119,12 @@ func (s *Service) SetTakeSaver(saver TakeSaver) {
 
 	// ShotLookup resolves a shot ID from a scene ID for legacy generation logs.
 
+}
+
+// SetPushNotifier wires the push service used to notify users when an async
+// generation task reaches a terminal state.
+func (s *Service) SetPushNotifier(pn PushNotifier) {
+	s.pushNotifier = pn
 }
 
 	func (s *Service) SetShotLookup(lookup ShotLookup) {
@@ -349,22 +364,41 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 	}
 
 	// Track the task for status polling
+	terminal := result.Status == config.STATUS_SUCCESS || result.Status == config.STATUS_FAILED
 	s.mu.Lock()
-	s.tasks[result.TaskID] = &TaskRecord{
-		TaskID:      result.TaskID,
-		ModelID:     m.ID,
-		ModelName:   m.Name,
-		Status:      result.Status,
-		ProjectName: req.ProjectName,
-		SceneCode:   req.SceneCode,
-		TakeNumber:  req.TakeNumber,
-		UserHandle:  userName,
+	record := &TaskRecord{
+		TaskID:       result.TaskID,
+		ModelID:      m.ID,
+		ModelName:    m.Name,
+		Status:       result.Status,
+		ProjectName:  req.ProjectName,
+		SceneCode:    req.SceneCode,
+		TakeNumber:   req.TakeNumber,
+		UserHandle:   userName,
+		UserID:       req.UserID,
+		PushNotified: terminal,
+		ResourceType: req.ResourceType,
 		Result: &StatusResult{
 			Status: result.Status,
 			Raw:    result.Raw,
 		},
 	}
+	s.tasks[result.TaskID] = record
 	s.mu.Unlock()
+
+	// A task that already returned terminal will never be polled (the client
+	// consumes the output straight from this response), so notify here.
+	if terminal {
+		s.notifyTaskCompletion(req.UserID, taskNotifyInfo{
+			TaskID:       result.TaskID,
+			Status:       result.Status,
+			ResourceType: req.ResourceType,
+			ModelName:    m.Name,
+			ProjectName:  req.ProjectName,
+			SceneCode:    req.SceneCode,
+			TakeNumber:   req.TakeNumber,
+		})
+	}
 
 	out := convertOutputs(result.Outputs)
 
@@ -1353,6 +1387,19 @@ func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
 		if result.Status == config.STATUS_SUCCESS {
 			s.saveGeneratedAssets(log.TaskID, result)
 		}
+		// Task finished after a server restart (in-memory record is gone):
+		// the owner is known from the generation log, so notify here too.
+		if log.UserID != nil {
+			s.notifyTaskCompletion(*log.UserID, taskNotifyInfo{
+				TaskID:       log.TaskID,
+				Status:       result.Status,
+				ResourceType: log.ResourceType,
+				ModelName:    log.ModelName,
+				ProjectName:  log.ProjectName,
+				SceneCode:    log.SceneCode,
+				TakeNumber:   log.TakeNumber,
+			})
+		}
 	}
 
 	return statusResult, nil
@@ -1467,6 +1514,8 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 
 		if result.Status == config.STATUS_SUCCESS || result.Status == config.STATUS_FAILED {
 			s.mu.Lock()
+			notify := !record.PushNotified
+			record.PushNotified = true
 			record.Status = result.Status
 			record.Result = statusResult
 			s.mu.Unlock()
@@ -1475,6 +1524,17 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 			if result.Status == config.STATUS_SUCCESS {
 				s.saveGeneratedAssets(taskID, result)
 				s.saveToTakes(taskID, statusResult.VideoURL, statusResult.LocalURL)
+			}
+			if notify {
+				s.notifyTaskCompletion(record.UserID, taskNotifyInfo{
+					TaskID:       taskID,
+					Status:       result.Status,
+					ResourceType: record.ResourceType,
+					ModelName:    record.ModelName,
+					ProjectName:  record.ProjectName,
+					SceneCode:    record.SceneCode,
+					TakeNumber:   record.TakeNumber,
+				})
 			}
 		}
 		return statusResult, nil
@@ -1683,6 +1743,54 @@ func (s *Service) updateLogWithFinalStatus(taskID string, result *GeneratorResul
 	if saveErr := s.logStore.UpdateByTaskID(taskID, result.Outputs, result.Status, errorMsg); saveErr != nil {
 		fmt.Printf("failed to update generation log for task %s: %v\n", taskID, saveErr)
 	}
+}
+
+// taskNotifyInfo carries the context used to build a completion push.
+type taskNotifyInfo struct {
+	TaskID       string
+	Status       string
+	ResourceType string
+	ModelName    string
+	ProjectName  string
+	SceneCode    string
+	TakeNumber   int
+}
+
+// notifyTaskCompletion sends a Web Push to the task owner the first time an
+// async task reaches a terminal state. Only video tasks notify today (image
+// is synchronous and already visible in the UI). Delivery is fire-and-forget
+// so it never blocks the status request that detected the transition.
+func (s *Service) notifyTaskCompletion(userID int, info taskNotifyInfo) {
+	if s.pushNotifier == nil || userID <= 0 || info.ResourceType != "video" {
+		return
+	}
+
+	title, ntype := "🎬 Video ready", "video-ready"
+	if info.Status == config.STATUS_FAILED {
+		title, ntype = "⚠️ Video failed", "video-failed"
+	}
+
+	// Body: "Project · Model" then a second line "SCxx · Tn" when available.
+	body := strings.TrimSpace(info.ProjectName)
+	if body == "" {
+		body = info.ModelName
+	} else if info.ModelName != "" {
+		body += " · " + info.ModelName
+	}
+	if info.SceneCode != "" {
+		if body != "" {
+			body += "\n"
+		}
+		body += info.SceneCode
+		if info.TakeNumber > 0 {
+			body += " · T" + fmt.Sprintf("%d", info.TakeNumber)
+		}
+	}
+
+	go s.pushNotifier.SendToUser(int64(userID), title, body, map[string]string{
+		"type":    ntype,
+		"task_id": info.TaskID,
+	})
 }
 
 func (s *Service) resolveContent(items []ContentItem, modelID string) ([]ContentItem, error) {
