@@ -213,7 +213,7 @@ Puntos clave del `defaultShotBuilderPrompt`:
 - **4 fases**: análisis de subtexto (Weston) → física (Mamet) → cinematografía → ensamblaje multimodal.
 - **Anatomy Library**: diccionario de emociones en términos musculares + micro-fidgeting (eye darts, nostril flares...).
 - **Cinema Modes M1–M5** con lente/movimiento/grade por modo.
-- **Prompt Engine**: el pre-prompt `prompt.en` es un texto plano de 220–360 palabras con secciones fijas en orden: `Scene and Mood / Composition / Space and Mélange / Cross-Shot Rule / Action / Dialogue / Ending Shot / Environmental Base / Sound Layer` + párrafo final de captura.
+- **Prompt Engine**: el pre-prompt `prompt.en` es un texto plano de 280–400 palabras (hasta 600 en multi-shot) con secciones fijas en orden: `Scene and Mood / Composition / Space and Mélange / Cross-Shot Rule / Action / Dialogue / Ending Shot / Environmental Base / Sound Layer` + párrafo final de captura.
 - **Salida**: solo JSON `{ episode, description, duration, mode, aspectRatio, directorNotes, scenes[] }`, sin texto alrededor, sin markdown fences.
 - Los shots del JSON son **slim**: `id, title, description, duration, start, end, references, prompt{en,zh}, notes` — NO camera/composition/blocking/acting como sub-objetos (esa dirección vive dentro de `prompt.en`). *(Los tipos Go `Shot`/`Camera`/`Composition`/etc. en `claude_types.go` conservan los campos ricos por compatibilidad con el formato legacy, pero el prompt actual instruye a Claude a no emitirlos.)*
 - `prompt.zh` solo si el usuario pidió generación en chino.
