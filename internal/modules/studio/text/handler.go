@@ -440,8 +440,14 @@ You are REFINING an existing shot breakdown that was generated previously. You r
 1. The previous breakdown (episode + scenes + shots JSON) — the current state of the plan.
 2. A change_request — the user's instruction describing what to modify.
 
+The scene's reference images (characters, locations, props) are attached as vision
+input. They may have CHANGED since the previous breakdown — the user can edit or
+replace them between refinements. They are ground truth.
+
 Rules:
 - Apply ONLY the changes described in change_request. Everything else must remain IDENTICAL to the previous breakdown: same scene count, same shot ids, same titles, same descriptions, same prompts, same references, same continuity objects, same cumulative start/end timestamps.
+- RE-VALIDATE every reference image against the breakdown. For each shot, check that the character identity/wardrobe, the location geometry, and the props described in prompt.en still match the CURRENT image. If an image changed and a shot no longer matches it (different wardrobe, different plate layout, changed prop), CORRECT that shot's prompt.en to describe the current image — this is a required correction, not drift. If the image still matches, leave the shot untouched.
+- When you correct a shot because an image changed (not because of change_request), add a note to that shot's notes.warnings stating what changed.
 - If change_request adds or removes scenes/shots, adjust ONLY what is necessary and keep the rest untouched.
 - Preserve the script numbering (scriptNumber), the [ImageN] slot assignments, and the output JSON schema (episode + scenes + shots, each shot with prompt.en and optional prompt.zh).
 - Respond with ONLY a valid JSON object matching the schema — no text before or after, no markdown fences.
@@ -551,9 +557,14 @@ func (h *Handler) ClaudeRefineShots(c *gin.Context) {
 		return
 	}
 
-	// Anchor on the previous breakdown + the change request. The scene_context
-	// is already embedded in the previous response (references/assetAssignments).
-	originalPrompt := "=== Previous Breakdown ===\n" + req.PreviousResponse +
+	// Anchor on the CURRENT scene context (the user may have edited or replaced
+	// reference images since the previous breakdown) + the previous breakdown +
+	// the change request. The images are also attached as vision blocks.
+	originalPrompt := ""
+	if req.SceneContext != nil {
+		originalPrompt += "=== Current Scene Context ===\n" + buildSceneContextBlock(req.SceneContext) + "\n\n"
+	}
+	originalPrompt += "=== Previous Breakdown ===\n" + req.PreviousResponse +
 		"\n\n=== Change Request ===\n" + req.ChangeRequest
 
 	// Same base schema as generate-shots plus refinement (anti-drift) rules.
