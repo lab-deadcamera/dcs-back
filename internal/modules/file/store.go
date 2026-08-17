@@ -87,8 +87,19 @@ func (s *Store) CopyFile(src io.Reader, subpath string) error {
 }
 
 func (s *Store) GenerateThumbnail(srcSubpath string, width, height int) (string, error) {
+	return s.generateThumbnailAt(srcSubpath, width, height, "thumbnails")
+}
+
+// GenerateVisionThumbnail renders a larger image for Claude vision analysis —
+// the "sweet spot" between the 300px thumbnail and the full original. Cached
+// separately from the 300px thumbnail so the two never overwrite each other.
+func (s *Store) GenerateVisionThumbnail(srcSubpath string, size int) (string, error) {
+	return s.generateThumbnailAt(srcSubpath, size, size, "thumbnails-vision")
+}
+
+func (s *Store) generateThumbnailAt(srcSubpath string, width, height int, thumbRoot string) (string, error) {
 	srcPath := filepath.Join(s.uploadDir, srcSubpath)
-	thumbName := "thumbnails/" + srcSubpath
+	thumbName := thumbRoot + "/" + srcSubpath
 	dstPath := filepath.Join(s.uploadDir, thumbName)
 
 	if _, err := os.Stat(dstPath); err == nil {
@@ -175,6 +186,14 @@ func decodeImage(path string) (image.Image, error) {
 // RemoveThumbnail deletes a file's cached thumbnail, if present.
 func (s *Store) RemoveThumbnail(srcSubpath string) error {
 	thumbSubpath := "thumbnails/" + srcSubpath
+	if s.FileExists(thumbSubpath) {
+		return s.DeleteFile(thumbSubpath)
+	}
+	return nil
+}
+
+func (s *Store) RemoveVisionThumbnail(srcSubpath string) error {
+	thumbSubpath := "thumbnails-vision/" + srcSubpath
 	if s.FileExists(thumbSubpath) {
 		return s.DeleteFile(thumbSubpath)
 	}

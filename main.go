@@ -72,7 +72,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to init file store: %v", err)
 	}
-	fileSvc := file.NewService(fileStore, cfg.BaseURL)
+	fileSvc := file.NewService(fileStore, cfg.BaseURL, cfg.VisionThumbnailSize)
 	fileHdl := file.NewHandler(fileSvc)
 	fileSvc.StartPurgeCron()
 
@@ -155,7 +155,7 @@ func main() {
 	studioSvc.SetPushNotifier(pushSvc)
 
 	shotBuilderLogStore := studiotext.NewLogStore(database)
-	studioTextHdl := studiotext.NewHandler(studioSvc.GetProviderStore(), skillSvc, shotBuilderLogStore, pushSvc)
+	studioTextHdl := studiotext.NewHandler(studioSvc.GetProviderStore(), skillSvc, shotBuilderLogStore, pushSvc, fileSvc, cfg.MaxOutputTokens, cfg.MaxVisionImages)
 	projectSvc := project.NewService(projectStore)
 	projectSvc.SetTaskLookup(func(taskID string) string {
 		sr, err := studioSvc.GetStatus(taskID)

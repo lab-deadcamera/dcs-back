@@ -222,18 +222,19 @@ type ClaudeGenerateShotsResponse struct {
 // breakdown. previous_response is the raw JSON returned by generate-shots
 // (data.text) and change_request is the user's natural-language instruction.
 type ClaudeRefineShotsRequest struct {
-	SceneID          string `json:"scene_id" binding:"required"`
-	ProjectID        string `json:"project_id" binding:"required"`
-	ProjectName      string `json:"project_name"`
-	Model            string `json:"model"`
-	APIModel         string `json:"api_model"`
-	PreviousResponse string `json:"previous_response" binding:"required"`
-	ChangeRequest    string `json:"change_request" binding:"required"`
-	SystemPrompt     string `json:"system_prompt"`
-	SkillID          string `json:"skill_id"`
-	UserID           int    `json:"user_id"`
-	UserName         string `json:"user_name"`
-	GenerateZh       bool   `json:"generate_zh"`
+	SceneID          string        `json:"scene_id" binding:"required"`
+	ProjectID        string        `json:"project_id" binding:"required"`
+	ProjectName      string        `json:"project_name"`
+	Model            string        `json:"model"`
+	APIModel         string        `json:"api_model"`
+	PreviousResponse string        `json:"previous_response" binding:"required"`
+	ChangeRequest    string        `json:"change_request" binding:"required"`
+	SystemPrompt     string        `json:"system_prompt"`
+	SkillID          string        `json:"skill_id"`
+	UserID           int           `json:"user_id"`
+	UserName         string        `json:"user_name"`
+	GenerateZh       bool          `json:"generate_zh"`
+	SceneContext     *SceneContext `json:"scene_context,omitempty"`
 }
 
 type ClaudeRefineShotsResponse struct {

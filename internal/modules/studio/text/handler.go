@@ -27,15 +27,48 @@ type PushNotifier interface {
 	SendToUser(userID int64, title, body string, data map[string]string)
 }
 
-type Handler struct {
-	providerStore *provider.Store
-	skillSvc      *skillmodule.Service
-	logStore      *LogStore
-	pushSvc       PushNotifier
+// VisionImageProvider resolves a stored file id to a publicly reachable URL of
+// its vision-size rendering. Satisfied by the file module's Service. The
+// backend builds the URL from the id (never from client-supplied URLs) so the
+// shot builder only sends images it actually owns, and only image files.
+type VisionImageProvider interface {
+	VisionURL(id string) (string, error)
 }
 
-func NewHandler(providerStore *provider.Store, skillSvc *skillmodule.Service, logStore *LogStore, pushSvc PushNotifier) *Handler {
-	return &Handler{providerStore: providerStore, skillSvc: skillSvc, logStore: logStore, pushSvc: pushSvc}
+// visionImage is a single reference image sent to Claude as a vision block,
+// with a short label so the model can associate it with a slot / role.
+type visionImage struct {
+	URL   string
+	Label string
+}
+
+type Handler struct {
+	providerStore  *provider.Store
+	skillSvc       *skillmodule.Service
+	logStore       *LogStore
+	pushSvc        PushNotifier
+	vision         VisionImageProvider
+	maxOutputTokens int
+	maxVisionImages int
+}
+
+func NewHandler(
+	providerStore *provider.Store,
+	skillSvc *skillmodule.Service,
+	logStore *LogStore,
+	pushSvc PushNotifier,
+	vision VisionImageProvider,
+	maxOutputTokens, maxVisionImages int,
+) *Handler {
+	return &Handler{
+		providerStore:   providerStore,
+		skillSvc:        skillSvc,
+		logStore:        logStore,
+		pushSvc:         pushSvc,
+		vision:          vision,
+		maxOutputTokens: maxOutputTokens,
+		maxVisionImages: maxVisionImages,
+	}
 }
 
 func (h *Handler) Generate(c *gin.Context) {
@@ -152,7 +185,9 @@ For each verb from Phase 1:
 
 ### Phase 4 — Multimodal Shot-Script Assembly
 - Assign a cinema mode (M1-M5), a runtime, and the references each shot needs.
-- Wire [Image]/[Video]/[Audio] tags with explicit function declarations in the prompt blocks.
+- Wire [Image]/[Video]/[Audio] tags into the prompt blocks and DECLARE EACH TAG'S FUNCTION explicitly. A bare tag mention forces the model to guess and mis-mix references (a reference video's face bleeding into an image's face). State what to extract: "[image1] strictly as character reference to maintain face and clothing; follow the exact body momentum and camera curve from [video1]; reference voice timbre from [audio1]."
+- Respect the Seedance reference caps for what each shot may reference in generation: up to 9 images, 3 videos, 3 audios (12 files total) per shot. You may be shown ADDITIONAL reference images for analysis — analyze them, but assign each shot only the references it actually needs.
+- The reference images shown to you (characters, plates, props) are GROUND TRUTH: read them and describe only what is visible — never invent wardrobe, architecture, or styling not present in the images. Trust the reference over any guess.
 - Route spoken dialogue to the Dialogue block: the line in English, in double quotes, speaker identified.
 - Close with the sanctioned technical-stability line where needed.
 
@@ -187,6 +222,9 @@ Inject ONE OR TWO per acting beat. Asynchronous — these fire OFF the rhythm of
 - **Asymmetrical lip curl**: tenth-second micro-tension in ONE mouth corner while the other stays relaxed. Reads as irony, contempt, or resignation.
 - **Uneven biological blinking**: fast double-blink, then three-second hold without blinking, with one lid descending a millisecond before the other.
 
+### Audio-Face Coupling (when dialogue or an [audio] reference is present)
+Seedance 2.5 and unified models couple audio and video in the same latency — audio transients drive facial muscle reactions. When a shot carries spoken dialogue or an [audio] reference, let the transients drive involuntary reactions: a sharp inhale or a stressed syllable triggers an asymmetric blink, a faint jaw tug, or a nostril flare on the beat just after the consonant. Name this explicitly in the Action section — it is one of the strongest uncanny-valley crossing levers available. The spoken line itself lives in the Dialogue section, short and in double quotes, to lock native lip-sync.
+
 ## Cinema Modes (M1-M5)
 
 | Mode | Use when scene is... | Lens | Movement | Grade |
@@ -199,9 +237,28 @@ Inject ONE OR TWO per acting beat. Asynchronous — these fire OFF the rhythm of
 
 Default to M1 for dramatic/lived-in scenes. Flashbacks may use M2 (cleaner, editorial flashback) or M3 (gritty memory). Scene type shifts (present→flashback) should be reflected in different modes.
 
+### Camera Capture (drop-in, one per shot)
+Default camera energy is handheld with breath, drift, and organic operator movement — even in quiet moments. Locked-off tripod is opt-in only (M2 editorial, M5 atmospheric, or when the shot explicitly calls for a static/locked-off frame). All modes default to 24fps, 180° shutter. Write the shot's mode line in the closing paragraph, substituting the focal length from the Lens Length Guide; one main camera move only, described as rhythm (slow, smooth, gradual, gentle, fluid), never as f-stops or dolly speeds:
+
+- **M1 — Narrative**: wide-latitude cinema capture, vintage [XX]mm 2x anamorphic character at a wide aperture — oval bokeh, soft frame-edge falloff — light diffusion bloom softening highlights, handheld with natural operator breath and one slow move, color-negative daylight film rendition with fine 35mm grain, teal-amber grade, shallow depth of field, 24fps 180° shutter, [XX] seconds.
+- **M2 — Studio/Editorial**: wide-latitude cinema capture, clean spherical [XX]mm character at a wide aperture — natural round bokeh, even sharpness — mild diffusion bloom, locked tripod with optional slow push-in, saturated editorial grade, fine grain, warm-retained blacks, 24fps 180° shutter, [XX] seconds.
+- **M3 — Action/Combat**: wide-latitude cinema capture, vintage [XX]mm 2x anamorphic character at a wide aperture — oval bokeh, soft edge falloff — light diffusion bloom softening highlights, handheld and shaky throughout with no stabilized shots, color-negative film rendition with heavier low-light grain, [palette descriptor] with dusty atmospheric haze, 24fps 180° shutter, [XX] seconds.
+- **M4 — Performance/Concert**: wide-latitude cinema capture, vintage [XX]mm 2x anamorphic character at a wide aperture — oval bokeh, horizontal streak flares on stage lights — light diffusion bloom softening highlights, mixed handheld pit-photographer and orbital operator energy with hard cuts between angles, color-negative film rendition with fine grain, [stage-lighting color cast], heavy volumetric haze, real sweat sheen, 24fps 180° shutter, [XX] seconds.
+- **M5 — Atmospheric/Empty**: wide-latitude cinema capture, vintage [XX]mm 2x anamorphic character at a wide aperture — oval bokeh, soft edge falloff — light diffusion bloom softening highlights, locked-off or extremely slow push-in only, color-negative film rendition with fine grain, palette grade [hex values], atmospheric haze, weathered material detail, 24fps 180° shutter, [XX] seconds. No humans, environment is the subject.
+
+For slow-motion beats (impact, hair whip, water splash) append to the camera line: "intercut 96fps high-speed slow-motion at [moment] holding 180° shutter."
+
+### Lens Length Guide
+- 32/35/40mm — wide establishing, full-body, group, environmental context
+- 50/55mm — medium portrait, two-shot, waist-up, dialogue framing
+- 75mm — tight editorial portrait, single-character isolation, performance close-up
+- 85/100mm — extreme close-up (eyes, lips, jewelry, fabric texture)
+
+Default 55mm (M1/M3/M4) or 50mm (M2); M5 runs wider (35-55mm).
+
 ## Prompt Engine — The Pre-Prompt Is the Heart
 
-Every shot's 'prompt.en' is a complete, self-contained Seedance prompt written as a natural, flowing director's note. It is the MOST IMPORTANT field — all of the shot's visual direction (composition, blocking, acting, audio, camera) lives INSIDE this text, not in separate sub-objects. Keep it concise: 220-360 words per shot. Plain text, one line per section.
+Every shot's 'prompt.en' is a complete, self-contained Seedance prompt written as a natural, flowing director's note. It is the MOST IMPORTANT field — all of the shot's visual direction (composition, blocking, acting, audio, camera) lives INSIDE this text, not in separate sub-objects. Keep it concise: 280-400 words per shot (multi-shot prompts may run up to 600). Plain text, one line per section.
 
 Start with a references header listing the [Image] slots used in this shot, in the exact seedance slot format (bracketed, matching the shot's references array):
 
@@ -212,15 +269,15 @@ Start with a references header listing the [Image] slots used in this shot, in t
 Then write the sections in THIS EXACT ORDER, each on its own line, separated by blank lines. Do NOT nest them in JSON — this is the prompt body text:
 
 - **Scene and Mood**: LEAD with the subject + primary physical action in the first sentence (the first 20-30 words carry ~80% of spatial-init weight). Then one line of dramatic mood as residue. Camera and style NEVER open.
-- **Composition**: Where each subject sits in 2-D screen space — center/two-thirds of frame, foreground/midground/background, x% where helpful. Name the [ImageN] anchors.
+- **Composition**: Where each subject sits in 2-D screen space — left/center/right third (or x%, 0%=left, 50%=center, 100%=right), foreground/midground/background, depth, frame occupancy (close-up / medium / full / waist-up / chest-up, or % of frame height), and negative space (what stays empty, where, what fills it). Name the [ImageN] anchors. Use film language without percentages for classical compositions (centered single, over-the-shoulder, profile two-shot, symmetrical wide); coordinates earn their place when the composition is asymmetric or drift would break the shot.
 - **Space and Mélange**: First establish the physical space (space type, key surfaces, lighting, atmosphere). Then pin each character to a coherent place — surface, body orientation, contact point, gaze. Carry each [ImageN] anchor inline. Bodies sit INSIDE the space, not on a backdrop.
-- **Cross-Shot Rule**: For 2+ subjects — never swap positions/sides/depth, eyelines named. For multi-shot — what carries across the cut.
-- **Action**: The character's physical action as observable muscular facts (transitive verb; NO result-oriented adjectives like "angry"/"sad"), with per-beat timestamps and 1-2 micro-fidgeting injections (see Anatomy Library). Subject motion and camera motion strictly separated.
-- **Dialogue**: MANDATORY — exact line in double quotes, speaker identified by visual descriptor + [ImageN] tag. Budget ~2-2.5 words/sec. If silent write exactly "None—Silent shot."
+- **Cross-Shot Rule**: For 2+ subjects — no swap (never trade screen positions), no center crossing, no depth change, distance and screen sides held, eyelines named (who looks at whom, whether it holds or breaks), costumes and silhouettes consistent. For multi-shot — what carries across the cut.
+- **Action**: The character's physical action as observable muscular facts (transitive verb; NO result-oriented adjectives like "angry"/"sad"), with per-beat timestamps and 1-2 micro-fidgeting injections (see Anatomy Library). Add micro-motion (breath, hair, fabric, jewelry) and environmental motion (rain, smoke, dust, traffic, wind) where the scene has them. Subject motion and camera motion strictly separated — never fuse them in one phrase. Naming "nothing else moves" is a directive: absence is stated, not implied.
+- **Dialogue**: MANDATORY — exact line in double quotes, speaker identified by visual descriptor + [ImageN] tag. Budget ~2-2.5 words/sec. If silent write exactly "None—Silent shot." The quoted line is always English — it is what the model renders as speech and lip-syncs to. One speaker focus per shot; off-screen lines marked (o.s.); never split a line across a cut. When dialogue or an [audio] reference is present, let audio transients drive involuntary reactions (a sharp inhale or stressed syllable triggers an asymmetric blink, a faint jaw tug, or a nostril flare just after the consonant).
 - **Ending Shot**: Exact closing composition at end of runtime. Close with: "No on-screen text, subtitles, sign fonts, or rendered text appear in the shot."
 - **Environmental Base**: Location anchored to [ImageN] plate if attached. Time of day, lighting, atmosphere, color palette.
 - **Sound Layer**: Diegetic only — specific ambient/foley sounds. NO music, NO lyrics, NO score. Dialogue NEVER restated here.
-- Final paragraph (no header) integrating: capture realism (matte skin, no highlights, real texture, spatial depth) + camera capture (lens, handheld/locked as rhythm, stock, grade, grain, fps, shutter, runtime) + close with "Severe shaking, time flickering, and identity drift were avoided."
+- Final paragraph (no header) integrating the **Capture Realism** mechanics (see Capture Realism section below: atmosphere between planes, moisture without shine if wet, per-zone specular kill, contrast stated three ways) + the shot's mode **Camera Capture** line (see Camera Capture section: lens, movement as rhythm, stock, grade, grain, fps, shutter, runtime) + close with "Severe shaking, time flickering, and identity drift were avoided."
 
 ### Universal Prompt Rules
 1. Front-load subject + physical action in Scene and Mood — camera and style never open.
@@ -232,8 +289,23 @@ Then write the sections in THIS EXACT ORDER, each on its own line, separated by 
 7. Trust the reference image for wardrobe — only restate state-changes the image cannot carry (damp, torn, dusty, bloodied).
 8. One main idea per shot. One dominant action, one camera strategy.
 9. Per-shot runtime: 4-8s = one strong action, 8-12s = action + hold, 12-15s = 2-3 beats.
-10. Target 220-360 words per prompt.en. Concise beats verbose — the pre-prompt is what the generator uses.
+10. Target 280-400 words per prompt.en (≤600 for multi-shot). Concise beats verbose — the pre-prompt is what the generator uses.
 11. Include micro-fidgeting injection in Action — timed per-beat.
+12. **Reference function declaration** — declare what to extract from every tag. A bare tag makes the model guess and mis-mix references (a reference video's face bleeding into an image's face). Example: "[image1] strictly as character reference for face and clothing; follow the exact body momentum and camera curve from [video1]; reference voice timbre from [audio1]."
+13. **Movement layers in Action** — character motion + micro-motion (breath, hair, fabric, jewelry) + environmental motion (rain, smoke, dust, traffic, wind); subject and camera motion strictly separated. Naming "nothing else moves" is a directive — absence is stated, not implied.
+14. **Audio-face coupling** — when the shot carries spoken dialogue or an [audio] reference, let audio transients drive involuntary reactions: a sharp inhale or stressed syllable triggers an asymmetric blink, a faint jaw tug, or a nostril flare just after the consonant.
+15. **Dialogue continuity** — quoted dialogue lines are always English (they are what the model renders as speech and lip-syncs to). One speaker focus per shot; off-screen lines marked (o.s.); never split a spoken line across a cut.
+16. **Frame rate & slow motion** — all modes default to 24fps, 180° shutter. Slow-motion beats (impact, hair whip, water splash) go in the camera line: "intercut 96fps high-speed slow-motion at [moment] holding 180° shutter."
+17. **Positive locks over negative prohibitions** — the only sanctioned negatives are the on-screen-text suppression, the specular-kill in Capture Realism, and the technical-stability line. Naming a forbidden element can summon it (the negation bug); keep acting direction positive and physical.
+18. **Ambiguity handling** — if the script is ambiguous about cast, location, or blocking, make the most physically-grounded assumption and flag it in the shot's notes.warnings. Never invent or drop characters; never place a body in a location the script does not establish.
+
+### Capture Realism (the anti-plastic block — mandatory on every shot)
+Every prompt.en closes with a capture-realism paragraph tuned to the scene. Four mechanics:
+
+1. **Depth via suspended atmosphere between planes** — name the haze/mist/air density suspended between camera, subject, and background, so distant planes render softer, desaturated, and lower-contrast than the foreground. Scale it thin/light/heavy rather than dropping it wherever there are planes to separate.
+2. **Moisture without shine (only if wet/humid/sweaty)** — damp matte hair and skin, wet surfaces that mute and deepen without beading and without a single specular hotspot. Omit entirely on dry scenes.
+3. **Per-zone specular kill on skin** — zero shine on forehead, nose bridge, cheekbones, temples, chin, and collarbones; real peach fuzz at the jaw and hairline; soft fine even pore texture; light absorbed like true subsurface scattering; warmth preserved. Flattering ceiling locked: fine and even, never harsh — no acne, no blemishes, no cratered pores, no clinical macro-detail. Realism never makes a face ugly. Drop the skin sentence on no-humans plates.
+4. **Contrast curve stated three ways** — (a) tonal curve: shadows lifted gently holding texture, highlights rolled off softly never clipping to white, nothing crushed to black; (b) specular removal: all specular highlights surgically removed from skin, hair, fabric, and surfaces, every pixel reading matte and diffuse; (c) grade: low-contrast, slightly desaturated, warmth preserved.
 
 ## Output JSON Structure
 
@@ -317,7 +389,7 @@ Return ONLY a valid JSON object with this exact structure. This is the ONLY thin
 4. **All timestamps (start, end)** are cumulative from the episode start. First scene starts at 0.
 5. **Flashback visual language**: Flashback scenes should use distinct visual language. Note this in continuity.notes and consider a different mode.
 6. **Continuity accuracy**: Every scene must have an accurate continuity object. locationChange=true when the location changes. Note flashback transitions.
-7. **prompt.en** must use the simplified format: references header "[ImageN]" then the sections Scene and Mood / Composition / Space and Mélange / Cross-Shot Rule / Action / Dialogue / Ending Shot / Environmental Base / Sound Layer, then a final capture-and-camera paragraph. Concise, 220-360 words.
+7. **prompt.en** must use the simplified format: references header "[ImageN]" then the sections Scene and Mood / Composition / Space and Mélange / Cross-Shot Rule / Action / Dialogue / Ending Shot / Environmental Base / Sound Layer, then a final capture-and-camera paragraph. Concise, 280-400 words (≤600 for multi-shot).
 8. **No result-oriented acting**: Replace every emotional adjective ("angry," "sad," "scared") with muscular description or transitive verb.
 9. **At least one micro-fidgeting injection per acting shot**, timed per-beat.
 10. **prompt.zh** is OPTIONAL. Only include it when the user explicitly requests Chinese generation.
@@ -430,7 +502,7 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 		UserName:  req.UserName,
 	}
 
-	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "generate shots", "=== ORIGINAL SCRIPT AND INSTRUCTIONS ===")
+	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "generate shots", "=== ORIGINAL SCRIPT AND INSTRUCTIONS ===", h.buildVisionImages(req.SceneContext))
 	if errMsg != "" {
 		utils.InternalError(c, errMsg)
 		return
@@ -505,7 +577,7 @@ func (h *Handler) ClaudeRefineShots(c *gin.Context) {
 		UserName:  req.UserName,
 	}
 
-	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===")
+	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===", h.buildVisionImages(req.SceneContext))
 	if errMsg != "" {
 		utils.InternalError(c, errMsg)
 		return
@@ -569,6 +641,7 @@ func (h *Handler) runClaudeShotBuilder(
 	systemPrompt, originalPrompt string,
 	rawBody []byte,
 	skillName, keyModel, apiModel, actionLabel, correctiveHeader string,
+	images []visionImage,
 ) (string, string) {
 	// Retry loop: up to 3 attempts with corrective feedback
 	const maxAttempts = 3
@@ -582,7 +655,7 @@ func (h *Handler) runClaudeShotBuilder(
 	finalPrompt := originalPrompt
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		reply, usage, duration, callErr := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt)
+		reply, usage, duration, callErr := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt, images)
 
 		a := &ShotBuilderAttempt{
 			AttemptNumber: attempt + 1,
@@ -879,7 +952,7 @@ func (h *Handler) ClaudeOptimizePrompt(c *gin.Context) {
 		apiModel = keyModel
 	}
 
-	reply, _, _, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt)
+	reply, _, _, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt, nil)
 	if err != nil {
 		utils.InternalError(c, fmt.Sprintf("failed to optimize prompt: %v", err))
 		return
@@ -958,7 +1031,7 @@ var modelNameMap = map[string]string{
 	"claude-fable-5":      "claude-fable-5",
 }
 
-func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemPrompt, userPrompt string) (string, *anthropic.Usage, time.Duration, error) {
+func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemPrompt, userPrompt string, images []visionImage) (string, *anthropic.Usage, time.Duration, error) {
 	start := time.Now()
 
 	// 1. Resolve API key from provider store
@@ -977,9 +1050,21 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 		option.WithRequestTimeout(15*time.Minute),
 	)
 
+	// Build the user turn: the text prompt (script + scene context) followed by
+	// one labelled vision block per reference image, so Claude reads the actual
+	// characters/plates instead of guessing from names alone. The images are
+	// re-sent on every retry (the corrective prompt is text-only).
+	blocks := []anthropic.ContentBlockParamUnion{anthropic.NewTextBlock(userPrompt)}
+	for _, img := range images {
+		if img.Label != "" {
+			blocks = append(blocks, anthropic.NewTextBlock(img.Label))
+		}
+		blocks = append(blocks, anthropic.NewImageBlock(anthropic.URLImageSourceParam{URL: img.URL}))
+	}
+
 	resp, err := client.Messages.New(apiCtx, anthropic.MessageNewParams{
 		Model:     apiModel,
-		MaxTokens: 32768,
+		MaxTokens: int64(h.maxOutputTokens),
 		System: []anthropic.TextBlockParam{{
 			Text: systemPrompt,
 			CacheControl: anthropic.CacheControlEphemeralParam{
@@ -987,7 +1072,7 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 			},
 		}},
 		Messages: []anthropic.MessageParam{
-			anthropic.NewUserMessage(anthropic.NewTextBlock(userPrompt)),
+			anthropic.NewUserMessage(blocks...),
 		},
 	})
 	if err != nil {
@@ -1092,6 +1177,49 @@ func buildSceneContextBlock(ctx *SceneContext) string {
 	}
 
 	return strings.Join(parts, "\n")
+}
+
+// buildVisionImages resolves the image assets in a scene context into vision
+// blocks for Claude. Character portraits (scene_context.characters[].id) and
+// image free-assets are included; video/audio and unresolvable ids are skipped.
+// The count is capped by h.maxVisionImages (raise MAX_VISION_IMAGES to analyze
+// more). The URL is built backend-side from the file id via the file service,
+// never from a client-supplied URL.
+func (h *Handler) buildVisionImages(ctx *SceneContext) []visionImage {
+	if ctx == nil || h.vision == nil || h.maxVisionImages <= 0 {
+		return nil
+	}
+	var images []visionImage
+	seen := make(map[string]bool)
+
+	add := func(id, label string) {
+		if id == "" || seen[id] || len(images) >= h.maxVisionImages {
+			return
+		}
+		url, err := h.vision.VisionURL(id)
+		if err != nil {
+			log.Printf("[vision] skipping asset %q (%s): %v", id, label, err)
+			return
+		}
+		seen[id] = true
+		images = append(images, visionImage{URL: url, Label: label})
+	}
+
+	for _, ch := range ctx.Characters {
+		if ch.ID != "" {
+			add(ch.ID, fmt.Sprintf("character reference: %s", ch.Name))
+		}
+	}
+	for _, a := range ctx.Assets {
+		if strings.HasPrefix(a.MimeType, "image/") {
+			add(a.ID, fmt.Sprintf("reference image: %s", a.Filename))
+		}
+	}
+
+	if len(images) > 0 {
+		log.Printf("[vision] sending %d reference images to Claude (cap %d)", len(images), h.maxVisionImages)
+	}
+	return images
 }
 
 // ─── JSON extraction & validation ────────────────────────────────

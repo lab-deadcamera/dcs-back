@@ -103,6 +103,28 @@ func (h *Handler) ServeThumbnail(c *gin.Context) {
 	c.File(path)
 }
 
+// ServeVision serves the vision-size rendering of an image (the sweet spot
+// between the 300px thumbnail and the full original) for Claude vision
+// analysis. Public so Anthropic's servers can fetch it without auth.
+func (h *Handler) ServeVision(c *gin.Context) {
+	id := c.Param("id")
+	path, err := h.svc.GetVisionPath(id)
+	if err != nil {
+		switch err.Error() {
+		case "file not found":
+			utils.NotFound(c, err.Error())
+		case "file has been deleted":
+			utils.Gone(c, err.Error())
+		case "file is not an image":
+			utils.NotFound(c, err.Error())
+		default:
+			utils.InternalError(c, err.Error())
+		}
+		return
+	}
+	c.File(path)
+}
+
 func (h *Handler) SoftDelete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.svc.SoftDelete(id); err != nil {
