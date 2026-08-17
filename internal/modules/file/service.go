@@ -11,12 +11,13 @@ import (
 )
 
 type Service struct {
-	store   *Store
-	baseURL string
+	store      *Store
+	baseURL    string
+	visionSize int
 }
 
-func NewService(store *Store, baseURL string) *Service {
-	return &Service{store: store}
+func NewService(store *Store, baseURL string, visionSize int) *Service {
+	return &Service{store: store, baseURL: baseURL, visionSize: visionSize}
 }
 
 func (s *Service) Upload(data []byte, filename, category, storage string) (*UploadResult, error) {
@@ -108,10 +109,14 @@ func (s *Service) SoftDelete(id string) error {
 		return fmt.Errorf("failed to move to trash: %w", err)
 	}
 
-	// Also move the associated thumbnail, if any.
+	// Also move the associated thumbnails (300px + vision), if any.
 	thumbSubpath := "thumbnails/" + f.Path
 	if s.store.FileExists(thumbSubpath) {
 		_ = s.store.MoveFile(thumbSubpath, "trash/thumbnails/"+f.Path)
+	}
+	visionSubpath := "thumbnails-vision/" + f.Path
+	if s.store.FileExists(visionSubpath) {
+		_ = s.store.MoveFile(visionSubpath, "trash/thumbnails-vision/"+f.Path)
 	}
 
 	return s.store.SoftDeleteFile(id)
@@ -133,10 +138,14 @@ func (s *Service) Restore(id string) error {
 		return fmt.Errorf("failed to restore from trash: %w", err)
 	}
 
-	// Also restore the associated thumbnail, if any.
+	// Also restore the associated thumbnails (300px + vision), if any.
 	thumbTrashPath := "trash/thumbnails/" + f.Path
 	if s.store.FileExists(thumbTrashPath) {
 		_ = s.store.MoveFile(thumbTrashPath, "thumbnails/"+f.Path)
+	}
+	visionTrashPath := "trash/thumbnails-vision/" + f.Path
+	if s.store.FileExists(visionTrashPath) {
+		_ = s.store.MoveFile(visionTrashPath, "thumbnails-vision/"+f.Path)
 	}
 
 	return s.store.RestoreFile(id)
@@ -155,11 +164,16 @@ func (s *Service) RecoverTemp(id string) error {
 		return fmt.Errorf("failed to move temp: %w", err)
 	}
 
-	// Also move the associated thumbnail, if any.
+	// Also move the associated thumbnails (300px + vision), if any.
 	thumbTrashPath := "trash/thumbnails/" + f.Path
 	if s.store.FileExists(thumbTrashPath) {
 		newThumbPath := "thumbnails/temp/" + filepath.Base(f.Path)
 		_ = s.store.MoveFile(thumbTrashPath, newThumbPath)
+	}
+	visionTrashPath := "trash/thumbnails-vision/" + f.Path
+	if s.store.FileExists(visionTrashPath) {
+		newVisionPath := "thumbnails-vision/temp/" + filepath.Base(f.Path)
+		_ = s.store.MoveFile(visionTrashPath, newVisionPath)
 	}
 
 	newPath := "temp/" + filepath.Base(f.Path)
@@ -187,10 +201,14 @@ func (s *Service) HardDelete(id string) error {
 		}
 	}
 
-	// Also delete the associated thumbnail, if any.
+	// Also delete the associated thumbnails (300px + vision), if any.
 	thumbSubpath := "thumbnails/" + f.Path
 	if s.store.FileExists(thumbSubpath) {
 		_ = s.store.DeleteFile(thumbSubpath)
+	}
+	visionSubpath := "thumbnails-vision/" + f.Path
+	if s.store.FileExists(visionSubpath) {
+		_ = s.store.DeleteFile(visionSubpath)
 	}
 
 	return s.store.HardDeleteFile(id)
@@ -224,6 +242,45 @@ func (s *Service) GetThumbnailPath(id string) (string, error) {
 	return s.store.GenerateThumbnail(f.Path, 300, 300)
 }
 
+// GetVisionPath returns the on-disk path of a file's vision-size rendering,
+// generating it on demand. Only image files are served.
+func (s *Service) GetVisionPath(id string) (string, error) {
+	f, err := s.store.GetFileByID(id)
+	if err != nil {
+		return "", err
+	}
+	if f == nil {
+		return "", fmt.Errorf("file not found")
+	}
+	if f.Trashed {
+		return "", fmt.Errorf("file has been deleted")
+	}
+	if !strings.HasPrefix(f.MimeType, "image/") {
+		return "", fmt.Errorf("file is not an image")
+	}
+	return s.store.GenerateVisionThumbnail(f.Path, s.visionSize)
+}
+
+// VisionURL returns the public, absolute URL of a file's vision-size rendering.
+// It validates that the file exists and is an image, so the shot builder never
+// resolves a video/audio or a bogus id into a vision block.
+func (s *Service) VisionURL(id string) (string, error) {
+	f, err := s.store.GetFileByID(id)
+	if err != nil {
+		return "", err
+	}
+	if f == nil {
+		return "", fmt.Errorf("file not found")
+	}
+	if f.Trashed {
+		return "", fmt.Errorf("file has been deleted")
+	}
+	if !strings.HasPrefix(f.MimeType, "image/") {
+		return "", fmt.Errorf("file is not an image")
+	}
+	return s.baseURL + "/api/v1/files/" + id + "/vision", nil
+}
+
 // ReplaceImageContent overwrites an existing image file's bytes in place,
 // preserving its path — and therefore its file ID, serve URL and thumbnail
 // location. The thumbnail is regenerated at the same path. It returns the
@@ -246,16 +303,22 @@ func (s *Service) ReplaceImageContent(id string, data []byte) (*File, error) {
 		return nil, fmt.Errorf("invalid image content: %w", err)
 	}
 
-	// Write to the same path, then regenerate the thumbnail in place.
+	// Write to the same path, then regenerate the thumbnails (300px + vision) in place.
 	if err := s.store.SaveFile(data, f.Path); err != nil {
 		return nil, fmt.Errorf("failed to overwrite file: %w", err)
 	}
 	if err := s.store.RemoveThumbnail(f.Path); err != nil {
 		return nil, fmt.Errorf("failed to remove stale thumbnail: %w", err)
 	}
+	if err := s.store.RemoveVisionThumbnail(f.Path); err != nil {
+		return nil, fmt.Errorf("failed to remove stale vision thumbnail: %w", err)
+	}
 	if _, err := s.store.GenerateThumbnail(f.Path, 300, 300); err != nil {
 		// Non-fatal: thumbnail can be generated on-demand later if needed.
 		fmt.Printf("warning: failed to regenerate thumbnail for %s: %v\n", f.Path, err)
+	}
+	if _, err := s.store.GenerateVisionThumbnail(f.Path, s.visionSize); err != nil {
+		fmt.Printf("warning: failed to regenerate vision thumbnail for %s: %v\n", f.Path, err)
 	}
 
 	if _, err := s.store.db.Exec(
@@ -287,10 +350,14 @@ func (s *Service) PurgeExpiredTemp() error {
 	}
 	for _, f := range files {
 		s.store.DeleteFile(f.Path)
-		// Also delete the associated thumbnail, if any.
+		// Also delete the associated thumbnails (300px + vision), if any.
 		thumbSubpath := "thumbnails/" + f.Path
 		if s.store.FileExists(thumbSubpath) {
 			_ = s.store.DeleteFile(thumbSubpath)
+		}
+		visionSubpath := "thumbnails-vision/" + f.Path
+		if s.store.FileExists(visionSubpath) {
+			_ = s.store.DeleteFile(visionSubpath)
 		}
 		s.store.HardDeleteFile(f.ID)
 	}

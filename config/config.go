@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 )
 
 type Config struct {
@@ -12,6 +13,14 @@ type Config struct {
 	MaxFileSize     int64
 	ThumbnailWidth  int
 	ThumbnailHeight int
+	// VisionThumbnailSize is the max edge (px) of the vision-analysis rendering
+	// sent to Claude ("sweet spot" between the 300px thumbnail and the full
+	// original — Anthropic downscales to ~1568px max and bills ≈(w×h)/750 tokens).
+	VisionThumbnailSize int
+	// MaxOutputTokens is the Claude max output for the shot builder.
+	MaxOutputTokens int
+	// MaxVisionImages is how many reference images may be analyzed per call.
+	MaxVisionImages int
 	BaseURL         string
 	AllowedExts     map[string]bool
 	DatabaseURL     string
@@ -113,6 +122,26 @@ func Load() *Config {
 		pushVapidSubject = "mailto:admin@road2theoscars.tech"
 	}
 
+	// Vision sweet spot + shot-builder limits (tunable via env).
+	visionThumbnailSize := 1024
+	if v := os.Getenv("VISION_THUMBNAIL_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			visionThumbnailSize = n
+		}
+	}
+	maxOutputTokens := 64000
+	if v := os.Getenv("MAX_OUTPUT_TOKENS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxOutputTokens = n
+		}
+	}
+	maxVisionImages := 24
+	if v := os.Getenv("MAX_VISION_IMAGES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxVisionImages = n
+		}
+	}
+
 	log.Printf("[config] ASSET_ACCESS_KEY_ID=%s", tern(assetAccessKeyID != "", "set", "EMPTY"))
 	log.Printf("[config] ASSET_SECRET_ACCESS_KEY=%s", tern(assetSecretAccessKey != "", "set", "EMPTY"))
 	log.Printf("[config] ASSET_DEFAULT_GROUP_ID=%s", tern(assetDefaultGroupID != "", "set", "EMPTY"))
@@ -124,7 +153,10 @@ func Load() *Config {
 		MaxFileSize:     10 << 20,
 		ThumbnailWidth:  300,
 		ThumbnailHeight: 300,
-		BaseURL:         baseURL,
+		VisionThumbnailSize: visionThumbnailSize,
+		MaxOutputTokens:     maxOutputTokens,
+		MaxVisionImages:     maxVisionImages,
+		BaseURL:             baseURL,
 		DatabaseURL:     databaseURL,
 		JWTSecret:       jwtSecret,
 		OutputsDir:      outputsDir,

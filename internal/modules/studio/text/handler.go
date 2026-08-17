@@ -27,15 +27,48 @@ type PushNotifier interface {
 	SendToUser(userID int64, title, body string, data map[string]string)
 }
 
-type Handler struct {
-	providerStore *provider.Store
-	skillSvc      *skillmodule.Service
-	logStore      *LogStore
-	pushSvc       PushNotifier
+// VisionImageProvider resolves a stored file id to a publicly reachable URL of
+// its vision-size rendering. Satisfied by the file module's Service. The
+// backend builds the URL from the id (never from client-supplied URLs) so the
+// shot builder only sends images it actually owns, and only image files.
+type VisionImageProvider interface {
+	VisionURL(id string) (string, error)
 }
 
-func NewHandler(providerStore *provider.Store, skillSvc *skillmodule.Service, logStore *LogStore, pushSvc PushNotifier) *Handler {
-	return &Handler{providerStore: providerStore, skillSvc: skillSvc, logStore: logStore, pushSvc: pushSvc}
+// visionImage is a single reference image sent to Claude as a vision block,
+// with a short label so the model can associate it with a slot / role.
+type visionImage struct {
+	URL   string
+	Label string
+}
+
+type Handler struct {
+	providerStore  *provider.Store
+	skillSvc       *skillmodule.Service
+	logStore       *LogStore
+	pushSvc        PushNotifier
+	vision         VisionImageProvider
+	maxOutputTokens int
+	maxVisionImages int
+}
+
+func NewHandler(
+	providerStore *provider.Store,
+	skillSvc *skillmodule.Service,
+	logStore *LogStore,
+	pushSvc PushNotifier,
+	vision VisionImageProvider,
+	maxOutputTokens, maxVisionImages int,
+) *Handler {
+	return &Handler{
+		providerStore:   providerStore,
+		skillSvc:        skillSvc,
+		logStore:        logStore,
+		pushSvc:         pushSvc,
+		vision:          vision,
+		maxOutputTokens: maxOutputTokens,
+		maxVisionImages: maxVisionImages,
+	}
 }
 
 func (h *Handler) Generate(c *gin.Context) {
@@ -153,7 +186,8 @@ For each verb from Phase 1:
 ### Phase 4 — Multimodal Shot-Script Assembly
 - Assign a cinema mode (M1-M5), a runtime, and the references each shot needs.
 - Wire [Image]/[Video]/[Audio] tags into the prompt blocks and DECLARE EACH TAG'S FUNCTION explicitly. A bare tag mention forces the model to guess and mis-mix references (a reference video's face bleeding into an image's face). State what to extract: "[image1] strictly as character reference to maintain face and clothing; follow the exact body momentum and camera curve from [video1]; reference voice timbre from [audio1]."
-- Respect the reference caps per generation: up to 9 images, 3 videos, 3 audios (12 files total).
+- Respect the Seedance reference caps for what each shot may reference in generation: up to 9 images, 3 videos, 3 audios (12 files total) per shot. You may be shown ADDITIONAL reference images for analysis — analyze them, but assign each shot only the references it actually needs.
+- The reference images shown to you (characters, plates, props) are GROUND TRUTH: read them and describe only what is visible — never invent wardrobe, architecture, or styling not present in the images. Trust the reference over any guess.
 - Route spoken dialogue to the Dialogue block: the line in English, in double quotes, speaker identified.
 - Close with the sanctioned technical-stability line where needed.
 
@@ -468,7 +502,7 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 		UserName:  req.UserName,
 	}
 
-	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "generate shots", "=== ORIGINAL SCRIPT AND INSTRUCTIONS ===")
+	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "generate shots", "=== ORIGINAL SCRIPT AND INSTRUCTIONS ===", h.buildVisionImages(req.SceneContext))
 	if errMsg != "" {
 		utils.InternalError(c, errMsg)
 		return
@@ -543,7 +577,7 @@ func (h *Handler) ClaudeRefineShots(c *gin.Context) {
 		UserName:  req.UserName,
 	}
 
-	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===")
+	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===", h.buildVisionImages(req.SceneContext))
 	if errMsg != "" {
 		utils.InternalError(c, errMsg)
 		return
@@ -607,6 +641,7 @@ func (h *Handler) runClaudeShotBuilder(
 	systemPrompt, originalPrompt string,
 	rawBody []byte,
 	skillName, keyModel, apiModel, actionLabel, correctiveHeader string,
+	images []visionImage,
 ) (string, string) {
 	// Retry loop: up to 3 attempts with corrective feedback
 	const maxAttempts = 3
@@ -620,7 +655,7 @@ func (h *Handler) runClaudeShotBuilder(
 	finalPrompt := originalPrompt
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		reply, usage, duration, callErr := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt)
+		reply, usage, duration, callErr := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt, images)
 
 		a := &ShotBuilderAttempt{
 			AttemptNumber: attempt + 1,
@@ -917,7 +952,7 @@ func (h *Handler) ClaudeOptimizePrompt(c *gin.Context) {
 		apiModel = keyModel
 	}
 
-	reply, _, _, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt)
+	reply, _, _, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt, nil)
 	if err != nil {
 		utils.InternalError(c, fmt.Sprintf("failed to optimize prompt: %v", err))
 		return
@@ -996,7 +1031,7 @@ var modelNameMap = map[string]string{
 	"claude-fable-5":      "claude-fable-5",
 }
 
-func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemPrompt, userPrompt string) (string, *anthropic.Usage, time.Duration, error) {
+func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemPrompt, userPrompt string, images []visionImage) (string, *anthropic.Usage, time.Duration, error) {
 	start := time.Now()
 
 	// 1. Resolve API key from provider store
@@ -1015,9 +1050,21 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 		option.WithRequestTimeout(15*time.Minute),
 	)
 
+	// Build the user turn: the text prompt (script + scene context) followed by
+	// one labelled vision block per reference image, so Claude reads the actual
+	// characters/plates instead of guessing from names alone. The images are
+	// re-sent on every retry (the corrective prompt is text-only).
+	blocks := []anthropic.ContentBlockParamUnion{anthropic.NewTextBlock(userPrompt)}
+	for _, img := range images {
+		if img.Label != "" {
+			blocks = append(blocks, anthropic.NewTextBlock(img.Label))
+		}
+		blocks = append(blocks, anthropic.NewImageBlock(anthropic.URLImageSourceParam{URL: img.URL}))
+	}
+
 	resp, err := client.Messages.New(apiCtx, anthropic.MessageNewParams{
 		Model:     apiModel,
-		MaxTokens: 32768,
+		MaxTokens: int64(h.maxOutputTokens),
 		System: []anthropic.TextBlockParam{{
 			Text: systemPrompt,
 			CacheControl: anthropic.CacheControlEphemeralParam{
@@ -1025,7 +1072,7 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 			},
 		}},
 		Messages: []anthropic.MessageParam{
-			anthropic.NewUserMessage(anthropic.NewTextBlock(userPrompt)),
+			anthropic.NewUserMessage(blocks...),
 		},
 	})
 	if err != nil {
@@ -1130,6 +1177,49 @@ func buildSceneContextBlock(ctx *SceneContext) string {
 	}
 
 	return strings.Join(parts, "\n")
+}
+
+// buildVisionImages resolves the image assets in a scene context into vision
+// blocks for Claude. Character portraits (scene_context.characters[].id) and
+// image free-assets are included; video/audio and unresolvable ids are skipped.
+// The count is capped by h.maxVisionImages (raise MAX_VISION_IMAGES to analyze
+// more). The URL is built backend-side from the file id via the file service,
+// never from a client-supplied URL.
+func (h *Handler) buildVisionImages(ctx *SceneContext) []visionImage {
+	if ctx == nil || h.vision == nil || h.maxVisionImages <= 0 {
+		return nil
+	}
+	var images []visionImage
+	seen := make(map[string]bool)
+
+	add := func(id, label string) {
+		if id == "" || seen[id] || len(images) >= h.maxVisionImages {
+			return
+		}
+		url, err := h.vision.VisionURL(id)
+		if err != nil {
+			log.Printf("[vision] skipping asset %q (%s): %v", id, label, err)
+			return
+		}
+		seen[id] = true
+		images = append(images, visionImage{URL: url, Label: label})
+	}
+
+	for _, ch := range ctx.Characters {
+		if ch.ID != "" {
+			add(ch.ID, fmt.Sprintf("character reference: %s", ch.Name))
+		}
+	}
+	for _, a := range ctx.Assets {
+		if strings.HasPrefix(a.MimeType, "image/") {
+			add(a.ID, fmt.Sprintf("reference image: %s", a.Filename))
+		}
+	}
+
+	if len(images) > 0 {
+		log.Printf("[vision] sending %d reference images to Claude (cap %d)", len(images), h.maxVisionImages)
+	}
+	return images
 }
 
 // ─── JSON extraction & validation ────────────────────────────────

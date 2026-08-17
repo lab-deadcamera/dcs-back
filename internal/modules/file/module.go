@@ -18,6 +18,7 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, _ gin.HandlerFunc) {
 	// Public routes (no auth)
 	rg.GET("/files/:id/serve", m.hdl.ServeFile)
 	rg.GET("/files/:id/thumbnail", m.hdl.ServeThumbnail)
+	rg.GET("/files/:id/vision", m.hdl.ServeVision)
 
 	g := rg.Group("/files")
 	g.Use(authMw)
