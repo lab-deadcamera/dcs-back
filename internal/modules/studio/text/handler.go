@@ -449,7 +449,9 @@ Rules:
 - RE-VALIDATE every reference image against the breakdown. For each shot, check that the character identity/wardrobe, the location geometry, and the props described in prompt.en still match the CURRENT image. If an image changed and a shot no longer matches it (different wardrobe, different plate layout, changed prop), CORRECT that shot's prompt.en to describe the current image — this is a required correction, not drift. If the image still matches, leave the shot untouched.
 - When you correct a shot because an image changed (not because of change_request), add a note to that shot's notes.warnings stating what changed.
 - If change_request adds or removes scenes/shots, adjust ONLY what is necessary and keep the rest untouched.
+- TARGETED REFINEMENT: when a "=== TARGETED SHOTS ===" section is present, modify ONLY the shots it lists (their prompt.en, and if needed their duration/start/end/references). Every other shot — and every scene that is not a target scene — must be emitted byte-for-byte identical to the previous breakdown: same titles, same descriptions, same prompts, same references, same continuity objects, same timestamps. Do not renumber or re-edit anything outside the targets, even if you think it would be better. The change request applies ONLY to the targeted shots.
 - Preserve the script numbering (scriptNumber), the [ImageN] slot assignments, and the output JSON schema (episode + scenes + shots, each shot with prompt.en and optional prompt.zh).
+- A "=== RECENT CONVERSATION ===" section, when present, is context from earlier turns of the same conversation — it explains the intent behind the current change request but the change request is the operative instruction.
 - Respond with ONLY a valid JSON object matching the schema — no text before or after, no markdown fences.
 `
 
@@ -559,13 +561,9 @@ func (h *Handler) ClaudeRefineShots(c *gin.Context) {
 
 	// Anchor on the CURRENT scene context (the user may have edited or replaced
 	// reference images since the previous breakdown) + the previous breakdown +
-	// the change request. The images are also attached as vision blocks.
-	originalPrompt := ""
-	if req.SceneContext != nil {
-		originalPrompt += "=== Current Scene Context ===\n" + buildSceneContextBlock(req.SceneContext) + "\n\n"
-	}
-	originalPrompt += "=== Previous Breakdown ===\n" + req.PreviousResponse +
-		"\n\n=== Change Request ===\n" + req.ChangeRequest
+	// the change request (+ optional targeted shots and recent conversation).
+	// The images are also attached as vision blocks.
+	originalPrompt := buildRefinePrompt(req.SceneContext, req.PreviousResponse, req.ChangeRequest, req.Targets, req.RecentContext)
 
 	// Same base schema as generate-shots plus refinement (anti-drift) rules.
 	basePrompt := defaultShotBuilderPrompt + "\n\n## Refinement Mode\n" + refineModeInstructions
@@ -603,6 +601,58 @@ func (h *Handler) ClaudeRefineShots(c *gin.Context) {
 		Status: "succeeded",
 		Text:   clean,
 	})
+}
+
+// buildRefinePrompt composes the user prompt for a refine-shots call: current
+// scene context (optional) + previous breakdown + change request, plus optional
+// targeted shots (modify only these) and recent conversation turns (bounded
+// thread coherence). Pure — no handler state, unit-testable.
+func buildRefinePrompt(sceneContext *SceneContext, previousResponse, changeRequest string, targets []ShotRefineTarget, recent []ChatTurn) string {
+	var b strings.Builder
+
+	if sceneContext != nil {
+		b.WriteString("=== Current Scene Context ===\n")
+		b.WriteString(buildSceneContextBlock(sceneContext))
+		b.WriteString("\n\n")
+	}
+
+	b.WriteString("=== Previous Breakdown ===\n")
+	b.WriteString(previousResponse)
+	b.WriteString("\n\n=== Change Request ===\n")
+	b.WriteString(changeRequest)
+
+	if len(targets) > 0 {
+		b.WriteString("\n\n=== TARGETED SHOTS ===\n")
+		parts := make([]string, 0, len(targets))
+		for _, t := range targets {
+			parts = append(parts, fmt.Sprintf("%d-%s", t.SceneNumber, t.ShotID))
+		}
+		b.WriteString(strings.Join(parts, ", "))
+		b.WriteString("\nApply the change request ONLY to these shots. Every other shot must be emitted byte-for-byte identical to the previous breakdown.")
+	}
+
+	if len(recent) > 0 {
+		b.WriteString("\n\n=== RECENT CONVERSATION ===\n")
+		for _, turn := range recent {
+			role := turn.Role
+			if role == "" {
+				role = "user"
+			}
+			b.WriteString(role + ": " + truncateRune(turn.Content, 500) + "\n")
+		}
+	}
+
+	return b.String()
+}
+
+// truncateRune shortens s to at most max runes, appending an ellipsis when it
+// had to cut. Used to bound the recent-conversation context on refine calls.
+func truncateRune(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
 }
 
 // ─── Shared Shot Builder pipeline ────────────────────────────────

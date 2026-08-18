@@ -218,23 +218,43 @@ type ClaudeGenerateShotsResponse struct {
 
 // ─── Shot Builder Refine ────────────────────────────────────────
 
+// ShotRefineTarget identifies a single shot to refine. SceneNumber is the
+// scene's script number (scriptNumber from the breakdown); ShotID is the
+// shot's id within that scene (e.g. "A", "B"). When present in a refine
+// request, Claude modifies ONLY the listed shots and leaves every other shot
+// byte-identical.
+type ShotRefineTarget struct {
+	SceneNumber int    `json:"sceneNumber"`
+	ShotID      string `json:"shotId"`
+}
+
+// ChatTurn is one message from the conversational thread, sent as bounded
+// coherence context on refine (last few turns) — never the full history.
+type ChatTurn struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
 // ClaudeRefineShotsRequest is the payload for refining an existing shot
 // breakdown. previous_response is the raw JSON returned by generate-shots
 // (data.text) and change_request is the user's natural-language instruction.
 type ClaudeRefineShotsRequest struct {
-	SceneID          string        `json:"scene_id" binding:"required"`
-	ProjectID        string        `json:"project_id" binding:"required"`
-	ProjectName      string        `json:"project_name"`
-	Model            string        `json:"model"`
-	APIModel         string        `json:"api_model"`
-	PreviousResponse string        `json:"previous_response" binding:"required"`
-	ChangeRequest    string        `json:"change_request" binding:"required"`
-	SystemPrompt     string        `json:"system_prompt"`
-	SkillID          string        `json:"skill_id"`
-	UserID           int           `json:"user_id"`
-	UserName         string        `json:"user_name"`
-	GenerateZh       bool          `json:"generate_zh"`
-	SceneContext     *SceneContext `json:"scene_context,omitempty"`
+	SceneID          string            `json:"scene_id" binding:"required"`
+	ProjectID        string            `json:"project_id" binding:"required"`
+	ProjectName      string            `json:"project_name"`
+	Model            string            `json:"model"`
+	APIModel         string            `json:"api_model"`
+	PreviousResponse string            `json:"previous_response" binding:"required"`
+	ChangeRequest    string            `json:"change_request" binding:"required"`
+	SystemPrompt     string            `json:"system_prompt"`
+	SkillID          string            `json:"skill_id"`
+	UserID           int               `json:"user_id"`
+	UserName         string            `json:"user_name"`
+	GenerateZh       bool              `json:"generate_zh"`
+	SceneContext     *SceneContext     `json:"scene_context,omitempty"`
+	// Optional chat-style refinement controls (both additive).
+	Targets       []ShotRefineTarget `json:"targets,omitempty"`        // refine only these shots
+	RecentContext []ChatTurn         `json:"recent_context,omitempty"` // last few turns for thread coherence
 }
 
 type ClaudeRefineShotsResponse struct {

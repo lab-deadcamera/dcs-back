@@ -282,9 +282,68 @@ func TestBuildCorrectivePromptFrom(t *testing.T) {
 // TestRefineModeInstructions verifies the refinement rules include the
 // anti-drift directives that keep unchanged shots identical.
 func TestRefineModeInstructions(t *testing.T) {
-	for _, s := range []string{"change_request", "IDENTICAL", "previous breakdown", "ONLY a valid JSON object"} {
+	for _, s := range []string{"change_request", "IDENTICAL", "previous breakdown", "ONLY a valid JSON object", "TARGETED SHOTS", "RECENT CONVERSATION"} {
 		if !strings.Contains(refineModeInstructions, s) {
 			t.Errorf("refine mode instructions missing required keyword: %q", s)
 		}
 	}
+}
+
+func TestBuildRefinePrompt(t *testing.T) {
+	const prev = `{"scenes":[{"scriptNumber":89}]}`
+	const change = "make shot A slower"
+
+	t.Run("base compose", func(t *testing.T) {
+		p := buildRefinePrompt(nil, prev, change, nil, nil)
+		if !strings.Contains(p, "=== Previous Breakdown ===") || !strings.Contains(p, prev) {
+			t.Error("missing previous breakdown section")
+		}
+		if !strings.Contains(p, "=== Change Request ===") || !strings.Contains(p, change) {
+			t.Error("missing change request section")
+		}
+		if strings.Contains(p, "TARGETED SHOTS") || strings.Contains(p, "RECENT CONVERSATION") {
+			t.Error("optional sections should be absent when not provided")
+		}
+	})
+
+	t.Run("targets listed with scene-shot ids", func(t *testing.T) {
+		p := buildRefinePrompt(nil, prev, change, []ShotRefineTarget{{SceneNumber: 89, ShotID: "A"}}, nil)
+		if !strings.Contains(p, "=== TARGETED SHOTS ===") || !strings.Contains(p, "89-A") {
+			t.Error("targeted shots section should list 89-A")
+		}
+		if !strings.Contains(p, "ONLY to these shots") {
+			t.Error("targeted section should scope the change to the listed shots")
+		}
+	})
+
+	t.Run("recent context bounded and truncated", func(t *testing.T) {
+		long := strings.Repeat("x", 800)
+		p := buildRefinePrompt(nil, prev, change, nil, []ChatTurn{{Role: "user", Content: long}})
+		if !strings.Contains(p, "=== RECENT CONVERSATION ===") {
+			t.Error("recent conversation section missing")
+		}
+		if !strings.Contains(p, "user: ") {
+			t.Error("recent turn should be labeled by role")
+		}
+		if strings.Contains(p, strings.Repeat("x", 700)) {
+			t.Error("recent content should be truncated to ~500 runes")
+		}
+		if !strings.Contains(p, "…") {
+			t.Error("truncated content should end with an ellipsis")
+		}
+	})
+
+	t.Run("scene context included when provided", func(t *testing.T) {
+		ctx := &SceneContext{Description: "office"}
+		p := buildRefinePrompt(ctx, prev, change, nil, nil)
+		if !strings.Contains(p, "=== Current Scene Context ===") || !strings.Contains(p, "office") {
+			t.Error("scene context section should be included when provided")
+		}
+	})
+
+	t.Run("truncateRune leaves short strings intact", func(t *testing.T) {
+		if got := truncateRune("hola", 10); got != "hola" {
+			t.Errorf("truncateRune should not cut short strings, got %q", got)
+		}
+	})
 }
