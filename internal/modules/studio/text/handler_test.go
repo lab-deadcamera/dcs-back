@@ -23,18 +23,24 @@ func TestPromptMentionsEpisode(t *testing.T) {
 		"scriptLocation",   // INT/EXT location
 		"continuity",       // continuity tracking
 		"shots",            // shots inside scenes
-		"Scene and Mood",   // simplified pre-prompt format
-		"Composition",
-		"Space and Mélange",
-		"Cross-Shot Rule",
-		"Action",
+		"Scene & Mood",     // locked pre-prompt grammar (pack-style)
+		"Frame Map",
+		"Location & Blocking",
+		"Cross-Frame Rules",
+		"Cut Timing",
+		"Movement",
 		"Dialogue",
-		"Ending Shot",
-		"Environmental Base",
-		"Sound Layer",
+		"Last Frame",
+		"World Plate",
+		"Sound Bed",
 		"Severe shaking, time flickering, and identity drift were avoided",
 		"micro-fidgeting",  // acting features
 		"Anatomical Emotion",
+		"delivery register",             // how the line is said (anti-robotic)
+		"Alive from frame one, never statue-still",
+		"watchFor",                      // per-shot production QA notes
+		"Screen-sides lock",
+		"First-frame continuity",
 	}
 	for _, s := range required {
 		if !strings.Contains(defaultShotBuilderPrompt, s) {

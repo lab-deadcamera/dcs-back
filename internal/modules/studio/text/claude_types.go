@@ -102,6 +102,10 @@ type Render struct {
 type ShotNotes struct {
 	Todos    []string `json:"todos"`
 	Warnings []string `json:"warnings"`
+	// WatchFor carries 1-3 plain-language production QA notes per shot:
+	// learned failure modes, continuity locks to respect, what to check in
+	// the first render. Consumed by the frontend shot cards.
+	WatchFor []string `json:"watchFor,omitempty"`
 	Approved bool     `json:"approved"`
 }
 

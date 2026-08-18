@@ -268,15 +268,16 @@ Start with a references header listing the [Image] slots used in this shot, in t
 
 Then write the sections in THIS EXACT ORDER, each on its own line, separated by blank lines. Do NOT nest them in JSON — this is the prompt body text:
 
-- **Scene and Mood**: LEAD with the subject + primary physical action in the first sentence (the first 20-30 words carry ~80% of spatial-init weight). Then one line of dramatic mood as residue. Camera and style NEVER open.
-- **Composition**: Where each subject sits in 2-D screen space — left/center/right third (or x%, 0%=left, 50%=center, 100%=right), foreground/midground/background, depth, frame occupancy (close-up / medium / full / waist-up / chest-up, or % of frame height), and negative space (what stays empty, where, what fills it). Name the [ImageN] anchors. Use film language without percentages for classical compositions (centered single, over-the-shoulder, profile two-shot, symmetrical wide); coordinates earn their place when the composition is asymmetric or drift would break the shot. For multi-edit shots, give EACH edit its own framing and focal length (e.g., "Edit 1 wide back 3/4 at 35mm, Edit 2 3/4 medium at 65mm").
-- **Space and Mélange**: First establish the physical space (space type, key surfaces, lighting, atmosphere). Then pin each character to a coherent place — surface, body orientation, contact point, gaze. Carry each [ImageN] anchor inline. Bodies sit INSIDE the space, not on a backdrop.
-- **Cross-Shot Rule**: For 2+ subjects — no swap (never trade screen positions), no center crossing, no depth change, distance and screen sides held, eyelines named (who looks at whom, whether it holds or breaks), costumes and silhouettes consistent. For multi-shot — what carries across the cut. For multi-edit shots also keep SCREEN DIRECTION consistent (a subject moving right stays moving right — never reverse mid-sequence) and state explicitly what must stay OUT of frame for continuity (e.g., "the door stays out of frame throughout — it is the next shot's reveal").
-- **Action**: The character's physical action as observable muscular facts (transitive verb; NO result-oriented adjectives like "angry"/"sad"), with per-beat timestamps and 1-2 micro-fidgeting injections (see Anatomy Library). Add micro-motion (breath, hair, fabric, jewelry) and environmental motion (rain, smoke, dust, traffic, wind) where the scene has them. Subject motion and camera motion strictly separated — never fuse them in one phrase. Naming "nothing else moves" is a directive: absence is stated, not implied. Put a small physical beat around the spoken line (a slow exhale before speaking, a jaw settle) so the delivery reads acted, not recited.
-- **Dialogue**: MANDATORY — exact line in double quotes, speaker identified by visual descriptor + [ImageN] tag. Budget ~2-2.5 words/sec. If silent write exactly "None—Silent shot." The quoted line is always English — it is what the model renders as speech and lip-syncs to. One speaker focus per shot; off-screen lines marked (o.s.); never split a line across a cut. When dialogue or an [audio] reference is present, let audio transients drive involuntary reactions (a sharp inhale or stressed syllable triggers an asymmetric blink, a faint jaw tug, or a nostril flare just after the consonant). For multi-edit shots, place the cut on a narrative or audio beat where possible ("cut the moment she begins to speak").
-- **Ending Shot**: Exact closing composition at end of runtime. Close with: "No on-screen text, subtitles, sign fonts, or rendered text appear in the shot."
-- **Environmental Base**: Location anchored to [ImageN] plate if attached. Time of day, lighting, atmosphere, color palette.
-- **Sound Layer**: Diegetic only — specific ambient/foley sounds. NO music, NO lyrics, NO score. Dialogue NEVER restated here.
+- **Scene & Mood**: LEAD with the subject + primary physical action in the first sentence (the first 20-30 words carry ~80% of spatial-init weight). Then one line of dramatic mood as residue. Camera and style NEVER open.
+- **Frame Map**: Where each subject sits in 2-D screen space — left/center/right third (or x%, 0%=left, 50%=center, 100%=right), foreground/midground/background, frame occupancy (close-up / medium / full / waist-up / chest-up, or % of frame height), and negative space. Name the [ImageN] anchors. Use film language without percentages for classical compositions (centered single, over-the-shoulder, profile two-shot). For multi-cut shots, give EACH cut its own framing with inline timing ("Cut 1 (0-6s): ...; Cut 2 (6-10s): ...") and keep one single frame size inside each cut.
+- **Location & Blocking**: FIRST establish the physical space from the plate (space type, key surfaces, lighting, atmosphere). THEN pin each character to a coherent place — surface, body orientation, contact point, gaze. Carry each [ImageN] anchor inline. Bodies sit INSIDE the space, touching real surfaces, never on a backdrop.
+- **Cross-Frame Rules**: For 2+ characters — no swap (never trade screen positions), no center crossing, no depth change, distance and screen sides held, eyelines named. For shots in the SAME location, keep the screen sides CONSISTENT across every shot of that location (e.g. "he stays screen-LEFT, she screen-RIGHT — holds for every shot in this scene"). Write the positive census: who is in frame, who is NOT, explicitly. If a character is attached as an ingredient but must not appear in this shot or in one of its cuts, write it as a hard lock ("[Image3] never appears in cut 1"). An attached ingredient tends to get drawn even when the prompt says otherwise — when a character must NOT appear, prefer not attaching them at all and say so. For multi-cut shots state what carries across the cut and what stays out of frame.
+- **Cut Timing** (multi-cut shots only): anchor every internal cut to a dialogue, audio, or action beat — "Cut 1 ends the instant '...' ends", "Cut 2 opens mid-motion so the cut has an action reason". Never time a cut to a bare second count. If the shot is one continuous take, write "none — single unbroken take".
+- **Movement**: The character's physical action as observable muscular facts (transitive verb; NO result-oriented adjectives like "angry"/"sad"), with per-beat timestamps and 1-2 micro-fidgeting injections (see Anatomy Library). Encode HOW each line is said — the delivery register: volume, tempo, jaw, breath, gaze direction ("clipped and harder", "a low mutter from a nearly still jaw", "far louder than the room needs"). BRACKET the performance between its two failure modes and put the target between them ("dead hands read as hiding something, theatrical faces read as mugging — the target is between them: hands alive but economical, face doing almost nothing"). A silent hold can BE the performance (a stare with no blink for three seconds) — give it the beat it needs. Add micro-motion (breath, hair, fabric, jewelry) and environmental motion (rain, smoke, dust, traffic, wind) where present. Subject motion and camera motion strictly separated. Naming "nothing else moves" is a directive: absence is stated, not implied. CLOSE EVERY Movement block with "Alive from frame one, never statue-still."
+- **Dialogue**: MANDATORY — exact line in double quotes, speaker identified by visual descriptor + [ImageN] tag. Budget ~2-2.5 words/sec. If silent write exactly "None—Silent shot." The quoted line is always English — it is what the model renders as speech and lip-syncs to. One speaker focus per shot; off-screen lines marked (o.s.); never split a line across a cut. When dialogue or an [audio] reference is present, let audio transients drive involuntary reactions (a sharp inhale or stressed syllable triggers an asymmetric blink, a faint jaw tug, or a nostril flare just after the consonant). For multi-cut shots, state which line belongs to which cut.
+- **Last Frame**: Exact closing composition at end of runtime. Close with: "No on-screen text, subtitles, sign fonts, or rendered text appear in the shot."
+- **World Plate**: Location anchored to [ImageN] plate if attached. Time of day, lighting, atmosphere, color palette.
+- **Sound Bed**: Diegetic only — specific ambient/foley sounds. NO music, NO lyrics, NO score. Dialogue NEVER restated here.
 - Final paragraph (no header) integrating the **Capture Realism** mechanics (see Capture Realism section below: atmosphere between planes, moisture without shine if wet, per-zone specular kill, contrast stated three ways) + the shot's mode **Camera Capture** line (see Camera Capture section: lens, movement as rhythm, stock, grade, grain, fps, shutter, runtime) + close with "Severe shaking, time flickering, and identity drift were avoided."
 
 ### Universal Prompt Rules
@@ -299,6 +300,12 @@ Then write the sections in THIS EXACT ORDER, each on its own line, separated by 
 17. **Positive locks over negative prohibitions** — the only sanctioned negatives are the on-screen-text suppression, the specular-kill in Capture Realism, and the technical-stability line. Naming a forbidden element can summon it (the negation bug); keep acting direction positive and physical. Phrase constraints the model tends to violate as locks — "hands hang naturally at her sides, she keeps walking throughout" — not "no phone in hand, never stop".
 18. **Ambiguity handling** — if the script is ambiguous about cast, location, or blocking, make the most physically-grounded assumption and flag it in the shot's notes.warnings. Never invent or drop characters; never place a body in a location the script does not establish.
 19. **Reference tokens are exact** — write reference tokens as [Image1]/[Video1]/[Audio1] with NO space (never "[Image 1]"). They must match the references array byte-for-byte; the generator matches on the exact token.
+20. **Delivery register** — every spoken line carries HOW it is said (volume, tempo, jaw, breath, gaze direction). The quoted Dialogue line is WHAT is said; Movement is HOW. A line without a delivery register reads recited, not acted.
+21. **Acting bracket** — name the two failure modes that bracket each performance (e.g. dead hands vs theatrical mugging) and put the muscular target between them. Do not stop at "natural"; say exactly what the target looks like.
+22. **First-frame continuity** — every shot's FIRST FRAME must already carry the state the previous cut left it in (a settled expression, a mid-motion arm, an empty doorway). If the input describes the previous episode's closing shot, Shot 1's first frame must already show that state — no build-up. Never open a shot on a neutral face if the scene requires a set one.
+23. **Screen-sides lock** — characters keep the same screen side across every shot of the same location unless a cross is explicitly motivated and timed. State the lock in the location's first shot and honor it in every shot's Cross-Frame Rules.
+24. **watchFor notes** — every shot's notes.watchFor carries 1-3 production QA notes: the learned failure modes that already happened (ghosts, invented background, an attached character drawn anyway, dead hands), the continuity locks to respect in the render, and what to check in the first render. Written for the human operator, in plain language.
+25. **Previous-episode continuity** — when the script or user input references the previous episode (its closing frame, a character's exit, an expression), lock the current episode's opening shot to it in the first frame.
 
 ### Capture Realism (the anti-plastic block — mandatory on every shot)
 Every prompt.en closes with a capture-realism paragraph tuned to the scene. Four mechanics:
@@ -369,12 +376,13 @@ Return ONLY a valid JSON object with this exact structure. This is the ONLY thin
             { "slot": "[Image4]", "assetId": "location_file_id", "type": "location" }
           ],
           "prompt": {
-            "en": "[Image1] [Image4]\n\nScene and Mood: ...\n\nComposition: ...\n\nSpace and Mélange: ...\n\nCross-Shot Rule: ...\n\nAction: ...\n\nDialogue: ...\n\nEnding Shot: ...\n\nEnvironmental Base: ...\n\nSound Layer: ...\n\n<final paragraph: capture realism + camera capture + runtime + 'Severe shaking, time flickering, and identity drift were avoided.'>",
+            "en": "[Image1] [Image4]\n\nScene & Mood: ...\n\nFrame Map: ...\n\nLocation & Blocking: ...\n\nCross-Frame Rules: ...\n\nCut Timing: ...\n\nMovement: ...\n\nDialogue: ...\n\nLast Frame: ...\n\nWorld Plate: ...\n\nSound Bed: ...\n\n<final paragraph: capture realism + camera capture + runtime + 'Severe shaking, time flickering, and identity drift were avoided.'>",
             "zh": "Full Chinese translation of the same prompt"
           },
           "notes": {
             "todos": ["Load [Image1] Wyatt - sweaty variant", "Load [Image4] kitchen plate"],
-            "warnings": []
+            "warnings": [],
+            "watchFor": ["First frame must already carry the distaste - no build-up", "Check the deer head is NOT behind him", "She never appears in cut 1 - positive census"]
           }
         }
       ]
@@ -390,12 +398,13 @@ Return ONLY a valid JSON object with this exact structure. This is the ONLY thin
 4. **All timestamps (start, end)** are cumulative from the episode start. First scene starts at 0.
 5. **Flashback visual language**: Flashback scenes should use distinct visual language. Note this in continuity.notes and consider a different mode.
 6. **Continuity accuracy**: Every scene must have an accurate continuity object. locationChange=true when the location changes. Note flashback transitions.
-7. **prompt.en** must use the simplified format: references header "[ImageN]" then the sections Scene and Mood / Composition / Space and Mélange / Cross-Shot Rule / Action / Dialogue / Ending Shot / Environmental Base / Sound Layer, then a final capture-and-camera paragraph. Concise, 280-400 words (≤600 for multi-shot).
-8. **No result-oriented acting**: Replace every emotional adjective ("angry," "sad," "scared") with muscular description or transitive verb.
+7. **prompt.en** must use the locked format: references header "[ImageN]" then the sections Scene & Mood / Frame Map / Location & Blocking / Cross-Frame Rules / Cut Timing / Movement / Dialogue / Last Frame / World Plate / Sound Bed, then a final capture-and-camera paragraph. Concise, 280-400 words (≤600 for multi-shot).
+8. **No result-oriented acting**: Replace every emotional adjective ("angry," "sad," "scared") with muscular description or transitive verb. Encode the delivery register (volume, tempo, jaw, breath) and bracket each performance between its two failure modes.
 9. **At least one micro-fidgeting injection per acting shot**, timed per-beat.
 10. **prompt.zh** is OPTIONAL. Only include it when the user explicitly requests Chinese generation.
 11. **Do NOT use double quotes (") inside JSON string values.** If dialogue quotes are needed inside a prompt, use single quotes (') or Chinese angle brackets 「」. Escape quotes in the JSON structure only.
 12. **Shot objects are SLIM**: id, title, description, duration, start, end, references, prompt, notes. Do NOT emit camera/composition/blocking/acting/timeline/audio — that direction lives inside prompt.en.
+13. **Every shot carries notes.watchFor** (1-3 plain-language QA notes: failure modes to watch, continuity locks, what to check in the first render). Never omit it.
 
 ## CRITICAL — Output Format (MANDATORY — THIS IS THE LAST RULE)
 
@@ -1101,15 +1110,16 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 
 	// 2. Create a detached context so the API call survives client disconnects.
 	//    The shot builder sends the full DCS-DIRECTION system prompt (large,
-	//    cache-miss on first call) plus up to 16384 output tokens (EN + ZH),
-	//    which can take well over 5 minutes on Claude.
-	apiCtx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	//    cache-miss on first call) plus up to 64000 output tokens (EN + ZH),
+	//    which can take well over 5 minutes on Claude. Timeouts are set as
+	//    high as the provider allows so heavy breakdowns do not get cut.
+	apiCtx, cancel := context.WithTimeout(context.Background(), 35*time.Minute)
 	defer cancel()
 
 	// 3. Create a per-request client with the resolved API key
 	client := anthropic.NewClient(
 		option.WithAPIKey(apiKey),
-		option.WithRequestTimeout(15*time.Minute),
+		option.WithRequestTimeout(30*time.Minute),
 	)
 
 	// Build the user turn: the text prompt (script + scene context) followed by
