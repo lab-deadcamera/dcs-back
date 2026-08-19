@@ -8,35 +8,36 @@ import (
 
 // ─── Types ─────────────────────────────────────────────────────
 
-// ShotBuilderLog is one FAILED generate-shots call. It stores everything
-// needed to reconstruct the request: raw payload (incl. scene_context with
-// the assigned resources), the final composed prompts, the user (denormalized
-// from the JWT), model, skill, tokens and duration.
+// ShotBuilderLog is one generate-shots / refine-shots call, whether it
+// succeeded or failed. It stores everything needed to reconstruct the request:
+// raw payload (incl. scene_context with the assigned resources), the final
+// composed prompts, the user (denormalized from the JWT), model, skill, tokens
+// and duration.
 type ShotBuilderLog struct {
-	ID               string    `json:"id"`
-	Mode             string    `json:"mode"`
-	UserID           int       `json:"user_id"`
-	UserName         string    `json:"user_name"`
-	UserEmail        string    `json:"user_email"`
-	ProjectID        string    `json:"project_id"`
-	SceneID          string    `json:"scene_id"`
-	KeyModel         string    `json:"key_model"`
-	APIModel         string    `json:"api_model"`
-	SkillID          string    `json:"skill_id"`
-	SkillName        string    `json:"skill_name"`
-	RequestPayload   string    `json:"request_payload"` // raw JSON body as sent
-	SystemPrompt     string    `json:"system_prompt"`   // final composed system prompt
-	Prompt           string    `json:"prompt"`          // final composed user prompt (original script + context)
-	Status           string    `json:"status"`
-	ErrorMessage     string    `json:"error_message"`
-	Response         string    `json:"response"` // extracted JSON from the last attempt
-	Attempts         int       `json:"attempts"`
-	TotalInputTokens int       `json:"total_input_tokens"`
-	TotalOutputTokens int      `json:"total_output_tokens"`
-	DurationMs       int64     `json:"duration_ms"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at,omitempty"`
-	DeletedAt        *time.Time `json:"deleted_at,omitempty"`
+	ID                string     `json:"id"`
+	Mode              string     `json:"mode"`
+	UserID            int        `json:"user_id"`
+	UserName          string     `json:"user_name"`
+	UserEmail         string     `json:"user_email"`
+	ProjectID         string     `json:"project_id"`
+	SceneID           string     `json:"scene_id"`
+	KeyModel          string     `json:"key_model"`
+	APIModel          string     `json:"api_model"`
+	SkillID           string     `json:"skill_id"`
+	SkillName         string     `json:"skill_name"`
+	RequestPayload    string     `json:"request_payload"` // raw JSON body as sent
+	SystemPrompt      string     `json:"system_prompt"`   // final composed system prompt
+	Prompt            string     `json:"prompt"`          // final composed user prompt (original script + context)
+	Status            string     `json:"status"`
+	ErrorMessage      string     `json:"error_message"`
+	Response          string     `json:"response"` // extracted JSON from the last attempt
+	Attempts          int        `json:"attempts"`
+	TotalInputTokens  int        `json:"total_input_tokens"`
+	TotalOutputTokens int        `json:"total_output_tokens"`
+	DurationMs        int64      `json:"duration_ms"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at,omitempty"`
+	DeletedAt         *time.Time `json:"deleted_at,omitempty"`
 	// Enriched (LEFT JOIN, not stored)
 	ProjectName string `json:"project_name"`
 }
@@ -65,7 +66,7 @@ type ShotBuilderLogSummary struct {
 	CreatedAt         time.Time `json:"created_at"`
 }
 
-// ShotBuilderAttempt is one Claude API call within a failed generate-shots call.
+// ShotBuilderAttempt is one Claude API call within a generate-shots / refine-shots call.
 type ShotBuilderAttempt struct {
 	ID                  string    `json:"id"`
 	LogID               string    `json:"log_id"`
@@ -149,7 +150,7 @@ const shotBuilderLogFullCols = `sbl.id, sbl.user_id,
 const shotBuilderLogFrom = `FROM shot_builder_logs sbl
 	LEFT JOIN projects p ON p.id::text = sbl.project_id`
 
-// Create inserts a new (failed) shot builder log and fills ID/timestamps.
+// Create inserts a new shot builder log and fills ID/timestamps.
 func (s *LogStore) Create(log *ShotBuilderLog) error {
 	mode := log.Mode
 	if mode == "" {
@@ -190,7 +191,7 @@ func (s *LogStore) InsertAttempt(a *ShotBuilderAttempt) error {
 	).Scan(&a.ID, &a.CreatedAt)
 }
 
-// ListLogs returns paginated failed shot builder logs, newest first.
+// ListLogs returns paginated shot builder logs, newest first.
 // Empty filter values are ignored.
 func (s *LogStore) ListLogs(page, limit int, projectID, sceneID, mode string, userID int, dateFrom, dateTo string) ([]ShotBuilderLogSummary, int, error) {
 	if page < 1 {

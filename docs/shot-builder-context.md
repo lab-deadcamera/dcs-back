@@ -103,7 +103,7 @@ DB: shots + output format → sesión del primer shot
 }
 ```
 
-**Response éxito** (200):
+**Response inmediata** (200 — `ClaudeGenerateShotsResponse`):
 
 ```json
 {
@@ -111,17 +111,34 @@ DB: shots + output format → sesión del primer shot
   "data": {
     "taskId": "claude_<timestamp_ms>",
     "model": "claude-sonnet-4-6",
-    "status": "succeeded",
-    "text": "{ \"episode\": {...}, \"scenes\": [...] }"
+    "status": "processing"
   }
 }
 ```
 
-> `text` es el JSON **crudo** extraído de la respuesta de Claude. El frontend lo parsea y lo enriquece en el Sequence Viewer. Los campos `episode`, `scenes`, `directorNotes`, `aspectRatio`, `mode` existen en el tipo de respuesta pero **no se pueblan** — solo se envía `text`.
+> `POST` responde al instante (`status: "processing"`) y la generación corre **en background** dentro del proceso Go (goroutine). El resultado se guarda en un task store en memoria (TTL 4 h, limpieza cada 10 min) y **también se persiste en `shot_builder_logs` con `status: "succeeded"`** (igual que los fallos). Requiere instancia única (igual que el resto de tareas async del studio).
 
-**Errores:**
-- 400: prompt vacío / body inválido.
-- 500: error de API de Claude, o agotados los 3 intentos con JSON inválido (en ambos casos se persiste el log de fallo).
+**Consultar estado** — `GET /api/v1/studio/text/claude/generate-shots/status/:taskId` (auth JWT):
+
+```json
+{
+  "success": true,
+  "data": {
+    "taskId": "claude_<timestamp_ms>",
+    "model": "claude-sonnet-4-6",
+    "status": "succeeded",   // "processing" | "succeeded" | "failed"
+    "text": "{ \"episode\": {...}, \"scenes\": [...] }"   // solo si status=succeeded
+  }
+}
+```
+
+Errores del status: `400` si `taskId` vacío, `404` si el task ya expiró (TTL 4 h) o no existe.
+
+> `text` es el JSON **crudo** extraído de la respuesta de Claude. El frontend lo parsea y lo enriquece en el Sequence Viewer. Los campos `episode`, `scenes`, `directorNotes`, `aspectRatio`, `mode` existen en el tipo de respuesta pero **no se pueblan** — solo se envía `text`. El frontend hace polling cada ~5 s con timeout global de 45 min; en `failed` muestra `data.error`.
+
+**Errores (fase async):**
+- 400: prompt vacío / body inválido (respuesta inmediata síncrona).
+- 500: error de API de Claude, o agotados los 3 intentos con JSON inválido → el task pasa a `status: "failed"` con `data.error` y se persiste el log de fallo.
 
 ### 4.1b Refinar un breakdown existente
 
@@ -255,18 +272,18 @@ Puntos clave del `defaultShotBuilderPrompt`:
 
 ## 8. Logs de fallos (shot_builder_logs)
 
-Regla: **solo se loguean los fallos** ("log-only-failures"). Un éxito NO escribe nada en estas tablas.
+Regla: **siempre se loguea la llamada** (éxito o fallo). Los éxitos se registran con `status = 'succeeded'` y `error_message` vacío.
 
-**`shot_builder_logs`** — una fila por llamada fallida a generate-shots. Guarda todo lo necesario para reconstruir el request:
+**`shot_builder_logs`** — una fila por llamada a generate-shots / refine-shots. Guarda todo lo necesario para reconstruir el request:
 - Usuario (denormalizado del JWT: `user_id`, `user_name`, `user_email`), `project_id`, `scene_id`.
 - `request_payload` (raw body tal cual llegó, incluye `scene_context` con los recursos asignados), `system_prompt` final, `prompt` final (guion + contexto).
 - Modelos (`key_model`, `api_model`), skill (`skill_id`, `skill_name`).
-- `status = 'failed'`, `error_message`, `response` (JSON extraído del último intento), `attempts`, tokens totales, `duration_ms`.
+- `status` (`'succeeded'` \| `'failed'`), `error_message`, `response` (JSON extraído del último intento), `attempts`, tokens totales, `duration_ms`.
 - Soft-delete (`deleted_at`).
 
-**`shot_builder_attempts`** — una fila por llamada a la API de Claude dentro de un log fallido (FK `log_id` ON DELETE CASCADE). `attempt_number`, prompt del intento, respuesta cruda, `valid`, `error_message`, tokens (input/output/cache read/cache creation), `duration_ms`.
+**`shot_builder_attempts`** — una fila por llamada a la API de Claude dentro de un log (FK `log_id` ON DELETE CASCADE). `attempt_number`, prompt del intento, respuesta cruda, `valid`, `error_message`, tokens (input/output/cache read/cache creation), `duration_ms`.
 
-La persistencia se hace en `persistFailure()` y un error de logging **nunca enmascara** el error real que ya se envió al cliente (solo `log.Printf`).
+La persistencia se hace en `persistLog()` y un error de logging **nunca enmascara** el resultado real que ya se envió al cliente (solo `log.Printf`).
 
 ---
 

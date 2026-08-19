@@ -9,23 +9,23 @@ type EpisodeAsset struct {
 }
 
 type Episode struct {
-	Title           string         `json:"title,omitempty"`
-	TotalDuration   int            `json:"totalDuration,omitempty"`
-	TotalShots      int            `json:"totalShots,omitempty"`
+	Title            string         `json:"title,omitempty"`
+	TotalDuration    int            `json:"totalDuration,omitempty"`
+	TotalShots       int            `json:"totalShots,omitempty"`
 	AssetAssignments []EpisodeAsset `json:"assetAssignments,omitempty"`
 }
 
 // ─── Scene-level types ──────────────────────────────────────────
 
 type SceneContinuity struct {
-	Location            string   `json:"location"`
-	LocationChange      bool     `json:"locationChange"`
-	TimeContinuity      string   `json:"timeContinuity"`
-	CharactersPresent   []string `json:"charactersPresent"`
-	EmotionalCarryover  string   `json:"emotionalCarryover,omitempty"`
-	PhysicalCarryover   string   `json:"physicalCarryover,omitempty"`
-	WardrobeCarryover   string   `json:"wardrobeCarryover,omitempty"`
-	Notes               []string `json:"notes,omitempty"`
+	Location           string   `json:"location"`
+	LocationChange     bool     `json:"locationChange"`
+	TimeContinuity     string   `json:"timeContinuity"`
+	CharactersPresent  []string `json:"charactersPresent"`
+	EmotionalCarryover string   `json:"emotionalCarryover,omitempty"`
+	PhysicalCarryover  string   `json:"physicalCarryover,omitempty"`
+	WardrobeCarryover  string   `json:"wardrobeCarryover,omitempty"`
+	Notes              []string `json:"notes,omitempty"`
 }
 
 type Camera struct {
@@ -116,37 +116,37 @@ type ShotReference struct {
 }
 
 type Shot struct {
-	ID          string      `json:"id"`
-	Title       string      `json:"title"`
-	Description string      `json:"description"`
-	Duration    int         `json:"duration"`
-	Start       int         `json:"start"`
-	End         int         `json:"end"`
-	Camera      Camera      `json:"camera"`
-	Composition Composition `json:"composition"`
-	Blocking    Blocking    `json:"blocking"`
-	Acting      Acting      `json:"acting"`
-	Timeline    Timeline    `json:"timeline"`
-	Audio       Audio       `json:"audio"`
+	ID          string          `json:"id"`
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	Duration    int             `json:"duration"`
+	Start       int             `json:"start"`
+	End         int             `json:"end"`
+	Camera      Camera          `json:"camera"`
+	Composition Composition     `json:"composition"`
+	Blocking    Blocking        `json:"blocking"`
+	Acting      Acting          `json:"acting"`
+	Timeline    Timeline        `json:"timeline"`
+	Audio       Audio           `json:"audio"`
 	References  []ShotReference `json:"references"`
-	Prompt      PromptPair  `json:"prompt"`
-	Render      Render      `json:"render"`
-	Notes       ShotNotes   `json:"notes"`
+	Prompt      PromptPair      `json:"prompt"`
+	Render      Render          `json:"render"`
+	Notes       ShotNotes       `json:"notes"`
 }
 
 type SceneData struct {
-	ScriptNumber   int              `json:"scriptNumber"`
-	ScriptLocation string           `json:"scriptLocation"`
-	Title          string           `json:"title"`
-	Description    string           `json:"description"`
-	Duration       int              `json:"duration"`
-	Start          int              `json:"start"`
-	End            int              `json:"end"`
-	SceneType      string           `json:"sceneType"`
-	Mode           string           `json:"mode"`
-	Continuity     SceneContinuity  `json:"continuity"`
-	References     []ShotReference  `json:"references"`
-	Shots          []Shot           `json:"shots"`
+	ScriptNumber   int             `json:"scriptNumber"`
+	ScriptLocation string          `json:"scriptLocation"`
+	Title          string          `json:"title"`
+	Description    string          `json:"description"`
+	Duration       int             `json:"duration"`
+	Start          int             `json:"start"`
+	End            int             `json:"end"`
+	SceneType      string          `json:"sceneType"`
+	Mode           string          `json:"mode"`
+	Continuity     SceneContinuity `json:"continuity"`
+	References     []ShotReference `json:"references"`
+	Shots          []Shot          `json:"shots"`
 }
 
 type DirectorNotes struct {
@@ -185,7 +185,7 @@ type SceneContextAsset struct {
 }
 
 type SceneContext struct {
-	Description string                `json:"description,omitempty"`
+	Description string                  `json:"description,omitempty"`
 	Characters  []SceneContextCharacter `json:"characters,omitempty"`
 	Presets     []SceneContextPreset    `json:"presets,omitempty"`
 	Assets      []SceneContextAsset     `json:"assets,omitempty"`
@@ -209,15 +209,26 @@ type ClaudeGenerateShotsRequest struct {
 }
 
 type ClaudeGenerateShotsResponse struct {
-	TaskID string      `json:"taskId"`
-	Model  string      `json:"model"`
-	Status string      `json:"status"`
-	Text   string      `json:"text,omitempty"`
-	Episode *Episode   `json:"episode,omitempty"`
-	Scenes  []SceneData `json:"scenes,omitempty"`
+	TaskID        string         `json:"taskId"`
+	Model         string         `json:"model"`
+	Status        string         `json:"status"`
+	Text          string         `json:"text,omitempty"`
+	Episode       *Episode       `json:"episode,omitempty"`
+	Scenes        []SceneData    `json:"scenes,omitempty"`
 	DirectorNotes *DirectorNotes `json:"directorNotes,omitempty"`
-	AspectRatio string `json:"aspectRatio,omitempty"`
-	Mode string        `json:"mode,omitempty"`
+	AspectRatio   string         `json:"aspectRatio,omitempty"`
+	Mode          string         `json:"mode,omitempty"`
+}
+
+// ClaudeShotsStatusResponse is the polling response for a background
+// generate-shots task: "processing" | "succeeded" (text holds the clean JSON) |
+// "failed" (error holds the reason).
+type ClaudeShotsStatusResponse struct {
+	TaskID string `json:"taskId"`
+	Model  string `json:"model"`
+	Status string `json:"status"`
+	Text   string `json:"text,omitempty"`
+	Error  string `json:"error,omitempty"`
 }
 
 // ─── Shot Builder Refine ────────────────────────────────────────
@@ -243,19 +254,19 @@ type ChatTurn struct {
 // breakdown. previous_response is the raw JSON returned by generate-shots
 // (data.text) and change_request is the user's natural-language instruction.
 type ClaudeRefineShotsRequest struct {
-	SceneID          string            `json:"scene_id" binding:"required"`
-	ProjectID        string            `json:"project_id" binding:"required"`
-	ProjectName      string            `json:"project_name"`
-	Model            string            `json:"model"`
-	APIModel         string            `json:"api_model"`
-	PreviousResponse string            `json:"previous_response" binding:"required"`
-	ChangeRequest    string            `json:"change_request" binding:"required"`
-	SystemPrompt     string            `json:"system_prompt"`
-	SkillID          string            `json:"skill_id"`
-	UserID           int               `json:"user_id"`
-	UserName         string            `json:"user_name"`
-	GenerateZh       bool              `json:"generate_zh"`
-	SceneContext     *SceneContext     `json:"scene_context,omitempty"`
+	SceneID          string        `json:"scene_id" binding:"required"`
+	ProjectID        string        `json:"project_id" binding:"required"`
+	ProjectName      string        `json:"project_name"`
+	Model            string        `json:"model"`
+	APIModel         string        `json:"api_model"`
+	PreviousResponse string        `json:"previous_response" binding:"required"`
+	ChangeRequest    string        `json:"change_request" binding:"required"`
+	SystemPrompt     string        `json:"system_prompt"`
+	SkillID          string        `json:"skill_id"`
+	UserID           int           `json:"user_id"`
+	UserName         string        `json:"user_name"`
+	GenerateZh       bool          `json:"generate_zh"`
+	SceneContext     *SceneContext `json:"scene_context,omitempty"`
 	// Optional chat-style refinement controls (both additive).
 	Targets       []ShotRefineTarget `json:"targets,omitempty"`        // refine only these shots
 	RecentContext []ChatTurn         `json:"recent_context,omitempty"` // last few turns for thread coherence

@@ -43,13 +43,14 @@ type visionImage struct {
 }
 
 type Handler struct {
-	providerStore  *provider.Store
-	skillSvc       *skillmodule.Service
-	logStore       *LogStore
-	pushSvc        PushNotifier
-	vision         VisionImageProvider
+	providerStore   *provider.Store
+	skillSvc        *skillmodule.Service
+	logStore        *LogStore
+	pushSvc         PushNotifier
+	vision          VisionImageProvider
 	maxOutputTokens int
 	maxVisionImages int
+	taskStore       *ShotTaskStore
 }
 
 func NewHandler(
@@ -68,6 +69,7 @@ func NewHandler(
 		vision:          vision,
 		maxOutputTokens: maxOutputTokens,
 		maxVisionImages: maxVisionImages,
+		taskStore:       NewShotTaskStore(),
 	}
 }
 
@@ -423,7 +425,6 @@ EXAMPLES OF WHAT NOT TO DO:
 ✅ "{...}" — valid JSON only, nothing else.
 `
 
-
 const defaultProncerPrompt = `You are a professional cinematography prompt consultant. Your ONLY role is to help refine and optimize video-generation prompts.
 
 Given a current prompt and optional context, the user may ask you to:
@@ -520,19 +521,68 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 		UserName:  req.UserName,
 	}
 
-	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "generate shots", "=== ORIGINAL SCRIPT AND INSTRUCTIONS ===", h.buildVisionImages(req.SceneContext))
-	if errMsg != "" {
-		utils.InternalError(c, errMsg)
+	// The breakdown can take 5+ minutes on Claude, so the request returns
+	// immediately with a taskId and the generation runs in the background.
+	// The client polls GET /generate-shots/status/:taskId for the result.
+	taskID := fmt.Sprintf("claude_%d", time.Now().UnixMilli())
+	user := userFromContext(c)
+
+	task := &ShotTask{
+		TaskID:    taskID,
+		Status:    ShotTaskProcessing,
+		Model:     apiModel,
+		CreatedAt: time.Now(),
+	}
+	h.taskStore.Set(task)
+
+	go func() {
+		// Detached context — the generation survives the client disconnecting.
+		ctx := context.Background()
+		clean, errMsg := h.runClaudeShotBuilder(ctx, user, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "generate shots", "=== ORIGINAL SCRIPT AND INSTRUCTIONS ===", h.buildVisionImages(req.SceneContext))
+		if errMsg != "" {
+			h.taskStore.Update(taskID, func(t *ShotTask) {
+				t.Status = ShotTaskFailed
+				t.Error = errMsg
+			})
+			return
+		}
+		h.taskStore.Update(taskID, func(t *ShotTask) {
+			t.Status = ShotTaskSucceeded
+			t.Text = clean
+		})
+		// ✅ Valid — notify the requesting user. The call was already logged.
+		h.notifyShotsReady(user.ID, clean, req.ProjectName)
+	}()
+
+	utils.Success(c, ClaudeGenerateShotsResponse{
+		TaskID: taskID,
+		Model:  apiModel,
+		Status: "processing",
+	})
+}
+
+// GetClaudeShotsStatus returns the current state of a background shot
+// generation task. The client polls this until the status is "succeeded"
+// (result in data.text) or "failed" (error in data.error).
+func (h *Handler) GetClaudeShotsStatus(c *gin.Context) {
+	taskID := c.Param("taskId")
+	if taskID == "" {
+		utils.BadRequest(c, "taskId is required")
 		return
 	}
 
-	// ✅ Valid — notify the requesting user and return clean JSON. Success is NOT logged.
-	h.notifyShotsReady(c, clean, req.ProjectName)
-	utils.Success(c, ClaudeGenerateShotsResponse{
-		TaskID: fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
-		Model:  apiModel,
-		Status: "succeeded",
-		Text:   clean,
+	task, ok := h.taskStore.Get(taskID)
+	if !ok {
+		utils.NotFound(c, "shot generation task not found")
+		return
+	}
+
+	utils.Success(c, ClaudeShotsStatusResponse{
+		TaskID: task.TaskID,
+		Model:  task.Model,
+		Status: task.Status,
+		Text:   task.Text,
+		Error:  task.Error,
 	})
 }
 
@@ -596,14 +646,14 @@ func (h *Handler) ClaudeRefineShots(c *gin.Context) {
 		UserName:  req.UserName,
 	}
 
-	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===", h.buildVisionImages(req.SceneContext))
+	clean, errMsg := h.runClaudeShotBuilder(c.Request.Context(), userFromContext(c), meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===", h.buildVisionImages(req.SceneContext))
 	if errMsg != "" {
 		utils.InternalError(c, errMsg)
 		return
 	}
 
-	// ✅ Valid — notify the requesting user and return clean JSON. Success is NOT logged.
-	h.notifyShotsReady(c, clean, req.ProjectName)
+	// ✅ Valid — notify the requesting user and return clean JSON. The call was already logged.
+	h.notifyShotsReady(userIDFromContext(c), clean, req.ProjectName)
 	utils.Success(c, ClaudeRefineShotsResponse{
 		TaskID: fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
 		Model:  apiModel,
@@ -703,11 +753,12 @@ func (h *Handler) buildShotBuilderSystemPrompt(basePrompt, skillID, userSystemPr
 
 // runClaudeShotBuilder executes the shared Claude retry loop for the shot
 // builder (generate-shots and refine-shots): up to 3 attempts with corrective
-// feedback, JSON extraction + validation, and log-only-failures persistence.
-// On success it returns the clean JSON and an empty message; on failure it
-// persists the log and returns the error message to send to the client.
+// feedback, JSON extraction + validation, and log persistence on both success
+// and failure. On success it returns the clean JSON and an empty message; on
+// failure it returns the error message to send to the client.
 func (h *Handler) runClaudeShotBuilder(
-	c *gin.Context,
+	ctx context.Context,
+	user shotBuilderUser,
 	meta *shotBuilderMeta,
 	systemPrompt, originalPrompt string,
 	rawBody []byte,
@@ -726,7 +777,7 @@ func (h *Handler) runClaudeShotBuilder(
 	finalPrompt := originalPrompt
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		reply, usage, duration, callErr := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt, images)
+		reply, usage, duration, callErr := h.callClaude(ctx, keyModel, apiModel, systemPrompt, finalPrompt, images)
 
 		a := &ShotBuilderAttempt{
 			AttemptNumber: attempt + 1,
@@ -739,7 +790,7 @@ func (h *Handler) runClaudeShotBuilder(
 			a.ErrorMessage = callErr.Error()
 			attempts = append(attempts, a)
 			msg := fmt.Sprintf("failed to %s: %v", actionLabel, callErr)
-			h.persistFailure(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, msg, start)
+			h.persistLog("failed", msg, user, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, start)
 			return "", msg
 		}
 
@@ -758,7 +809,8 @@ func (h *Handler) runClaudeShotBuilder(
 		attempts = append(attempts, a)
 
 		if a.Valid {
-			// ✅ Valid — return clean JSON. Success is NOT logged.
+			// ✅ Valid — persist the successful call before returning.
+			h.persistLog("succeeded", "", user, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, clean, start)
 			return clean, ""
 		}
 
@@ -778,13 +830,13 @@ func (h *Handler) runClaudeShotBuilder(
 
 	// All attempts exhausted — persist the failure before returning.
 	msg := buildExhaustionError(maxAttempts, lastReply)
-	h.persistFailure(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, msg, start)
+	h.persistLog("failed", msg, user, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, start)
 	return "", msg
 }
 
-// ─── Shot Builder Logs (failed calls) ─────────────────────────────
+// ─── Shot Builder Logs (generate-shots / refine-shots) ───────────
 
-// ListGenerateShotsLogs returns paginated failed generate-shots calls.
+// ListGenerateShotsLogs returns paginated generate-shots / refine-shots calls.
 func (h *Handler) ListGenerateShotsLogs(c *gin.Context) {
 	var req ListShotBuilderLogsRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -824,7 +876,7 @@ func (h *Handler) ListGenerateShotsLogs(c *gin.Context) {
 	})
 }
 
-// GetGenerateShotsLog returns a single failed generate-shots call with its attempts.
+// GetGenerateShotsLog returns a single generate-shots / refine-shots call with its attempts.
 func (h *Handler) GetGenerateShotsLog(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -850,30 +902,31 @@ func (h *Handler) GetGenerateShotsLog(c *gin.Context) {
 	utils.Success(c, gin.H{"log": logEntry, "attempts": attempts})
 }
 
-// persistFailure writes the shot builder log row and all buffered attempts
-// for a failed generate-shots / refine-shots call. A logging error must never
-// mask the real error already sent to the client, so failures are only logged
-// with log.Printf.
-func (h *Handler) persistFailure(
-	c *gin.Context,
+// persistLog writes the shot builder log row and all buffered attempts for a
+// generate-shots / refine-shots call, whether it succeeded or failed. A logging
+// error must never mask the real result, so persistence failures are only
+// logged with log.Printf.
+func (h *Handler) persistLog(
+	status, errorMsg string,
+	user shotBuilderUser,
 	meta *shotBuilderMeta,
 	systemPrompt, originalPrompt string,
 	rawBody []byte,
 	skillName, keyModel, apiModel string,
 	attempts []*ShotBuilderAttempt,
 	totalInput, totalOutput int,
-	lastReply, errorMsg string,
+	lastReply string,
 	start time.Time,
 ) {
 	if h.logStore == nil {
 		return
 	}
 
-	userID := userIDFromContext(c)
+	userID := user.ID
 	if userID == 0 {
 		userID = meta.UserID
 	}
-	userName := stringFromContext(c, "username")
+	userName := user.Name
 	if userName == "" {
 		userName = meta.UserName
 	}
@@ -882,7 +935,7 @@ func (h *Handler) persistFailure(
 		Mode:              meta.Mode,
 		UserID:            userID,
 		UserName:          userName,
-		UserEmail:         stringFromContext(c, "user_email"),
+		UserEmail:         user.Email,
 		ProjectID:         meta.ProjectID,
 		SceneID:           meta.SceneID,
 		KeyModel:          keyModel,
@@ -892,7 +945,7 @@ func (h *Handler) persistFailure(
 		RequestPayload:    string(rawBody),
 		SystemPrompt:      systemPrompt,
 		Prompt:            originalPrompt,
-		Status:            "failed",
+		Status:            status,
 		ErrorMessage:      errorMsg,
 		Response:          extractJSON(lastReply),
 		Attempts:          len(attempts),
@@ -935,10 +988,28 @@ func stringFromContext(c *gin.Context, key string) string {
 	return ""
 }
 
+// shotBuilderUser carries the authenticated identity captured from the request
+// context, so background shot generation can persist failure logs and send the
+// "shots ready" push after the request has returned.
+type shotBuilderUser struct {
+	ID    int
+	Name  string
+	Email string
+}
+
+// userFromContext captures the authenticated user's identity from the request
+// context. Must be called BEFORE a background goroutine is spawned.
+func userFromContext(c *gin.Context) shotBuilderUser {
+	return shotBuilderUser{
+		ID:    userIDFromContext(c),
+		Name:  stringFromContext(c, "username"),
+		Email: stringFromContext(c, "user_email"),
+	}
+}
+
 // notifyShotsReady sends a push to the requesting user when a shot breakdown
 // finishes generating or refining. Fire-and-forget — never blocks the response.
-func (h *Handler) notifyShotsReady(c *gin.Context, clean, projectName string) {
-	userID := userIDFromContext(c)
+func (h *Handler) notifyShotsReady(userID int, clean, projectName string) {
 	if h.pushSvc == nil || userID == 0 {
 		return
 	}
