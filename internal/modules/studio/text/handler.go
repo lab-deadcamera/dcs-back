@@ -425,6 +425,156 @@ EXAMPLES OF WHAT NOT TO DO:
 ✅ "{...}" — valid JSON only, nothing else.
 `
 
+// shotBuilderStructurePrompt is the v2 base prompt for generate-shots-v2.
+// Unlike defaultShotBuilderPrompt, it only defines the OUTPUT STRUCTURE (JSON
+// schema, slot/asset conventions and format rules). The BEHAVIOR — how to
+// interpret the script, direct actors, compose prompts, etc. — is defined by
+// the user-selected skill, which is appended on top.
+const shotBuilderStructurePrompt = `
+## Input Format — Script Parsing
+
+You receive a script in standard screenplay format. Each scene unit follows this pattern:
+
+'''
+56. INT. WYATT'S KITCHEN — DAY
+Content, dialogue, and action description...
+
+57. INT. CONVENIENCE STORE - NIGHT (FLASHBACK - HALLOWEEN 2015)
+Content...
+'''
+
+Parse each 'NN. INT/EXT. LOCATION — TIME' block as follows:
+- **NN** (e.g., 56) = 'scriptNumber' — the scene number from the script
+- **INT. WYATT'S KITCHEN — DAY** = 'scriptLocation' — full location string
+- **Content** = the scene's dramatic material to interpret and subdivide into shots
+
+Detect scene types: 'present', 'flashback', 'fantasy', 'dream', 'montage'. Look for markers like (FLASHBACK), (CONTINUOUS), SMASH CUT TO, HARD CUT TO, etc.
+
+## Episode-Level Asset Assignment
+
+You receive a 'scene_context' with characters, presets, and assets. Assign assets at the EPISODE level:
+
+'''
+episode.assetAssignments: [
+  { "slot": "[Image1]", "assetId": "wyatt", "type": "character" },
+  { "slot": "[Image4]", "assetId": "kitchen-plate", "type": "location" }
+]
+'''
+
+Type values: "character", "location", "prop", "audio".
+- "character" = a person / character (people, actors)
+- "location" = a location or environment where the shot takes place (INT/EXT space, set)
+- "prop" = an additional object in the scene that must stay consistent over time or needs an exact design (suitcase, hair dryer, chair, or anything with a unique feature)
+- "audio" = an audio asset
+- Same character across multiple scenes = same [ImageN] slot
+- Each scene's 'references' array only includes assets that actually appear in THAT scene
+- If an asset is a location/environment plate, only assign it to scenes that take place in that location
+- Location plates anchor the Location & Blocking block in the prompt
+
+## Output JSON Structure
+
+Return ONLY a valid JSON object with this exact structure. This is the ONLY thing you return — no text before or after.
+
+{
+  "episode": {
+    "title": "Episode title from the script header or user input",
+    "totalDuration": total_seconds_estimated,
+    "totalShots": total_number_of_shots_across_all_scenes,
+    "assetAssignments": [
+      { "slot": "[Image1]", "assetId": "character_uuid_from_scene_context", "type": "character" },
+      { "slot": "[Image2]", "assetId": "name_of_asset", "type": "location" }
+    ]
+  },
+  "description": "One-line logline describing the episode's core dramatic conflict",
+  "duration": total_seconds,
+  "mode": "M1",
+  "aspectRatio": "9:16",
+  "directorNotes": {
+    "goal": "What should the audience feel or understand from this episode?",
+    "styleGuide": "teal-amber grade - spherical rectilinear lens - 24fps 180 degree - diegetic audio only - prompt in positive",
+    "warnings": ["Critical episode-wide warnings"]
+  },
+  "scenes": [
+    {
+      "scriptNumber": 56,
+      "scriptLocation": "INT. WYATT'S KITCHEN — DAY",
+      "title": "Dramatic short title for this scene",
+      "description": "One-sentence plain-language action summary",
+      "duration": 25,
+      "start": 0,
+      "end": 25,
+      "sceneType": "present",
+      "mode": "M1",
+      "continuity": {
+        "location": "INT. WYATT'S KITCHEN — DAY",
+        "locationChange": false,
+        "timeContinuity": "DAY — same day as previous scene",
+        "charactersPresent": ["Wyatt", "Dixie"],
+        "emotionalCarryover": "N/A — first scene",
+        "physicalCarryover": "N/A — first scene",
+        "wardrobeCarryover": "N/A — first scene",
+        "notes": ["Episode cold open"]
+      },
+      "references": [
+        { "slot": "[Image1]", "assetId": "character_uuid", "type": "character" },
+        { "slot": "[Image4]", "assetId": "location_file_id", "type": "location" }
+      ],
+      "shots": [
+        {
+          "id": "A",
+          "title": "Wyatt paces frantically",
+          "description": "Wyatt walks back and forth gesticulating while Dixie watches in silence",
+          "duration": 10,
+          "start": 0,
+          "end": 10,
+          "references": [
+            { "slot": "[Image1]", "assetId": "character_uuid", "type": "character" },
+            { "slot": "[Image4]", "assetId": "location_file_id", "type": "location" }
+          ],
+          "prompt": {
+            "en": "[Image1] [Image4]\\n\\nScene & Mood: ...\\n\\nFrame Map: ...\\n\\nLocation & Blocking: ...\\n\\nCross-Frame Rules: ...\\n\\nCut Timing: ...\\n\\nMovement: ...\\n\\nDialogue: ...\\n\\nLast Frame: ...\\n\\nWorld Plate: ...\\n\\nSound Bed: ...\\n\\n<final paragraph: capture realism + camera capture + runtime + 'Severe shaking, time flickering, and identity drift were avoided.'>",
+            "zh": "Full Chinese translation of the same prompt"
+          },
+          "notes": {
+            "todos": ["Load [Image1] Wyatt - sweaty variant", "Load [Image4] kitchen plate"],
+            "warnings": [],
+            "watchFor": ["First frame must already carry the distaste - no build-up", "Check the deer head is NOT behind him", "She never appears in cut 1 - positive census"]
+          }
+        }
+      ]
+    }
+  ]
+}
+
+## Critical Rules
+
+1. **Script numbering**: The script's scene numbers (56, 57, 58) map directly to scenes[].scriptNumber. Maintain the order from the script.
+2. **Total duration**: episode.totalDuration should match the user's estimate from the prompt or the sum of all scene durations.
+3. **Scene-shots relationship**: Each scene has 1+ shots. Scenes with dialogue + action typically need 2-3 shots (wide establishing, single character A, single character B).
+4. **All timestamps (start, end)** are cumulative from the episode start. First scene starts at 0.
+5. **Continuity accuracy**: Every scene must have an accurate continuity object. locationChange=true when the location changes. Note flashback transitions.
+6. **prompt.zh** is OPTIONAL. Only include it when the user explicitly requests Chinese generation.
+7. **Do NOT use double quotes (") inside JSON string values.** If dialogue quotes are needed inside a prompt, use single quotes (') or Chinese angle brackets 「」. Escape quotes in the JSON structure only.
+8. **Shot objects are SLIM**: id, title, description, duration, start, end, references, prompt, notes. Do NOT emit camera/composition/blocking/acting/timeline/audio — that direction lives inside prompt.en.
+9. **Every shot carries notes.watchFor** (1-3 plain-language QA notes: failure modes to watch, continuity locks, what to check in the first render). Never omit it.
+
+## CRITICAL — Output Format (MANDATORY — THIS IS THE LAST RULE)
+
+You MUST respond with ONLY a valid JSON object matching the structure above. No exceptions.
+
+- Do NOT include ANY text before or after the JSON — no greetings, no commentary, no explanations, no markdown fences, no code blocks, no "Here is the result", no "Let me know if you need changes".
+- The response MUST begin with '{' and end with '}'.
+- Your ENTIRE response must be a single parseable JSON object with "episode" and "scenes" keys.
+- All string values must be valid JSON strings. Escape ALL double quotes inside prompts using backslash (\\").
+
+EXAMPLES OF WHAT NOT TO DO:
+❌ "I've analyzed your script. Here is the JSON:\\n{...}"
+❌ "...\\n{...}\\nLet me know if you need changes."
+❌ "'''json\\n{...}\\n'''"
+
+✅ "{...}" — valid JSON only, nothing else.
+`
+
 const defaultProncerPrompt = `You are a professional cinematography prompt consultant. Your ONLY role is to help refine and optimize video-generation prompts.
 
 Given a current prompt and optional context, the user may ask you to:
@@ -468,6 +618,22 @@ Rules:
 // ─── Shot Builder ─────────────────────────────────────────────────
 
 func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
+	h.claudeGenerateShots(c, defaultShotBuilderPrompt)
+}
+
+// ClaudeGenerateShotsV2 is the v2 shot generator: the base prompt only defines
+// the output STRUCTURE (JSON schema + format rules) and the BEHAVIOR is
+// delegated to the user-selected skill, appended on top of the base prompt.
+// Everything else — async task, polling, retries and logging — is identical
+// to generate-shots.
+func (h *Handler) ClaudeGenerateShotsV2(c *gin.Context) {
+	h.claudeGenerateShots(c, shotBuilderStructurePrompt)
+}
+
+// claudeGenerateShots is the shared implementation behind generate-shots and
+// generate-shots-v2. The only difference between them is the base system
+// prompt: the full director prompt (v1) vs the structure-only prompt (v2).
+func (h *Handler) claudeGenerateShots(c *gin.Context, basePrompt string) {
 	// Capture the raw request body BEFORE binding — it is the ground truth for
 	// reconstructing a failed request (payload + scene_context with the
 	// assigned resources). Restore it so ShouldBindJSON still works.
@@ -498,10 +664,10 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 	// resend it, otherwise Claude answers "No script provided".
 	originalPrompt := finalPrompt
 
-	// Build system prompt: start with the default shot builder schema,
-	// then APPEND the skill's system prompt on top (if any), so Claude
-	// still has the JSON output format and critical rules.
-	systemPrompt, skillName := h.buildShotBuilderSystemPrompt(defaultShotBuilderPrompt, req.SkillID, req.SystemPrompt, req.GenerateZh)
+	// Build system prompt: start with the base schema (full director prompt for
+	// v1, structure-only for v2), then APPEND the skill's system prompt on top
+	// (if any), so Claude still has the JSON output format and critical rules.
+	systemPrompt, skillName := h.buildShotBuilderSystemPrompt(basePrompt, req.SkillID, req.SystemPrompt, req.GenerateZh)
 
 	keyModel := req.Model
 	if keyModel == "" {
