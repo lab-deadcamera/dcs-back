@@ -724,7 +724,7 @@ func (h *Handler) claudeGenerateShots(c *gin.Context, basePrompt string, lockedF
 	go func() {
 		// Detached context — the generation survives the client disconnecting.
 		ctx := context.Background()
-		clean, errMsg := h.runClaudeShotBuilder(ctx, user, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "generate shots", "=== ORIGINAL SCRIPT AND INSTRUCTIONS ===", lockedFormat, h.buildVisionImages(req.SceneContext))
+		clean, errMsg := h.runClaudeShotBuilder(ctx, user, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "generate shots", "=== ORIGINAL SCRIPT AND INSTRUCTIONS ===", lockedFormat, h.buildVisionImages(req.SceneContext), nil)
 		if errMsg != "" {
 			h.taskStore.Update(taskID, func(t *ShotTask) {
 				t.Status = ShotTaskFailed
@@ -832,7 +832,7 @@ func (h *Handler) ClaudeRefineShots(c *gin.Context) {
 		UserName:  req.UserName,
 	}
 
-	clean, errMsg := h.runClaudeShotBuilder(c.Request.Context(), userFromContext(c), meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===", true, h.buildVisionImages(req.SceneContext))
+	clean, errMsg := h.runClaudeShotBuilder(c.Request.Context(), userFromContext(c), meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===", true, h.buildVisionImages(req.SceneContext), &refineContext{previousResponse: req.PreviousResponse, targets: req.Targets})
 	if errMsg != "" {
 		utils.InternalError(c, errMsg)
 		return
@@ -937,6 +937,14 @@ func (h *Handler) buildShotBuilderSystemPrompt(basePrompt, skillID, userSystemPr
 	return systemPrompt, skillName
 }
 
+// refineContext carries the previous breakdown and the targeted shots so the
+// consistency validator can enforce that a refine response only touches its
+// targets. nil means a fresh generate call — no drift check is applied.
+type refineContext struct {
+	previousResponse string
+	targets          []ShotRefineTarget
+}
+
 // runClaudeShotBuilder executes the shared Claude retry loop for the shot
 // builder (generate-shots and refine-shots): up to 3 attempts with corrective
 // feedback, JSON extraction + validation, and log persistence on both success
@@ -951,6 +959,7 @@ func (h *Handler) runClaudeShotBuilder(
 	skillName, keyModel, apiModel, actionLabel, correctiveHeader string,
 	lockedFormat bool,
 	images []visionImage,
+	refine *refineContext,
 ) (string, string) {
 	// Retry loop: up to 3 attempts with corrective feedback
 	const maxAttempts = 3
@@ -984,7 +993,7 @@ func (h *Handler) runClaudeShotBuilder(
 		// Extract clean JSON from Claude's response
 		clean := extractJSON(reply)
 		a.Response = reply
-		a.Valid = validateShotJSON(clean) && (!lockedFormat || validateV1PromptFormat(clean))
+		a.Valid = validateShotJSON(clean) && (!lockedFormat || validateV1PromptFormat(clean)) && (refine == nil || validateRefineConsistency(clean, refine))
 		if usage != nil {
 			a.InputTokens = int(usage.InputTokens)
 			a.OutputTokens = int(usage.OutputTokens)
@@ -1728,6 +1737,165 @@ func validateV1PromptFormat(text string) bool {
 		}
 		return strings.Contains(prompt.En, "Capture Realism") && strings.Contains(prompt.En, "Camera Capture")
 	})
+}
+
+// validateRefineConsistency enforces refine-mode consistency between the
+// returned breakdown and the previous one:
+//   - every reference slot maps to a single asset across the whole response
+//   - every shot that is NOT a refinement target must be byte-for-byte
+//     identical to the previous breakdown (no drift, no additions, no removals)
+//
+// Returns true when there is nothing to check (nil refine, empty previous
+// response, or no targets) or when the breakdown is consistent.
+func validateRefineConsistency(text string, refine *refineContext) bool {
+	if refine == nil || refine.previousResponse == "" || len(refine.targets) == 0 {
+		return true
+	}
+	if !validateSlotUniqueness(text) {
+		return false
+	}
+
+	prevShots, ok := indexShotsByKey(refine.previousResponse)
+	if !ok {
+		// Previous breakdown unparseable — nothing reliable to compare against.
+		return true
+	}
+	newShots, ok := indexShotsByKey(text)
+	if !ok {
+		return false
+	}
+
+	targets := make(map[string]bool, len(refine.targets))
+	for _, t := range refine.targets {
+		targets[fmt.Sprintf("%d-%s", t.SceneNumber, t.ShotID)] = true
+	}
+
+	// Every non-target shot in the new response must match the previous one.
+	for key, newRaw := range newShots {
+		if targets[key] {
+			continue
+		}
+		prevRaw, exists := prevShots[key]
+		if !exists || prevRaw != newRaw {
+			return false
+		}
+	}
+
+	// No non-target shot may disappear from the previous breakdown.
+	for key := range prevShots {
+		if targets[key] {
+			continue
+		}
+		if _, exists := newShots[key]; !exists {
+			return false
+		}
+	}
+
+	return true
+}
+
+// validateSlotUniqueness checks that every reference slot in the response
+// (episode.assetAssignments + per-shot references) maps to exactly one asset.
+func validateSlotUniqueness(text string) bool {
+	seen := make(map[string]string)
+	check := func(slot, assetID string) bool {
+		if slot == "" {
+			return true
+		}
+		if prev, ok := seen[slot]; ok {
+			return prev == assetID
+		}
+		seen[slot] = assetID
+		return true
+	}
+
+	var ep struct {
+		Episode *struct {
+			AssetAssignments []struct {
+				Slot    string `json:"slot"`
+				AssetID string `json:"assetId"`
+			} `json:"assetAssignments"`
+		} `json:"episode"`
+	}
+	if err := json.Unmarshal([]byte(text), &ep); err == nil && ep.Episode != nil {
+		for _, a := range ep.Episode.AssetAssignments {
+			if !check(a.Slot, a.AssetID) {
+				return false
+			}
+		}
+	}
+
+	return walkShots(text, func(shot map[string]json.RawMessage) bool {
+		var refs []struct {
+			Slot    string `json:"slot"`
+			AssetID string `json:"assetId"`
+		}
+		raw, ok := shot["references"]
+		if !ok || json.Unmarshal(raw, &refs) != nil {
+			return true
+		}
+		for _, r := range refs {
+			if !check(r.Slot, r.AssetID) {
+				return false
+			}
+		}
+		return true
+	})
+}
+
+// indexShotsByKey parses a breakdown (new episode+scenes format, or the legacy
+// flat shots array) and returns a map of "sceneNumber-shotID" → canonical JSON
+// of that shot. Shots are decoded into map[string]any so json.Marshal re-sorts
+// map keys at every nesting level — structurally-identical shots produce
+// identical bytes regardless of field order (and 10 vs 10.0 normalize).
+func indexShotsByKey(text string) (map[string]string, bool) {
+	var newFormat struct {
+		Episode *struct{} `json:"episode"`
+		Scenes  []struct {
+			ScriptNumber int              `json:"scriptNumber"`
+			Shots        []map[string]any `json:"shots"`
+		} `json:"scenes"`
+	}
+	if err := json.Unmarshal([]byte(text), &newFormat); err == nil && newFormat.Episode != nil && len(newFormat.Scenes) > 0 {
+		out := make(map[string]string)
+		for _, scene := range newFormat.Scenes {
+			for _, shot := range scene.Shots {
+				key := fmt.Sprintf("%d-%s", scene.ScriptNumber, shotString(shot, "id"))
+				if raw, err := json.Marshal(shot); err == nil {
+					out[key] = string(raw)
+				}
+			}
+		}
+		return out, true
+	}
+
+	var legacy struct {
+		Shots []map[string]any `json:"shots"`
+	}
+	if err := json.Unmarshal([]byte(text), &legacy); err == nil && len(legacy.Shots) > 0 {
+		out := make(map[string]string)
+		for _, shot := range legacy.Shots {
+			key := "0-" + shotString(shot, "id")
+			if raw, err := json.Marshal(shot); err == nil {
+				out[key] = string(raw)
+			}
+		}
+		return out, true
+	}
+
+	return nil, false
+}
+
+func shotString(shot map[string]any, key string) string {
+	raw, ok := shot[key]
+	if !ok {
+		return ""
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return ""
+	}
+	return s
 }
 
 func parseOptimizeResponse(text string) (optimized string, suggestions, changes []string) {
