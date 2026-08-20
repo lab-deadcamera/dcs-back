@@ -155,6 +155,62 @@ func TestValidateShotJSON(t *testing.T) {
 	}
 }
 
+// TestValidateShotJSONCuts verifies per-shot field invariants on cuts.
+func TestValidateShotJSONCuts(t *testing.T) {
+	tests := []struct {
+		json  string
+		valid bool
+		desc  string
+	}{
+		{json: `{"shots":[{"id":"A","cuts":2}]}`, valid: true, desc: "integer cuts valid"},
+		{json: `{"shots":[{"id":"A","cuts":0}]}`, valid: true, desc: "zero cuts valid (continuous take)"},
+		{json: `{"shots":[{"id":"A","cuts":-1}]}`, valid: false, desc: "negative cuts invalid"},
+		{json: `{"shots":[{"id":"A","cuts":1.5}]}`, valid: false, desc: "fractional cuts invalid"},
+		{json: `{"shots":[{"id":"A","cuts":"2"}]}`, valid: false, desc: "string cuts invalid"},
+		{json: `{"shots":[{"id":"A","cuts":null}]}`, valid: false, desc: "null cuts invalid"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			if got := validateShotJSON(tc.json); got != tc.valid {
+				t.Errorf("\n  input: %s\n  got:   %v\n  want:  %v", tc.json, got, tc.valid)
+			}
+		})
+	}
+}
+
+// TestValidateShotJSONPrompt verifies prompt.en invariants.
+func TestValidateShotJSONPrompt(t *testing.T) {
+	tests := []struct {
+		json  string
+		valid bool
+		desc  string
+	}{
+		{json: `{"shots":[{"id":"A","prompt":{"en":"Scene & Mood:\n\nFrame Map:"}}]}`, valid: true, desc: "non-empty prompt.en valid"},
+		{json: `{"shots":[{"id":"A","prompt":{"en":"  "}}]}`, valid: false, desc: "blank prompt.en invalid"},
+		{json: `{"shots":[{"id":"A","prompt":{"en":"Use @image1 as anchor"}}]}`, valid: false, desc: "@imageN forbidden"},
+		{json: `{"shots":[{"id":"A","prompt":{"en":"Use [Image1] as anchor"}}]}`, valid: true, desc: "[ImageN] allowed"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			if got := validateShotJSON(tc.json); got != tc.valid {
+				t.Errorf("\n  input: %s\n  got:   %v\n  want:  %v", tc.json, got, tc.valid)
+			}
+		})
+	}
+}
+
+// TestValidateV1PromptFormat verifies the locked v1 section check.
+func TestValidateV1PromptFormat(t *testing.T) {
+	full := `{"episode":{},"scenes":[{"shots":[{"id":"A","prompt":{"en":"Scene & Mood:\n\nFrame Map:\n\nCapture Realism: matte\n\nCamera Capture: handheld"}}]}]}`
+	missing := `{"episode":{},"scenes":[{"shots":[{"id":"A","prompt":{"en":"Scene & Mood:\n\nFrame Map:"}}]}]}`
+	if !validateV1PromptFormat(full) {
+		t.Error("prompt.en with both sections should pass validateV1PromptFormat")
+	}
+	if validateV1PromptFormat(missing) {
+		t.Error("prompt.en without the sections should fail validateV1PromptFormat")
+	}
+}
+
 // TestJSONExampleIsValid checks that the JSON structure in the prompt is valid.
 func TestJSONExampleIsValid(t *testing.T) {
 	example := `{"episode":{"title":"Test","totalDuration":120},"scenes":[{"scriptNumber":56,"scriptLocation":"INT. KITCHEN — DAY","title":"Test","description":"Test","duration":25,"start":0,"end":25,"sceneType":"present","mode":"M1","continuity":{"location":"INT. KITCHEN — DAY","locationChange":false,"timeContinuity":"DAY","charactersPresent":["Wyatt"]},"references":[],"shots":[{"id":"A","title":"Test","description":"Test","duration":10,"start":0,"end":10,"camera":{"lens":"40mm","framing":"Medium","movement":"Handheld","fps":24,"shutter":"180 degree","aspectRatio":"9:16"},"composition":{"frameMap":"x=50%","subjectLock":"none","crossFrameRules":"none","focus":"subject","depth":"Shallow DOF"},"blocking":{"location":"Kitchen","movement":"None","interaction":"None","positions":[]},"acting":{"emotion":"Calm","bodyLanguage":"Still","dialogue":"none — silent","microExpressions":[]},"timeline":{"duration":10,"segments":[],"beats":[]},"audio":{"dialogue":"","ambient":"Room tone","sfx":[],"music":false},"references":[],"prompt":{"en":"Scene & Mood:\n\nFrame Map:"},"render":{"mode":"M1","engine":"Seedance"},"notes":{"todos":[],"warnings":[],"approved":false}}]}]}`
