@@ -921,19 +921,43 @@ func (h *Handler) ClaudeRefineShots(c *gin.Context) {
 		UserName:  req.UserName,
 	}
 
-	clean, errMsg := h.runClaudeShotBuilder(c.Request.Context(), userFromContext(c), meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===", true, h.buildVisionImages(req.SceneContext), &refineContext{previousResponse: req.PreviousResponse, targets: req.Targets})
-	if errMsg != "" {
-		utils.InternalError(c, errMsg)
-		return
-	}
+	// The refine can take 5+ minutes on Claude, so the request returns
+	// immediately with a taskId and the refinement runs in the background.
+	// The client polls GET /generate-shots/status/:taskId for the result.
+	taskID := fmt.Sprintf("claude_%d", time.Now().UnixMilli())
+	user := userFromContext(c)
 
-	// ✅ Valid — notify the requesting user and return clean JSON. The call was already logged.
-	h.notifyShotsReady(userIDFromContext(c), clean, req.ProjectName)
-	utils.Success(c, ClaudeRefineShotsResponse{
-		TaskID: fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
+	task := &ShotTask{
+		TaskID:    taskID,
+		Status:    ShotTaskProcessing,
+		Model:     apiModel,
+		CreatedAt: time.Now(),
+	}
+	h.taskStore.Set(task)
+
+	go func() {
+		// Detached context — the refinement survives the client disconnecting.
+		ctx := context.Background()
+		clean, errMsg := h.runClaudeShotBuilder(ctx, user, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===", true, h.buildVisionImages(req.SceneContext), &refineContext{previousResponse: req.PreviousResponse, targets: req.Targets})
+		if errMsg != "" {
+			h.taskStore.Update(taskID, func(t *ShotTask) {
+				t.Status = ShotTaskFailed
+				t.Error = errMsg
+			})
+			return
+		}
+		h.taskStore.Update(taskID, func(t *ShotTask) {
+			t.Status = ShotTaskSucceeded
+			t.Text = clean
+		})
+		// ✅ Valid — notify the requesting user. The call was already logged.
+		h.notifyShotsReady(user.ID, clean, req.ProjectName)
+	}()
+
+	utils.Success(c, ClaudeGenerateShotsResponse{
+		TaskID: taskID,
 		Model:  apiModel,
-		Status: "succeeded",
-		Text:   clean,
+		Status: "processing",
 	})
 }
 
