@@ -206,6 +206,10 @@ type ClaudeGenerateShotsRequest struct {
 	UserName     string        `json:"user_name"`
 	SceneContext *SceneContext `json:"scene_context,omitempty"`
 	GenerateZh   bool          `json:"generate_zh"`
+	// Optional closed-world element registry produced by the elicitation
+	// flow. When present it is injected into the system prompt as hard
+	// visual rules (see buildClosedWorldBlock).
+	ElementRegistry []ElementEntity `json:"element_registry,omitempty"`
 }
 
 type ClaudeGenerateShotsResponse struct {
@@ -229,6 +233,56 @@ type ClaudeShotsStatusResponse struct {
 	Status string `json:"status"`
 	Text   string `json:"text,omitempty"`
 	Error  string `json:"error,omitempty"`
+}
+
+// ─── Element Elicitation (closed-world registry) ─────────────────
+
+// ElementDecision is the user's resolution for one visual element before
+// generation. Type is one of:
+//
+//	define_with_reference — link an existing asset (linked_asset_id required)
+//	define_with_text      — free-text description (description required)
+//	invent_free           — let Claude invent freely
+//	invent_restricted     — invent but respect description constraints
+//	abstract              — render as abstract/atmospheric presence
+type ElementDecision struct {
+	Type        string `json:"type"`
+	Description string `json:"description,omitempty"`
+}
+
+// ElementEntity is one visual element extracted from the script by the
+// analyze-elements pass and resolved by the user in the elicitation UI.
+// DefinitionStatus comes from the analysis ("defined" | "asset_orphan" |
+// "undefined"); once the user decides, UserDecision is set and the final
+// status sent to generate/refine becomes "defined" | "invented" | "abstracted".
+type ElementEntity struct {
+	EntityID         string           `json:"entity_id"`
+	Category         string           `json:"category"`
+	MentionedAs      string           `json:"mentioned_as"`
+	SourceText       string           `json:"source_text,omitempty"`
+	SceneNumber      int              `json:"scene_number"`
+	DefinitionStatus string           `json:"definition_status"`
+	LinkedAssetID    string           `json:"linked_asset_id,omitempty"`
+	ConsistencyGroup string           `json:"consistency_group,omitempty"`
+	UserDecision     *ElementDecision `json:"user_decision,omitempty"`
+}
+
+// ClaudeAnalyzeElementsRequest starts a background element-analysis task.
+// The prompt carries the full decoded script; scene_context provides the
+// characters and assets available for linking. The response reuses the
+// async shape of ClaudeGenerateShotsResponse (taskId + polling).
+type ClaudeAnalyzeElementsRequest struct {
+	SceneID      string        `json:"scene_id" binding:"required"`
+	ProjectID    string        `json:"project_id" binding:"required"`
+	ProjectName  string        `json:"project_name"`
+	Model        string        `json:"model"`
+	APIModel     string        `json:"api_model"`
+	Prompt       string        `json:"prompt" binding:"required"`
+	SystemPrompt string        `json:"system_prompt"`
+	SkillID      string        `json:"skill_id"`
+	UserID       int           `json:"user_id"`
+	UserName     string        `json:"user_name"`
+	SceneContext *SceneContext `json:"scene_context,omitempty"`
 }
 
 // ─── Shot Builder Refine ────────────────────────────────────────
@@ -270,6 +324,10 @@ type ClaudeRefineShotsRequest struct {
 	// Optional chat-style refinement controls (both additive).
 	Targets       []ShotRefineTarget `json:"targets,omitempty"`        // refine only these shots
 	RecentContext []ChatTurn         `json:"recent_context,omitempty"` // last few turns for thread coherence
+	// Optional closed-world element registry produced by the elicitation
+	// flow. When present it is injected into the system prompt as hard
+	// visual rules (see buildClosedWorldBlock).
+	ElementRegistry []ElementEntity `json:"element_registry,omitempty"`
 }
 
 type ClaudeRefineShotsResponse struct {

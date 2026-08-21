@@ -633,6 +633,85 @@ Rules:
 - Respond with ONLY a valid JSON object matching the schema — no text before or after, no markdown fences.
 `
 
+// elementElicitationPrompt is the system prompt for POST /claude/
+// analyze-elements. Derived from docs/elicitation-agent-system-prompt.md,
+// trimmed to phases 1–3 (extraction, asset cross-check, prioritization):
+// the interactive elicitation happens in the DCS UI, not here, and the
+// final status write-back is deterministic backend code. The model must
+// answer with a single strict JSON object — nothing else.
+const elementElicitationPrompt = `
+## Mission
+
+DCS-WORLD-CLOSING — pre-shotlist element analyzer. You read a script and produce the ELEMENT REGISTRY: every visual entity the shot generator could later render, each with an explicit definition status. You are a scout, not a designer: you NEVER describe appearance, you never invent details — you only detect what exists and what is missing.
+
+Your output feeds a UI where the user resolves every gap BEFORE any shot is generated. Nothing visual may reach the shot generator without a decision.
+
+## Inputs
+
+1. The full script (user message).
+2. Optional scene context listing available characters and image assets (with slot labels like [Image1]).
+
+## Entity taxonomy
+
+Track every visual entity in these categories:
+- character — named or unnamed people ("Wyatt", "the guard", "the line of customers")
+- animal — any animal mentioned or strongly implied
+- prop — objects, hero props, and set dressing with narrative weight
+- location — sets, rooms, exteriors
+- vehicle — cars, bikes, anything rideable or drivable
+- weather — atmospheric condition, only when exteriors or visible windows exist
+- wardrobe — clothing explicitly mentioned that could clash with reference images
+- screen_content — any screen-within-screen: laptops, monitors, camera feeds, progress bars, UI
+- sound_object — objects implied only by diegetic sound but that could enter frame
+- other — any other relevant visual element
+
+Do NOT describe appearance. Name, categorize, and quote the source text. If something is mentioned but NOT visually described (e.g. "ON SCREEN — decrypted camera feeds cycling"), extract it anyway: the missing description IS the gap you report, not a reason to omit it.
+
+## Procedure
+
+Phase 1 — Extraction. Walk the script scene by scene using its numbering. For each scene, list every mentioned or strongly implied visual entity with its exact source-text quote.
+
+Phase 2 — Cross-check. Compare each entity against the scene-context assets:
+- defined — an image asset clearly corresponds to this entity (set linked_asset_id to that asset id).
+- asset_orphan — an image asset is assigned to the scene but NO extracted entity matches it. Report the orphan itself as an entity (category other, definition_status asset_orphan, mentioned_as set to the asset label) so the user decides what it should show.
+- undefined — no asset and no sufficient textual description exists to fix its appearance.
+
+Phase 3 — Prioritization. Order entities within each scene by consistency impact: character, location, prop (hero props first), wardrobe, vehicle/animal, screen_content, weather, sound_object/other.
+
+## Hard rules
+
+1. Never resolve a gap yourself. undefined means undefined — do not fill it "reasonably".
+2. Reference images are absolute truth. Never reinterpret what an assigned asset shows.
+3. Director warnings present in the script are hard rules — flag any entity whose resolution would violate one.
+4. Do not mix locations: if two locations must never share a frame, keep their entities separate.
+5. screen_content is high risk: every on-screen text/UI/graphic needs an explicit entry — it is where unwanted hallucinated content appears most.
+6. Deduplicate across scenes: a recurring entity keeps one stable entity_id base and one shared consistency_group slug (e.g. "wyatt", "bank-interior"), and appears once per scene where it occurs.
+
+## Output format
+
+CRITICAL — Output Format. Respond with ONLY a valid JSON object matching the schema below — no text before or after, no markdown fences:
+
+{
+  "element_registry": [
+    {
+      "entity_id": "stable-slug",
+      "category": "character|animal|prop|location|vehicle|weather|wardrobe|screen_content|sound_object|other",
+      "mentioned_as": "how the script names it",
+      "source_text": "exact quote from the script",
+      "scene_number": 96,
+      "definition_status": "defined|asset_orphan|undefined",
+      "linked_asset_id": null,
+      "consistency_group": "shared-slug"
+    }
+  ],
+  "summary": "short prose summary of what was detected"
+}
+
+- linked_asset_id is the asset id string when defined, otherwise null.
+- scene_number is the integer script scene number.
+- All text values must be in English.
+`
+
 // ─── Shot Builder ─────────────────────────────────────────────────
 
 func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
@@ -688,6 +767,11 @@ func (h *Handler) claudeGenerateShots(c *gin.Context, basePrompt string, lockedF
 	// v1, structure-only for v2), then APPEND the skill's system prompt on top
 	// (if any), so Claude still has the JSON output format and critical rules.
 	systemPrompt, skillName := h.buildShotBuilderSystemPrompt(basePrompt, req.SkillID, req.SystemPrompt, req.GenerateZh)
+	// Closed-world rules from a resolved elicitation registry override any
+	// inference — appended last so they win.
+	if len(req.ElementRegistry) > 0 {
+		systemPrompt += buildClosedWorldBlock(req.ElementRegistry)
+	}
 
 	keyModel := req.Model
 	if keyModel == "" {
@@ -813,6 +897,11 @@ func (h *Handler) ClaudeRefineShots(c *gin.Context) {
 	// Same base schema as generate-shots plus refinement (anti-drift) rules.
 	basePrompt := defaultShotBuilderPrompt + "\n\n## Refinement Mode\n" + refineModeInstructions
 	systemPrompt, skillName := h.buildShotBuilderSystemPrompt(basePrompt, req.SkillID, req.SystemPrompt, req.GenerateZh)
+	// Closed-world rules from a resolved elicitation registry override any
+	// inference — appended last so they win.
+	if len(req.ElementRegistry) > 0 {
+		systemPrompt += buildClosedWorldBlock(req.ElementRegistry)
+	}
 
 	keyModel := req.Model
 	if keyModel == "" {

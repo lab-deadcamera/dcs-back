@@ -1,7 +1,7 @@
 # Shot Builder — Contexto del Backend
 
 > Documento de contexto para trabajar sobre el Shot Builder sin romper lo existente.
-> Backend: `dcs-back` (Go + Gin). Última actualización: 2026-08-09.
+> Backend: `dcs-back` (Go + Gin). Última actualización: 2026-08-20.
 >
 > Complementa a [`docs/shot-builder-flow.md`](./shot-builder-flow.md), que documenta el **flujo de UI** en el frontend. Este documento se enfoca en el **backend** (contratos, lógica de Claude, logs, datos).
 
@@ -33,7 +33,8 @@ dcs-back/
     ├── studio/
     │   ├── module.go                          → Registro de rutas de /studio (incluye /text/claude/*)
     │   └── text/                              → Módulo de texto: Shot Builder + Proncer (Claude)
-    │       ├── handler.go                     → Handlers ClaudeGenerateShots / ClaudeOptimizePrompt + logs de fallos
+    │       ├── handler.go                     → Handlers ClaudeGenerateShots(+V2) / GetClaudeShotsStatus / ClaudeRefineShots / ClaudeOptimizePrompt
+    │       ├── task_store.go                  → ShotTaskStore en memoria para tasks async (TTL 4 h, cleanup cada 10 min)
     │       ├── claude_types.go                → Tipos: SceneContext, request/response, Shot/SceneData/Episode
     │       ├── log_store.go                   → Store de shot_builder_logs / shot_builder_attempts
     │       ├── types.go, domain.go            → Stub genérico de generación de texto (NO usado por el Shot Builder)
@@ -43,7 +44,7 @@ dcs-back/
     └── project/                               → CRUD de proyectos/capítulos/escenas/shots/takes
 ```
 
-> **Importante:** El Shot Builder **NO** pasa por el pipeline unificado de generación (`PipelineRunner` / `GeneratorRequest`). Es un flujo aparte y síncrono: `Handler.ClaudeGenerateShots()` → `callClaude()` → respuesta JSON. El generador `text/generators/claude_text.go` y los stubs de `POST /studio/text/generate` son otra cosa (generación de texto genérica, marcada como "not yet implemented").
+> **Importante:** El Shot Builder **NO** pasa por el pipeline unificado de generación (`PipelineRunner` / `GeneratorRequest`). Es un flujo aparte: `generate-shots` y `generate-shots-v2` son **async** (responden `taskId` y la generación corre en una goroutine; el frontend hace polling del status), mientras que `refine-shots` es **síncrono**. Todos comparten el motor `runClaudeShotBuilder()`. El generador `text/generators/claude_text.go` y los stubs de `POST /studio/text/generate` son otra cosa (generación de texto genérica, marcada como "not yet implemented").
 
 ---
 
@@ -51,27 +52,37 @@ dcs-back/
 
 ```
 Angular (ShotBuilderPanel)
-  │  POST /api/v1/studio/text/claude/generate-shots
+  │  POST /api/v1/studio/text/claude/generate-shots[-v2]
   │  { project_id, scene_id, prompt, skill_id, model, api_model, generate_zh, scene_context }
   ▼
-text.Handler.ClaudeGenerateShots (handler.go)
-  │  1. Lee raw body (ground truth para logs de fallo) y hace bind del JSON
-  │  2. Si hay scene_context → buildSceneContextBlock() se antepone al prompt
-  │  3. Compone system prompt: defaultShotBuilderPrompt + skill + user instructions + reglas (ZH / idioma)
-  │  4. Retry loop (hasta 3 intentos):
-  │       ├─ callClaude() → Anthropic Messages API (claude-sonnet-4-6 por defecto)
-  │       ├─ extractJSON(reply) → objeto JSON balanceado
-  │       ├─ validateShotJSON(clean) → formato nuevo (episode+scenes) o legacy (shots[])
-  │       └─ si inválido → buildCorrectivePrompt(original) y reintenta
-  │  5. Éxito → { taskId, model, status: "succeeded", text: <JSON limpio> }  (NO se loguea)
-  │     Fracaso → persistFailure() → shot_builder_logs + shot_builder_attempts  (500)
+text.Handler.ClaudeGenerateShots / ClaudeGenerateShotsV2 (handler.go)
+  │  1. Lee raw body (ground truth para logs) y hace bind del JSON
+  │  2. Responde al instante { taskId, model, status: "processing" } y lanza goroutine
+  │     con contexto detached de 20 min (sobrevive a la desconexión del cliente)
+  │  3. En la goroutine (runClaudeShotBuilder):
+  │       ├─ buildSceneContextBlock() antepone el scene_context al prompt
+  │       ├─ buildVisionImages() adjunta retratos/assets de imagen (cap maxVisionImages)
+  │       ├─ system prompt: defaultShotBuilderPrompt (v1) | shotBuilderStructurePrompt (v2)
+  │       │   + skill + user instructions + reglas (ZH / idioma)
+  │       └─ retry loop (hasta 3 intentos):
+  │             ├─ callClaude() → Anthropic Messages API (claude-sonnet-4-6 por defecto)
+  │             ├─ extractJSON(reply) → objeto JSON balanceado
+  │             ├─ validación triple: validateShotJSON && (v1: validateV1PromptFormat)
+  │             │                     && (refine: validateRefineConsistency)
+  │             └─ si inválido → buildCorrectivePromptFrom(original) y reintenta
+  │  4. Éxito → task "succeeded" con text + persistLog("succeeded") + notifyShotsReady (push)
+  │     Fracaso → task "failed" + persistLog del error
   ▼
-Angular: parsea el JSON, renderiza Sequence Viewer
+Angular: polling GET .../generate-shots/status/:taskId cada ~5 s (timeout global 45 min)
+  │  succeeded → parsea data.text, renderiza Sequence Viewer
+  │  failed    → muestra data.error
   │  POST /projects/{id}/chapters/{chId}/scenes/{scId}/shots   (por cada shot, secuencial)
   │  PATCH .../shots/{shotId}  → persiste aspect_ratio y duration_seconds del Sequence
   ▼
 DB: shots + output format → sesión del primer shot
 ```
+
+El refine (`POST /refine-shots`) es igual pero **síncrono**: corre el mismo motor con `c.Request.Context()` y responde directamente con `{ taskId (fabricado), status: "succeeded", text }`.
 
 ---
 
@@ -140,9 +151,17 @@ Errores del status: `400` si `taskId` vacío, `404` si el task ya expiró (TTL 4
 - 400: prompt vacío / body inválido (respuesta inmediata síncrona).
 - 500: error de API de Claude, o agotados los 3 intentos con JSON inválido → el task pasa a `status: "failed"` con `data.error` y se persiste el log de fallo.
 
+### 4.1a Generar shots v2
+
+`POST /api/v1/studio/text/claude/generate-shots-v2` (auth JWT) — misma forma de request y respuesta que 4.1 (async + polling del mismo endpoint de status), pero:
+
+- System prompt base = `shotBuilderStructurePrompt` (solo estructura/schema) en lugar del prompt director completo.
+- `lockedFormat = false`: NO corre la validación extra `validateV1PromptFormat`.
+- El comportamiento lo define la **skill** seleccionada (se apendiza al prompt).
+
 ### 4.1b Refinar un breakdown existente
 
-`POST /api/v1/studio/text/claude/refine-shots` (auth JWT) — regenera el breakdown aplicando **solo** los cambios pedidos por el usuario (anti-drift).
+`POST /api/v1/studio/text/claude/refine-shots` (auth JWT) — regenera el breakdown aplicando **solo** los cambios pedidos por el usuario (anti-drift). Es **síncrono**: corre el mismo motor con `c.Request.Context()` y responde directamente (sin task store ni polling).
 
 **Request** (`ClaudeRefineShotsRequest`):
 
@@ -150,8 +169,16 @@ Errores del status: `400` si `taskId` vacío, `404` si el task ya expiró (TTL 4
 {
   "scene_id": "uuid",             // obligatorio
   "project_id": "uuid",           // obligatorio
+  "project_name": "...",          // opcional — para la push notification
   "previous_response": "{...}",   // obligatorio — data.text crudo del generate-shots anterior
   "change_request": "hacé el tono más oscuro y acortá el shot C",  // obligatorio
+  "scene_context": { ... },       // opcional — mismo SceneContext que generate
+  "targets": [                    // opcional — refinar SOLO estos shots
+    { "sceneNumber": 56, "shotId": "A" }
+  ],
+  "recent_context": [             // opcional — últimos turnos del chat (coherencia)
+    { "role": "user", "content": "..." }
+  ],
   "model": "claude-shot-builder",
   "api_model": "claude-sonnet-4-6",
   "system_prompt": "",
@@ -160,13 +187,16 @@ Errores del status: `400` si `taskId` vacío, `404` si el task ya expiró (TTL 4
 }
 ```
 
-**Response éxito** (200): mismo shape que generate-shots (`taskId`, `model`, `status: "succeeded"`, `text` con el JSON completo regenerado).
+**Response éxito** (200): `{ taskId (fabricado), model, status: "succeeded", text }` con el JSON completo regenerado.
 
 **Cómo funciona:**
-- El prompt del usuario se compone como `=== Previous Breakdown ===` + JSON previo + `=== Change Request ===` + instrucción. El `scene_context` NO se reenvía (ya está embebido en el breakdown previo vía references/assetAssignments).
+- El prompt se compone como: Current Scene Context + Previous Breakdown + Change Request + TARGETED SHOTS + RECENT CONVERSATION. El `scene_context` ahora SÍ se puede reenviar (opcional).
+- `recent_context` se trunca a **500 runes por turno** — nunca se envía el historial completo.
+- Con `targets`, Claude modifica solo esos shots y `validateRefineConsistency` verifica que los demás queden byte-idénticos.
 - System prompt = `defaultShotBuilderPrompt` + `## Refinement Mode` con `refineModeInstructions` (reglas anti-drift: aplicar solo el cambio pedido, conservar IDs, timestamps, slots `[ImageN]` y continuidad) + skill/instrucciones/reglas ZH/inglés igual que generate.
-- Reutiliza el mismo pipeline: `runClaudeShotBuilder()` (retry 3 intentos, `extractJSON` + `validateShotJSON`), y `persistFailure()` con `mode='refine'`.
+- Reutiliza el mismo motor: `runClaudeShotBuilder()` (retry 3 intentos, validación triple) y `persistLog()` con `mode='refine'`.
 - El retry correctivo reenvía el breakdown previo + instrucción (nunca la respuesta truncada).
+- Un refine exitoso dispara `notifyShotsReady` (push) igual que generate.
 
 ### 4.2 Optimizar prompt (Proncer)
 
@@ -254,6 +284,8 @@ Puntos clave del `defaultShotBuilderPrompt`:
 - **MaxTokens**: `32768` (para EN + ZH; el retry corrige respuestas truncadas).
 - **Prompt caching**: `CacheControlEphemeralTTL5m` en el bloque system. Reduce el costo en iteraciones seguidas (el system prompt es grande). Si se toca el system prompt, el caché se invalida.
 - **Errores**: extrae `apiErr.RawJSON() → error.message` para mensajes legibles de la API.
+- **Visión**: antes de llamar, `buildVisionImages(sceneContext)` adjunta retratos de personajes y free-assets `image/*` (dedup por id, cap `maxVisionImages`; URL construida backend-side desde el file id — nunca una URL provista por el cliente).
+- **Push en éxito**: `notifyShotsReady(userID, clean, projectName)` envía una notificación fire-and-forget ("📋 Breakdown ready · N scenes · M shots", data `{type: "shots-ready"}`) al terminar un generate o refine exitoso.
 
 ---
 
@@ -262,11 +294,17 @@ Puntos clave del `defaultShotBuilderPrompt`:
 - **Hasta 3 intentos** (`maxAttempts = 3`).
 - Cada intento se guarda como `ShotBuilderAttempt` en memoria (`attempt_number`, prompt enviado, respuesta cruda, `valid`, tokens, duración, error).
 - **Extracción**: `extractJSON()` encuentra el objeto JSON más externo balanceando llaves **dentro y fuera de strings** (maneja `{...}` dentro de `prompt.en`).
-- **Validación**: `validateShotJSON()` acepta dos formatos:
-  - **Nuevo**: `{ "episode": {...}, "scenes": [{ "shots": [...] }] }` (requiere episode + ≥1 escena con shots).
-  - **Legacy**: `{ "shots": [...] }` plano.
-- **Retry correctivo**: si falla, **NO reenvía la respuesta truncada previa** (quema contexto y produce el mismo resultado). Envía `buildCorrectivePrompt(originalPrompt)` que **reescribe el guion original** + instrucción de brevedad. *Bug documentado: reintentar sin el guion original hace que Claude responda "No script provided".*
-- Si se agotan los intentos → `buildExhaustionError()` + 500 + log de fallo.
+- **Validación triple**:
+  ```go
+  a.Valid = validateShotJSON(clean)
+         && (!lockedFormat || validateV1PromptFormat(clean))            // solo v1
+         && (refine == nil || validateRefineConsistency(clean, refine)) // solo refine con targets
+  ```
+  - `validateShotJSON()` acepta dos formatos: **nuevo** `{ "episode": {...}, "scenes": [{ "shots": [...] }] }` (requiere episode + ≥1 escena con shots) y **legacy** `{ "shots": [...] }` plano.
+  - `validateV1PromptFormat` (solo v1, `lockedFormat=true`): verifica que el JSON respete el formato del prompt director.
+  - `validateRefineConsistency` (solo refine con `targets`): los shots no apuntados deben quedar byte-idénticos.
+- **Retry correctivo**: si falla, **NO reenvía la respuesta truncada previa** (quema contexto y produce el mismo resultado). Envía `buildCorrectivePromptFrom(originalPrompt, correctiveHeader)` que **reenvía el input original** (guion en generate, breakdown previo en refine) + directiva de brevedad. *Bug documentado: reintentar sin el input original hace que Claude responda "No script provided".*
+- Si se agotan los intentos → `buildExhaustionError()`: en async el task pasa a `failed`; en refine (sync) responde error HTTP. En ambos casos se persiste el log de fallo.
 
 ---
 
@@ -328,11 +366,11 @@ Reference assets:
 
 ## 11. Puntos críticos / gotchas para cambios
 
-1. **Dos flujos de texto distintos**: el Shot Builder usa `ClaudeGenerateShots` (síncrono, Anthropic SDK). Los endpoints `POST /studio/text/generate|status|task|preview` son stubs ("not yet implemented") — no confundirlos.
+1. **Dos flujos de texto distintos**: el Shot Builder usa `ClaudeGenerateShots` (+V2, async con polling) y `ClaudeRefineShots` (síncrono), todos vía Anthropic SDK. Los endpoints `POST /studio/text/generate|status|task|preview` son stubs ("not yet implemented") — no confundirlos.
 2. **El prompt es un string Go con backticks**: cualquier backtick crudo dentro de `defaultShotBuilderPrompt` rompe la compilación. Correr `handler_test.go` después de tocarlo (`TestPromptNoBackticks`, `TestPromptMentionsEpisode`, `TestPromptHasFormatRule`).
 3. **Formato de salida estricto**: Claude debe devolver SOLO JSON. Si cambia el schema del JSON de salida, actualizar **a la vez**: el prompt (ejemplo en `defaultShotBuilderPrompt`), `validateShotJSON()`, los tipos en `claude_types.go`, y el parseo del frontend (Sequence Viewer).
 4. **Contrato con el frontend**: el frontend parsea `data.text` (JSON crudo). Los campos `episode/scenes/directorNotes` de la respuesta NO se pueblan — no asumir lo contrario.
-5. **Logs solo en fallo**: éxitos no se guardan. Si se necesita trazabilidad de éxitos, hay que cambiarlo a propósito (afecta volumen de datos).
+5. **Logs siempre**: tanto éxitos (`status='succeeded'`) como fallos se persisten en `shot_builder_logs`. Ojo: un comentario viejo en `handler.go` (~L968) aún menciona una regla "log-only-failures" — está desactualizado, el código actual siempre persiste.
 6. **API key de Claude**: se resuelve por nombre de modelo en el provider store (`model` = clave). Agregar un modelo nuevo requiere entrada en `modelNameMap` **y** un registro en Providers con su API key.
 7. **generate_zh = false** agrega una instrucción al system prompt pidiendo omitir `prompt.zh` (ahorra tokens).
 8. **Salida siempre en inglés** (regla inyectada) aunque el usuario escriba en español.

@@ -43,6 +43,8 @@ type textHandler interface {
 	GetClaudeShotsStatus(c *gin.Context)
 	ClaudeRefineShots(c *gin.Context)
 	ClaudeOptimizePrompt(c *gin.Context)
+	HandleClaudeAnalyzeElements(c *gin.Context)
+	HandleClaudeAnalyzeElementsStatus(c *gin.Context)
 	ListGenerateShotsLogs(c *gin.Context)
 	GetGenerateShotsLog(c *gin.Context)
 }
@@ -129,6 +131,8 @@ func (m *Module) Register(rg *gin.RouterGroup, authMw, adminMw gin.HandlerFunc) 
 				claude.GET("/generate-shots/status/:taskId", m.textHdl.GetClaudeShotsStatus)
 				claude.POST("/refine-shots", m.textHdl.ClaudeRefineShots)
 				claude.POST("/optimize-prompt", m.textHdl.ClaudeOptimizePrompt)
+				claude.POST("/analyze-elements", m.textHdl.HandleClaudeAnalyzeElements)
+				claude.GET("/analyze-elements/status/:taskId", m.textHdl.HandleClaudeAnalyzeElementsStatus)
 				claude.GET("/generate-shots-logs", m.textHdl.ListGenerateShotsLogs)
 				claude.GET("/generate-shots-logs/:id", m.textHdl.GetGenerateShotsLog)
 			}
