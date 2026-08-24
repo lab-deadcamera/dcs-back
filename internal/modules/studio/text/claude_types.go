@@ -364,18 +364,19 @@ type ListShotBuilderLogsRequest struct {
 // ─── Proncer ─────────────────────────────────────────────────────
 
 type ClaudeOptimizePromptRequest struct {
-	SceneID          string        `json:"scene_id" binding:"required"`
-	ProjectID        string        `json:"project_id" binding:"required"`
-	Model            string        `json:"model"`
-	APIModel         string        `json:"api_model"`
-	CurrentPrompt    string        `json:"current_prompt" binding:"required"`
-	UserInstructions string        `json:"user_instructions"`
-	SystemPrompt     string        `json:"system_prompt"`
-	SkillID          string        `json:"skill_id"`
-	UserID           int           `json:"user_id"`
-	UserName         string        `json:"user_name"`
-	ShotContext      *ShotContext  `json:"shot_context,omitempty"`
-	SceneContext     *SceneContext `json:"scene_context,omitempty"`
+	SceneID          string          `json:"scene_id" binding:"required"`
+	ProjectID        string          `json:"project_id" binding:"required"`
+	Model            string          `json:"model"`
+	APIModel         string          `json:"api_model"`
+	CurrentPrompt    string          `json:"current_prompt" binding:"required"`
+	UserInstructions string          `json:"user_instructions"`
+	SystemPrompt     string          `json:"system_prompt"`
+	SkillID          string          `json:"skill_id"`
+	UserID           int             `json:"user_id"`
+	UserName         string          `json:"user_name"`
+	ShotContext       *ShotContext    `json:"shot_context,omitempty"`
+	SceneContext      *SceneContext   `json:"scene_context,omitempty"`
+	ElementRegistry   []ElementEntity `json:"element_registry,omitempty"`
 }
 
 type ShotContext struct {
