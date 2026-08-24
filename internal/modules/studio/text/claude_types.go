@@ -377,6 +377,7 @@ type ClaudeOptimizePromptRequest struct {
 	ShotContext       *ShotContext    `json:"shot_context,omitempty"`
 	SceneContext      *SceneContext   `json:"scene_context,omitempty"`
 	ElementRegistry   []ElementEntity `json:"element_registry,omitempty"`
+	ReferenceFiles    []string        `json:"reference_files,omitempty"`
 }
 
 type ShotContext struct {

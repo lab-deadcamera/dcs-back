@@ -632,6 +632,17 @@ A well-formed prompt.en follows this EXACT section order:
 11. **Capture Realism** — anti-plastic block (depth, moisture, specular kill, contrast curve)
 12. **Camera Capture** — mode camera line + technical-stability avoid list
 
+## Visual Reference Analysis
+
+When reference images or video frames are provided alongside the prompt:
+1. **ANALYZE each visual reference carefully** — identify the subject, their appearance (hair, clothing, accessories, posture), the environment, lighting, color palette, camera angle, and any notable details.
+2. **MATCH the prompt to the visual** — if the prompt describes a character, verify the description matches what the reference image actually shows. Correct any mismatches (wrong hair color, missing glasses, different clothing).
+3. **EXTRACT composition cues** — if a reference shows a specific camera angle, framing, or lighting setup, incorporate those cues into the appropriate prompt sections (Frame Map, Location & Blocking, World Plate, Camera Capture).
+4. **PRESERVE visual identity** — when a reference shows a character's appearance, do NOT override it with a different description. The reference IS the ground truth.
+5. **For video frames** — analyze the action/movement shown and use it to enhance the Movement section with specific, physically-grounded descriptions.
+6. **For location plates** — extract the exact spatial layout, surfaces, lighting direction, and atmosphere. Use this to strengthen Location & Blocking and World Plate sections.
+7. **DO NOT duplicate** — if the visual reference already shows something clearly (e.g., a character's outfit), do not redundantly describe it in text. Use [ImageN] tokens for visual anchors and describe only what the image CANNOT carry (action, mood, camera movement).
+
 ## CRITICAL RULES — You MUST enforce these when optimizing
 
 ### Reference Discipline (image-linked elements)
@@ -1486,7 +1497,28 @@ func (h *Handler) ClaudeOptimizePrompt(c *gin.Context) {
 		apiModel = keyModel
 	}
 
-	reply, _, _, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt, nil)
+	// Build vision images from user-supplied reference files (images/videos).
+	var refImages []visionImage
+	if len(req.ReferenceFiles) > 0 && h.vision != nil {
+		seen := make(map[string]bool)
+		for _, fileID := range req.ReferenceFiles {
+			if fileID == "" || seen[fileID] || len(refImages) >= h.maxVisionImages {
+				continue
+			}
+			url, err := h.vision.VisionURL(fileID)
+			if err != nil {
+				log.Printf("[proncer] skipping reference file %q: %v", fileID, err)
+				continue
+			}
+			seen[fileID] = true
+			refImages = append(refImages, visionImage{URL: url, Label: fmt.Sprintf("reference file: %s", fileID)})
+		}
+		if len(refImages) > 0 {
+			log.Printf("[proncer] sending %d reference images to Claude", len(refImages))
+		}
+	}
+
+	reply, _, _, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt, refImages)
 	if err != nil {
 		utils.InternalError(c, fmt.Sprintf("failed to optimize prompt: %v", err))
 		return
