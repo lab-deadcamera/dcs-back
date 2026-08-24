@@ -304,11 +304,31 @@ func buildClosedWorldBlock(registry []ElementEntity) string {
 		case e.UserDecision != nil && e.UserDecision.Type == "abstract":
 			line += ": render as abstract/atmospheric presence only — no concrete form"
 		default:
-			line += ": status " + e.DefinitionStatus
+			if e.LinkedAssetID != "" {
+				line += ": auto-linked visual reference — USE the [ImageN] token, do NOT describe appearance in text"
+			} else {
+				line += ": status " + e.DefinitionStatus
+			}
 		}
 		b.WriteString(line + "\n")
 	}
 
-	b.WriteString("\nDo NOT introduce new named visual elements beyond this registry. Do NOT contradict any rule above.\n")
+	b.WriteString(`
+## CRITICAL — Reference Discipline (image-linked elements)
+
+When an element has a VISUAL REFERENCE IMAGE (linked_asset_id is set), the prompt.en MUST follow these rules:
+
+1. **USE ONLY the [ImageN] token** for that element in the prompt. The video generator reads the reference image for visual appearance.
+2. **DO NOT include appearance descriptions** (hair color, clothing, facial features, body type, skin tone, age, wardrobe) alongside the [ImageN] token. Describing appearance that the image already carries forces the generator to REINTERPRET and REDRAW the element, breaking visual consistency.
+3. **Describe only ACTION and BEHAVIOR** — what the element does, how it moves, where it looks, what it interacts with. The image carries the "what it looks like"; the text carries the "what it does".
+4. **State-changes ONLY** — the only appearance details allowed are things the reference image CANNOT carry: damp/torn/dusty/bloodied, objects in hands, eyes closed vs open, mouth open vs closed. These are state-changes, not descriptions.
+5. **Elements WITHOUT a visual reference** (invent_free, define_with_text, abstract, undefined) may be described freely in text.
+
+GOOD: "[Image4] stares at the screen, jaw clenched, fingers frozen above the keyboard."
+BAD:  "[Image4] a young man with dark hair and glasses stares at the screen, jaw clenched."
+      (The image already shows what he looks like — the text description causes the generator to redesign him.)
+
+Do NOT introduce new named visual elements beyond this registry. Do NOT contradict any rule above.
+`)
 	return b.String()
 }
