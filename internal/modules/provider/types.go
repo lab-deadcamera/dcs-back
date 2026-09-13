@@ -45,11 +45,23 @@ type Model struct {
 	DefaultAssetGroupID string     `json:"default_asset_group_id"`
 	ProjectName         string     `json:"project_name"`
 	ProjectNumber       string     `json:"project_number"`
-	Active              bool       `json:"active"`
-	Favorite            bool       `json:"favorite"`
-	CreatedAt           time.Time  `json:"created_at"`
-	UpdatedAt           time.Time  `json:"updated_at"`
-	DeletedAt           *time.Time `json:"deleted_at"`
+	// Config holds per-model settings as JSONB (e.g. video models declare
+	// their min/max videos per generation). Always non-nil.
+	Config    ModelConfig `json:"config"`
+	Active    bool        `json:"active"`
+	Favorite  bool        `json:"favorite"`
+	CreatedAt time.Time   `json:"created_at"`
+	UpdatedAt time.Time   `json:"updated_at"`
+	DeletedAt *time.Time  `json:"deleted_at"`
+}
+
+// ModelConfig holds per-model configuration stored in the models.config
+// JSONB column. Video models use MinVideos/MaxVideos to declare the valid
+// range for the request's quantity field (number of videos per generation).
+// Zero values mean "no limit configured".
+type ModelConfig struct {
+	MinVideos int `json:"min_videos,omitempty"`
+	MaxVideos int `json:"max_videos,omitempty"`
 }
 
 type ModelWithProvider struct {
@@ -83,6 +95,7 @@ type CreateModelRequest struct {
 	DefaultAssetGroupID string `json:"default_asset_group_id"`
 	ProjectName         string `json:"project_name"`
 	ProjectNumber       string `json:"project_number"`
+	Config              *ModelConfig `json:"config"`
 	Active              *bool  `json:"active"`
 }
 
@@ -102,7 +115,8 @@ type UpdateModelRequest struct {
 	AccessKeyID         *string `json:"access_key_id"`
 	SecretAccessKey     *string `json:"secret_access_key"`
 	DefaultAssetGroupID *string `json:"default_asset_group_id"`
-	ProjectName         *string `json:"project_name"`
-	ProjectNumber       *string `json:"project_number"`
-	Active              *bool   `json:"active"`
+	ProjectName         *string       `json:"project_name"`
+	ProjectNumber       *string       `json:"project_number"`
+	Config              *ModelConfig  `json:"config"`
+	Active              *bool         `json:"active"`
 }

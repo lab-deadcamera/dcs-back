@@ -283,6 +283,13 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 		genReq.GenerateAudio = *req.GenerateAudio
 	}
 
+	// Validate quantity (number of videos) against the model's configured
+	// min/max videos from its config JSONB.
+	if err := enforceVideoLimits(genReq, m.Config); err != nil {
+		errLog = err.Error()
+		return nil, err
+	}
+
 	// Pick generator
 	gen := s.pickGenerator(m.Name)
 	if gen == nil {
