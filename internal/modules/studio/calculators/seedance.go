@@ -24,6 +24,10 @@ import (
 //	dreamina-seedance-2-0-fast-260128:
 //	  With Video: 480p/720p = 3.30
 //	  Without:    480p = 5.80 | 720p = 6.60
+//
+//	dreamina-seedance-2-5-260628:
+//	  With Video: 480p/720p = 6.40
+//	  Without:    480p/720p = 10.70
 type SeedanceCalculator struct{}
 
 func NewSeedanceCalculator() *SeedanceCalculator {
@@ -97,45 +101,55 @@ if inputDuration < 0 { inputDuration = 0 }
 
 func (c *SeedanceCalculator) NeedsBackgroundCalc() bool { return false }
 
-// seedanceUnitPrice returns the price per million tokens for the given model config.
-func seedanceUnitPrice(req *studio.GeneratorRequest) float64 {
-	isFast := strings.Contains(strings.ToLower(req.Model), "fast")
-
-	// Detect if input video/reference media is present
-	hasInputVideo := false
+// hasSeedanceInputMedia reports whether the request carries reference media
+// (image/video), which switches Seedance pricing to the "input includes
+// video" rate tier.
+func hasSeedanceInputMedia(req *studio.GeneratorRequest) bool {
 	for _, item := range req.Content {
 		if item.Type == "video" || item.Type == "image" {
-			hasInputVideo = true
-			break
+			return true
 		}
+	}
+	return false
+}
+
+// seedanceUnitPrice returns the price per million tokens for the given model config.
+func seedanceUnitPrice(req *studio.GeneratorRequest) float64 {
+	lower := strings.ToLower(req.Model)
+	isFast := strings.Contains(lower, "fast")
+
+	// Seedance 2.5 has its own price table (published for 480p/720p only).
+	if strings.Contains(lower, "dreamina-seedance-2-5") {
+		if hasSeedanceInputMedia(req) {
+			return 6.40
+		}
+		return 10.70
 	}
 
 	switch {
-	case !isFast && hasInputVideo:
+	case !isFast && hasSeedanceInputMedia(req):
 		switch req.Resolution {
 		case "1080p":
 			return 4.70
 		default: // 480p, 720p
 			return 4.30
 		}
-	case !isFast && !hasInputVideo:
+	case !isFast:
 		switch req.Resolution {
 		case "1080p":
 			return 7.70
 		default: // 480p, 720p
 			return 7.00
 		}
-	case isFast && hasInputVideo:
+	case hasSeedanceInputMedia(req): // fast, with input media
 		return 3.30
-	case isFast && !hasInputVideo:
+	default: // fast, without input media
 		switch req.Resolution {
 		case "720p":
 			return 6.60
 		default: // 480p
 			return 5.80
 		}
-	default:
-		return 0
 	}
 }
 

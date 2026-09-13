@@ -1,0 +1,327 @@
+package generators
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"dcs-back-v0/config"
+	"dcs-back-v0/internal/modules/studio"
+	"dcs-back-v0/internal/utils"
+)
+
+// nameModelDreaminaSeedance25 is the BytePlus ModelArk model ID for
+// Dreamina Seedance 2.5. Match() uses partial matching so suffixed variants
+// (e.g. custom DB rows) also route to this generator.
+var nameModelDreaminaSeedance25 = "dreamina-seedance-2-5-260628"
+
+// ─── Seedance25Generator ────────────────────────────────────────
+
+// Seedance25Generator handles Dreamina Seedance 2.5 video generation via the
+// BytePlus ModelArk async video API (same task lifecycle as Seedance 2.0:
+// create task → poll status → cancel).
+type Seedance25Generator struct {
+	httpClient *http.Client
+	logStore   *studio.GenerationLogStore
+}
+
+func NewSeedance25Generator() *Seedance25Generator {
+	return &Seedance25Generator{
+		httpClient: &http.Client{Timeout: 120 * time.Second},
+	}
+}
+
+func (g *Seedance25Generator) SetLogStore(store *studio.GenerationLogStore) {
+	g.logStore = store
+}
+
+func (g *Seedance25Generator) Name() string { return nameModelDreaminaSeedance25 }
+
+func (g *Seedance25Generator) ContentType() string { return "video" }
+
+func (g *Seedance25Generator) Match(modelName string) bool {
+	lower := strings.ToLower(modelName)
+	return strings.Contains(lower, nameModelDreaminaSeedance25)
+}
+
+func (g *Seedance25Generator) Validate(req *studio.GeneratorRequest) error {
+	errs := studio.ValidateCommon(req)
+	if errs.HasErrors() {
+		return errs
+	}
+
+	// Seedance 2.5 supports 4–30 second outputs.
+	if req.Duration < 4 || req.Duration > 30 {
+		errs.Add("duration", "must be between 4 and 30 seconds")
+	}
+	if req.Ratio != "" && !ValidRatios[req.Ratio] {
+		errs.Add("ratio", "unsupported value: "+req.Ratio)
+	}
+	if req.Resolution != "" && !ValidResolutionsVideo[req.Resolution] {
+		errs.Add("resolution", "must be one of: 480p, 720p, 1080p")
+	}
+	if req.GenerateAudio && IsFastModel(req.Model) {
+		errs.Add("generate_audio", "only supported on pro models (non-fast)")
+	}
+
+	if errs.HasErrors() {
+		return errs
+	}
+	return nil
+}
+
+func (g *Seedance25Generator) Generate(req *studio.GeneratorRequest) (*studio.GeneratorResult, error) {
+	payload := g.BuildPayload(req)
+
+	result, err := g.arkRequest(req.BaseURL+req.Endpoint, "POST", payload, req.APIKey)
+	if err != nil {
+		return nil, err
+	}
+
+	taskID, _ := result["id"].(string)
+	if taskID == "" {
+		taskID, _ = result["task_id"].(string)
+	}
+	if taskID == "" {
+		return nil, fmt.Errorf("no task ID in response")
+	}
+
+	return &studio.GeneratorResult{
+		TaskID:  taskID,
+		Model:   req.Model,
+		Status:  "running",
+		Outputs: []studio.OutputResource{},
+		Raw:     result,
+	}, nil
+}
+
+func (g *Seedance25Generator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*studio.GeneratorResult, error) {
+	result, err := g.arkRequest(baseURL+endpoint+"/"+taskID, "GET", nil, apiKey)
+	if err != nil {
+		return nil, err
+	}
+
+	status, _ := result["status"].(string)
+
+	if status == config.STATUS_SUCCESS {
+		videoURL := g.findVideoURL(result, 0)
+		if videoURL != "" {
+			localName := fmt.Sprintf("seedance25_%d_%s.mp4", time.Now().UnixMilli(), taskID)
+			if g.logStore != nil {
+				log, err := g.logStore.GetByTaskID(taskID)
+				if err == nil && log != nil {
+					localName = fmt.Sprintf("%s_%s_%s_T%d_%s_%s_%d.mp4", log.ProjectName, log.SceneCode, safeShortID(log.ShotID, 0, 8), log.TakeNumber, log.UserName, safeShortID(taskID, 0, 12), time.Now().UnixMilli())
+				}
+			}
+			outputs := []studio.OutputResource{{
+				URL:  videoURL,
+				Type: "video",
+			}}
+
+			localURL, err := utils.SaveURLOutput(videoURL, localName)
+			if err == nil {
+				outputs[0].LocalURL = localURL
+			}
+
+			return &studio.GeneratorResult{
+				TaskID:  taskID,
+				Model:   nameModelDreaminaSeedance25,
+				Status:  status,
+				Outputs: outputs,
+				Raw:     result,
+			}, nil
+		}
+
+		return &studio.GeneratorResult{
+			TaskID:  taskID,
+			Model:   nameModelDreaminaSeedance25,
+			Status:  "succeeded_no_url",
+			Outputs: []studio.OutputResource{},
+			Raw:     result,
+			Error:   "Job succeeded but no video URL was found in the response.",
+		}, nil
+	}
+
+	if status == config.STATUS_FAILED {
+		errorMsg, _ := result["error"].(string)
+		if errorMsg == "" {
+			if e, ok := result["error"].(map[string]interface{}); ok {
+				errorMsg, _ = e["message"].(string)
+			}
+		}
+		return &studio.GeneratorResult{
+			TaskID:  taskID,
+			Model:   nameModelDreaminaSeedance25,
+			Status:  status,
+			Outputs: []studio.OutputResource{},
+			Raw:     result,
+			Error:   errorMsg,
+		}, nil
+	}
+
+	return &studio.GeneratorResult{
+		TaskID:  taskID,
+		Model:   nameModelDreaminaSeedance25,
+		Status:  status,
+		Outputs: []studio.OutputResource{},
+		Raw:     result,
+	}, nil
+}
+
+func (g *Seedance25Generator) CancelTask(taskID, apiKey, baseURL, endpoint string) error {
+	_, err := g.arkRequest(baseURL+endpoint+"/"+taskID, "DELETE", nil, apiKey)
+	return err
+}
+
+func (g *Seedance25Generator) BuildPayload(req *studio.GeneratorRequest) map[string]interface{} {
+	content := make([]map[string]interface{}, 0)
+
+	textPart := studio.CompileContentText(req.Content)
+
+	content = append(content, map[string]interface{}{
+		"type": "text",
+		"text": textPart,
+	})
+
+	for _, item := range req.Content {
+		switch item.Type {
+		case "image":
+			if item.DataURL == "" {
+				continue
+			}
+			content = append(content, map[string]interface{}{
+				"type":      "image_url",
+				"image_url": map[string]string{"url": item.DataURL},
+				"role":      "reference_image",
+			})
+		case "video":
+			if item.DataURL == "" {
+				continue
+			}
+			content = append(content, map[string]interface{}{
+				"type":      "video_url",
+				"video_url": map[string]string{"url": item.DataURL},
+				"role":      "reference_video",
+			})
+		case "audio":
+			if item.DataURL == "" {
+				continue
+			}
+			content = append(content, map[string]interface{}{
+				"type":      "audio_url",
+				"audio_url": map[string]string{"url": item.DataURL},
+				"role":      "reference_audio",
+			})
+		}
+	}
+
+	duration := req.Duration
+	if duration <= 0 {
+		duration = 5
+	}
+
+	payload := map[string]interface{}{
+		"model":          nameModelDreaminaSeedance25,
+		"content":        content,
+		"duration":       duration,
+		"camerafixed":    req.CameraFixed,
+		"watermark":      req.Watermark,
+		"generate_audio": req.GenerateAudio,
+	}
+
+	if req.Ratio != "" {
+		payload["ratio"] = req.Ratio
+	}
+	if req.Resolution != "" {
+		payload["resolution"] = req.Resolution
+	}
+	if !req.GenerateAudio {
+		payload["generate_audio"] = false
+	}
+
+	return payload
+}
+
+func (g *Seedance25Generator) arkRequest(url, method string, body interface{}, apiKey string) (map[string]interface{}, error) {
+	var bodyBytes []byte
+	if body != nil {
+		var err error
+		bodyBytes, err = json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal body: %w", err)
+		}
+	}
+
+	req, err := http.NewRequest(method, url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := g.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(respBytes, &result); err != nil {
+		return nil, fmt.Errorf("%s: %s", nameModelDreaminaSeedance25, string(respBytes))
+	}
+
+	if resp.StatusCode >= 400 {
+		msg := studio.ExtractError(result, string(respBytes))
+		return nil, fmt.Errorf("%s %d: %s", nameModelDreaminaSeedance25, resp.StatusCode, msg)
+	}
+
+	return result, nil
+}
+
+func (g *Seedance25Generator) findVideoURL(obj interface{}, depth int) string {
+	if obj == nil || depth > 6 {
+		return ""
+	}
+	switch v := obj.(type) {
+	case string:
+		if VideoURLPattern.MatchString(v) {
+			if strings.HasSuffix(strings.SplitN(v, "?", 2)[0], ".mp4") ||
+				strings.Contains(v, "tos-") ||
+				strings.Contains(v, "bytepluses.com") ||
+				strings.Contains(v, "volces.com") ||
+				strings.Contains(v, "byteimg.com") {
+				return v
+			}
+		}
+		return ""
+	case []interface{}:
+		for _, item := range v {
+			if found := g.findVideoURL(item, depth+1); found != "" {
+				return found
+			}
+		}
+		return ""
+	case map[string]interface{}:
+		for _, k := range []string{"video_url", "videoUrl", "url", "video"} {
+			if s, ok := v[k].(string); ok && VideoURLPattern.MatchString(s) {
+				return s
+			}
+		}
+		for _, val := range v {
+			if found := g.findVideoURL(val, depth+1); found != "" {
+				return found
+			}
+		}
+		return ""
+	}
+	return ""
+}
