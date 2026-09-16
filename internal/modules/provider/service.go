@@ -193,6 +193,15 @@ func normalizeModelConfig(c *ModelConfig) ModelConfig {
 	if n.MaxVideos > 0 && n.MaxVideos < n.MinVideos {
 		n.MaxVideos = n.MinVideos
 	}
+	if n.MinDuration < 0 {
+		n.MinDuration = 0
+	}
+	if n.MaxDuration < 0 {
+		n.MaxDuration = 0
+	}
+	if n.MaxDuration > 0 && n.MaxDuration < n.MinDuration {
+		n.MaxDuration = n.MinDuration
+	}
 	return n
 }
 

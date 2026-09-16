@@ -12,6 +12,7 @@ func TestEnforceVideoLimits(t *testing.T) {
 		name      string
 		config    provider.ModelConfig
 		quantity  int
+		duration  int
 		wantErr   bool
 		wantQty   int
 		errSubstr string
@@ -74,6 +75,29 @@ func TestEnforceVideoLimits(t *testing.T) {
 			wantErr:   true,
 			errSubstr: "at least 2",
 		},
+		{
+			name:      "duration below configured minimum",
+			config:    provider.ModelConfig{MinDuration: 4},
+			quantity:  1,
+			duration:  3,
+			wantErr:   true,
+			errSubstr: "duration must be at least 4",
+		},
+		{
+			name:      "duration above configured maximum",
+			config:    provider.ModelConfig{MaxDuration: 15},
+			quantity:  1,
+			duration:  16,
+			wantErr:   true,
+			errSubstr: "duration must be at most 15",
+		},
+		{
+			name:     "duration within configured range",
+			config:   provider.ModelConfig{MinDuration: 4, MaxDuration: 30},
+			quantity: 1,
+			duration: 12,
+			wantQty:  1,
+		},
 	}
 
 	for _, tc := range tests {
@@ -81,6 +105,7 @@ func TestEnforceVideoLimits(t *testing.T) {
 			req := &GeneratorRequest{
 				Model:    "dreamina-seedance-2-5-260628",
 				Quantity: tc.quantity,
+				Duration: tc.duration,
 				Content:  []ContentItem{{Type: "text", Text: "a prompt"}},
 			}
 			err := enforceVideoLimits(req, tc.config)

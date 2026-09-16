@@ -57,11 +57,14 @@ type Model struct {
 
 // ModelConfig holds per-model configuration stored in the models.config
 // JSONB column. Video models use MinVideos/MaxVideos to declare the valid
-// range for the request's quantity field (number of videos per generation).
+// range for the request's quantity field (number of videos per generation),
+// and MinDuration/MaxDuration the valid output duration in seconds.
 // Zero values mean "no limit configured".
 type ModelConfig struct {
-	MinVideos int `json:"min_videos,omitempty"`
-	MaxVideos int `json:"max_videos,omitempty"`
+	MinVideos   int `json:"min_videos,omitempty"`
+	MaxVideos   int `json:"max_videos,omitempty"`
+	MinDuration int `json:"min_duration,omitempty"`
+	MaxDuration int `json:"max_duration,omitempty"`
 }
 
 type ModelWithProvider struct {
