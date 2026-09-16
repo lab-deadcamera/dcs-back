@@ -10,6 +10,7 @@ import "strings"
 //   - DataURL is replaced with the model-specific reference URI
 var GalleryModels = []string{
 	"dreamina-seedance-2-0-gallery",
+	"dreamina-seedance-2-5-260628",
 }
 
 // IsGalleryModel returns true if the given model name matches any registered gallery model.
