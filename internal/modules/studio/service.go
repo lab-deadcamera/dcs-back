@@ -247,7 +247,7 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 	modelName = m.Name
 
 	// Resolve file IDs in content to data URLs (or asset:// URIs if synced)
-	resolvedContent, err := s.resolveContent(req.Content, m.ID)
+	resolvedContent, err := s.resolveContent(req.Content, s.syncModelID(m))
 	if err != nil {
 		errLog = fmt.Sprintf("failed to resolve content: %v", err)
 		return nil, fmt.Errorf("failed to resolve content: %w", err)
@@ -1697,7 +1697,7 @@ func (s *Service) PreviewPayload(req *StudioGenerateRequest) (*PreviewPayloadRes
 		return nil, fmt.Errorf("model not found: %s", req.Model)
 	}
 
-	resolvedContent, err := s.resolveContent(req.Content, m.ID)
+	resolvedContent, err := s.resolveContent(req.Content, s.syncModelID(m))
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve content: %w", err)
 	}
@@ -1798,6 +1798,21 @@ func (s *Service) notifyTaskCompletion(userID int, info taskNotifyInfo) {
 		"type":    ntype,
 		"task_id": info.TaskID,
 	})
+}
+
+// syncModelID returns the model ID that owns the gallery sync records for m.
+// Models that share a gallery are keyed by their canonical owner's model_id,
+// so a file synced by any member is reused by the rest.
+func (s *Service) syncModelID(m *provider.Model) string {
+	ownerName := GalleryOwnerModel(m.Name)
+	if ownerName == m.Name || s.providerStore == nil {
+		return m.ID
+	}
+	owner, err := s.providerStore.GetModelByName(ownerName)
+	if err != nil || owner == nil {
+		return m.ID
+	}
+	return owner.ID
 }
 
 func (s *Service) resolveContent(items []ContentItem, modelID string) ([]ContentItem, error) {
@@ -1906,6 +1921,19 @@ func (s *Service) GallerySyncContent(items []ContentItem, modelName string) ([]C
 	if m == nil {
 		log.Printf("[gallery-sync] model %q not found in DB", modelName)
 		return nil, fmt.Errorf("model not found")
+	}
+
+	// Models that share a gallery sync against the canonical owner model, so
+	// model_assets stays keyed by a single model_id and every member reuses
+	// the same assets.
+	if ownerName := GalleryOwnerModel(modelName); ownerName != modelName {
+		owner, oErr := s.providerStore.GetModelByName(ownerName)
+		if oErr != nil || owner == nil {
+			log.Printf("[gallery-sync] gallery owner %q not found: %v", ownerName, oErr)
+			return nil, fmt.Errorf("failed to resolve gallery owner model %q", ownerName)
+		}
+		log.Printf("[gallery-sync] model %q shares gallery with owner %q -> using model_id %s", modelName, ownerName, owner.ID)
+		m = owner
 	}
 
 	if ak, sk, _ := s.effectiveCredentials(m); ak == "" || sk == "" {
