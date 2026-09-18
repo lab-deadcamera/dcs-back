@@ -202,7 +202,30 @@ func normalizeModelConfig(c *ModelConfig) ModelConfig {
 	if n.MaxDuration > 0 && n.MaxDuration < n.MinDuration {
 		n.MaxDuration = n.MinDuration
 	}
+	n.AspectRatios = normalizeStringList(n.AspectRatios)
+	n.Resolutions = normalizeStringList(n.Resolutions)
 	return n
+}
+
+// normalizeStringList trims whitespace, drops empty entries and duplicates.
+func normalizeStringList(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(values))
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (s *Service) GetFavorite() (*Model, error) {

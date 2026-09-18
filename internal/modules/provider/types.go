@@ -59,12 +59,16 @@ type Model struct {
 // JSONB column. Video models use MinVideos/MaxVideos to declare the valid
 // range for the request's quantity field (number of videos per generation),
 // and MinDuration/MaxDuration the valid output duration in seconds.
-// Zero values mean "no limit configured".
+// AspectRatios/Resolutions declare the output formats the model supports;
+// empty slices mean "no restriction configured".
+// Zero values / empty slices mean "no limit configured".
 type ModelConfig struct {
-	MinVideos   int `json:"min_videos,omitempty"`
-	MaxVideos   int `json:"max_videos,omitempty"`
-	MinDuration int `json:"min_duration,omitempty"`
-	MaxDuration int `json:"max_duration,omitempty"`
+	MinVideos    int      `json:"min_videos,omitempty"`
+	MaxVideos    int      `json:"max_videos,omitempty"`
+	MinDuration  int      `json:"min_duration,omitempty"`
+	MaxDuration  int      `json:"max_duration,omitempty"`
+	AspectRatios []string `json:"aspect_ratios,omitempty"`
+	Resolutions  []string `json:"resolutions,omitempty"`
 }
 
 type ModelWithProvider struct {

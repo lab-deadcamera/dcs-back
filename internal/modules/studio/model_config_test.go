@@ -9,13 +9,15 @@ import (
 
 func TestEnforceVideoLimits(t *testing.T) {
 	tests := []struct {
-		name      string
-		config    provider.ModelConfig
-		quantity  int
-		duration  int
-		wantErr   bool
-		wantQty   int
-		errSubstr string
+		name        string
+		config      provider.ModelConfig
+		quantity    int
+		duration    int
+		ratio       string
+		resolution  string
+		wantErr     bool
+		wantQty     int
+		errSubstr   string
 	}{
 		{
 			name:     "no config, unset quantity defaults to 1",
@@ -98,15 +100,47 @@ func TestEnforceVideoLimits(t *testing.T) {
 			duration: 12,
 			wantQty:  1,
 		},
+		{
+			name:      "aspect ratio not allowed",
+			config:    provider.ModelConfig{AspectRatios: []string{"16:9"}},
+			quantity:  1,
+			ratio:     "9:16",
+			wantErr:   true,
+			errSubstr: "aspect ratio",
+		},
+		{
+			name:     "aspect ratio allowed",
+			config:   provider.ModelConfig{AspectRatios: []string{"16:9", "9:16"}},
+			quantity: 1,
+			ratio:    "9:16",
+			wantQty:  1,
+		},
+		{
+			name:      "resolution not allowed",
+			config:    provider.ModelConfig{Resolutions: []string{"480p", "720p"}},
+			quantity:  1,
+			resolution: "1080p",
+			wantErr:   true,
+			errSubstr: "resolution",
+		},
+		{
+			name:     "resolution allowed",
+			config:   provider.ModelConfig{Resolutions: []string{"480p", "720p"}},
+			quantity: 1,
+			resolution: "720p",
+			wantQty:  1,
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			req := &GeneratorRequest{
-				Model:    "dreamina-seedance-2-5-260628",
-				Quantity: tc.quantity,
-				Duration: tc.duration,
-				Content:  []ContentItem{{Type: "text", Text: "a prompt"}},
+				Model:      "dreamina-seedance-2-5-260628",
+				Quantity:   tc.quantity,
+				Duration:   tc.duration,
+				Ratio:      tc.ratio,
+				Resolution: tc.resolution,
+				Content:    []ContentItem{{Type: "text", Text: "a prompt"}},
 			}
 			err := enforceVideoLimits(req, tc.config)
 			if tc.wantErr {
