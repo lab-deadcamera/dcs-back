@@ -14,42 +14,49 @@ import (
 	"dcs-back-v0/internal/utils"
 )
 
-var nameModeldreaminaGallery = "dreamina-seedance-2-0-gallery"
+// nameModelDreaminaSeedance25 is the BytePlus ModelArk model ID for
+// Dreamina Seedance 2.5. Match() uses partial matching so suffixed variants
+// (e.g. custom DB rows) also route to this generator.
+var nameModelDreaminaSeedance25 = "dreamina-seedance-2-5-260628"
 
-// ─── SeedanceGalleryGenerator// ─── SeedanceGalleryGenerator ────────────────────────────────────
+// ─── Seedance25Generator ────────────────────────────────────────
 
-type SeedanceGalleryGenerator struct {
+// Seedance25Generator handles Dreamina Seedance 2.5 video generation via the
+// BytePlus ModelArk async video API (same task lifecycle as Seedance 2.0:
+// create task → poll status → cancel).
+type Seedance25Generator struct {
 	httpClient *http.Client
 	logStore   *studio.GenerationLogStore
 }
 
-func NewSeedanceGalleryGenerator() *SeedanceGalleryGenerator {
-	return &SeedanceGalleryGenerator{
+func NewSeedance25Generator() *Seedance25Generator {
+	return &Seedance25Generator{
 		httpClient: &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
-func (g *SeedanceGalleryGenerator) SetLogStore(store *studio.GenerationLogStore) {
+func (g *Seedance25Generator) SetLogStore(store *studio.GenerationLogStore) {
 	g.logStore = store
 }
 
-func (g *SeedanceGalleryGenerator) Name() string { return nameModeldreaminaGallery }
+func (g *Seedance25Generator) Name() string { return nameModelDreaminaSeedance25 }
 
-func (g *SeedanceGalleryGenerator) ContentType() string { return "video" }
+func (g *Seedance25Generator) ContentType() string { return "video" }
 
-func (g *SeedanceGalleryGenerator) Match(modelName string) bool {
+func (g *Seedance25Generator) Match(modelName string) bool {
 	lower := strings.ToLower(modelName)
-	return strings.Contains(lower, nameModeldreaminaGallery)
+	return strings.Contains(lower, nameModelDreaminaSeedance25)
 }
 
-func (g *SeedanceGalleryGenerator) Validate(req *studio.GeneratorRequest) error {
+func (g *Seedance25Generator) Validate(req *studio.GeneratorRequest) error {
 	errs := studio.ValidateCommon(req)
 	if errs.HasErrors() {
 		return errs
 	}
 
-	if req.Duration < 1 || req.Duration > 60 {
-		errs.Add("duration", "must be between 1 and 60 seconds")
+	// Seedance 2.5 supports 4–30 second outputs.
+	if req.Duration < 4 || req.Duration > 30 {
+		errs.Add("duration", "must be between 4 and 30 seconds")
 	}
 	if req.Ratio != "" && !ValidRatios[req.Ratio] {
 		errs.Add("ratio", "unsupported value: "+req.Ratio)
@@ -67,7 +74,7 @@ func (g *SeedanceGalleryGenerator) Validate(req *studio.GeneratorRequest) error 
 	return nil
 }
 
-func (g *SeedanceGalleryGenerator) Generate(req *studio.GeneratorRequest) (*studio.GeneratorResult, error) {
+func (g *Seedance25Generator) Generate(req *studio.GeneratorRequest) (*studio.GeneratorResult, error) {
 	payload := g.BuildPayload(req)
 
 	result, err := g.arkRequest(req.BaseURL+req.Endpoint, "POST", payload, req.APIKey)
@@ -92,7 +99,7 @@ func (g *SeedanceGalleryGenerator) Generate(req *studio.GeneratorRequest) (*stud
 	}, nil
 }
 
-func (g *SeedanceGalleryGenerator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*studio.GeneratorResult, error) {
+func (g *Seedance25Generator) GetStatus(taskID, apiKey, baseURL, endpoint string) (*studio.GeneratorResult, error) {
 	result, err := g.arkRequest(baseURL+endpoint+"/"+taskID, "GET", nil, apiKey)
 	if err != nil {
 		return nil, err
@@ -103,7 +110,7 @@ func (g *SeedanceGalleryGenerator) GetStatus(taskID, apiKey, baseURL, endpoint s
 	if status == config.STATUS_SUCCESS {
 		videoURL := g.findVideoURL(result, 0)
 		if videoURL != "" {
-			localName := fmt.Sprintf("seedance_%d_%s.mp4", time.Now().UnixMilli(), taskID)
+			localName := fmt.Sprintf("seedance25_%d_%s.mp4", time.Now().UnixMilli(), taskID)
 			if g.logStore != nil {
 				log, err := g.logStore.GetByTaskID(taskID)
 				if err == nil && log != nil {
@@ -122,7 +129,7 @@ func (g *SeedanceGalleryGenerator) GetStatus(taskID, apiKey, baseURL, endpoint s
 
 			return &studio.GeneratorResult{
 				TaskID:  taskID,
-				Model:   nameModeldreaminaGallery,
+				Model:   nameModelDreaminaSeedance25,
 				Status:  status,
 				Outputs: outputs,
 				Raw:     result,
@@ -131,7 +138,7 @@ func (g *SeedanceGalleryGenerator) GetStatus(taskID, apiKey, baseURL, endpoint s
 
 		return &studio.GeneratorResult{
 			TaskID:  taskID,
-			Model:   nameModeldreaminaGallery,
+			Model:   nameModelDreaminaSeedance25,
 			Status:  "succeeded_no_url",
 			Outputs: []studio.OutputResource{},
 			Raw:     result,
@@ -139,7 +146,7 @@ func (g *SeedanceGalleryGenerator) GetStatus(taskID, apiKey, baseURL, endpoint s
 		}, nil
 	}
 
-	if status == "failed" {
+	if status == config.STATUS_FAILED {
 		errorMsg, _ := result["error"].(string)
 		if errorMsg == "" {
 			if e, ok := result["error"].(map[string]interface{}); ok {
@@ -148,7 +155,7 @@ func (g *SeedanceGalleryGenerator) GetStatus(taskID, apiKey, baseURL, endpoint s
 		}
 		return &studio.GeneratorResult{
 			TaskID:  taskID,
-			Model:   nameModeldreaminaGallery,
+			Model:   nameModelDreaminaSeedance25,
 			Status:  status,
 			Outputs: []studio.OutputResource{},
 			Raw:     result,
@@ -158,23 +165,20 @@ func (g *SeedanceGalleryGenerator) GetStatus(taskID, apiKey, baseURL, endpoint s
 
 	return &studio.GeneratorResult{
 		TaskID:  taskID,
-		Model:   nameModeldreaminaGallery,
+		Model:   nameModelDreaminaSeedance25,
 		Status:  status,
 		Outputs: []studio.OutputResource{},
 		Raw:     result,
 	}, nil
 }
 
-func (g *SeedanceGalleryGenerator) CancelTask(taskID, apiKey, baseURL, endpoint string) error {
+func (g *Seedance25Generator) CancelTask(taskID, apiKey, baseURL, endpoint string) error {
 	_, err := g.arkRequest(baseURL+endpoint+"/"+taskID, "DELETE", nil, apiKey)
 	return err
 }
 
-func (g *SeedanceGalleryGenerator) BuildPayload(req *studio.GeneratorRequest) map[string]interface{} {
+func (g *Seedance25Generator) BuildPayload(req *studio.GeneratorRequest) map[string]interface{} {
 	content := make([]map[string]interface{}, 0)
-	imageIndex := 0
-	videoIndex := 0
-	audioIndex := 0
 
 	textPart := studio.CompileContentText(req.Content)
 
@@ -194,7 +198,6 @@ func (g *SeedanceGalleryGenerator) BuildPayload(req *studio.GeneratorRequest) ma
 				"image_url": map[string]string{"url": item.DataURL},
 				"role":      "reference_image",
 			})
-			imageIndex++
 		case "video":
 			if item.DataURL == "" {
 				continue
@@ -204,7 +207,6 @@ func (g *SeedanceGalleryGenerator) BuildPayload(req *studio.GeneratorRequest) ma
 				"video_url": map[string]string{"url": item.DataURL},
 				"role":      "reference_video",
 			})
-			videoIndex++
 		case "audio":
 			if item.DataURL == "" {
 				continue
@@ -214,7 +216,6 @@ func (g *SeedanceGalleryGenerator) BuildPayload(req *studio.GeneratorRequest) ma
 				"audio_url": map[string]string{"url": item.DataURL},
 				"role":      "reference_audio",
 			})
-			audioIndex++
 		}
 	}
 
@@ -224,9 +225,8 @@ func (g *SeedanceGalleryGenerator) BuildPayload(req *studio.GeneratorRequest) ma
 	}
 
 	payload := map[string]interface{}{
-		"model":          ModelDreaminaSeedance2,
+		"model":          nameModelDreaminaSeedance25,
 		"content":        content,
-		"ratio":          req.Ratio,
 		"duration":       duration,
 		"camerafixed":    req.CameraFixed,
 		"watermark":      req.Watermark,
@@ -246,7 +246,7 @@ func (g *SeedanceGalleryGenerator) BuildPayload(req *studio.GeneratorRequest) ma
 	return payload
 }
 
-func (g *SeedanceGalleryGenerator) arkRequest(url, method string, body interface{}, apiKey string) (map[string]interface{}, error) {
+func (g *Seedance25Generator) arkRequest(url, method string, body interface{}, apiKey string) (map[string]interface{}, error) {
 	var bodyBytes []byte
 	if body != nil {
 		var err error
@@ -276,18 +276,18 @@ func (g *SeedanceGalleryGenerator) arkRequest(url, method string, body interface
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return nil, fmt.Errorf("%s: %s", nameModeldreaminaGallery, string(respBytes))
+		return nil, fmt.Errorf("%s: %s", nameModelDreaminaSeedance25, string(respBytes))
 	}
 
 	if resp.StatusCode >= 400 {
 		msg := studio.ExtractError(result, string(respBytes))
-		return nil, fmt.Errorf("%s %d: %s", nameModeldreaminaGallery, resp.StatusCode, msg)
+		return nil, fmt.Errorf("%s %d: %s", nameModelDreaminaSeedance25, resp.StatusCode, msg)
 	}
 
 	return result, nil
 }
 
-func (g *SeedanceGalleryGenerator) findVideoURL(obj interface{}, depth int) string {
+func (g *Seedance25Generator) findVideoURL(obj interface{}, depth int) string {
 	if obj == nil || depth > 6 {
 		return ""
 	}

@@ -16,7 +16,7 @@ var ValidRatios = map[string]bool{
 
 // ValidResolutionsVideo lists supported video resolutions.
 var ValidResolutionsVideo = map[string]bool{
-	"480p": true, "720p": true, "1080p": true,
+	"480p": true, "720p": true, "1080p": true, "1440p": true, "2k": true, "4k": true,
 }
 
 // IsFastModel returns true if the model name contains "fast".

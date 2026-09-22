@@ -17,24 +17,30 @@ func TestPromptNoBackticks(t *testing.T) {
 // TestPromptMentionsEpisode verifies the prompt describes the episode→scenes→shots format.
 func TestPromptMentionsEpisode(t *testing.T) {
 	required := []string{
-		"episode",          // episode-level structure
-		"scenes",           // scenes array
-		"scriptNumber",     // script number parsing
-		"scriptLocation",   // INT/EXT location
-		"continuity",       // continuity tracking
-		"shots",            // shots inside scenes
-		"Scene and Mood",   // simplified pre-prompt format
-		"Composition",
-		"Space and Mélange",
-		"Cross-Shot Rule",
-		"Action",
+		"episode",        // episode-level structure
+		"scenes",         // scenes array
+		"scriptNumber",   // script number parsing
+		"scriptLocation", // INT/EXT location
+		"continuity",     // continuity tracking
+		"shots",          // shots inside scenes
+		"Scene & Mood",   // locked pre-prompt grammar (pack-style)
+		"Frame Map",
+		"Location & Blocking",
+		"Cross-Frame Rules",
+		"Cut Timing",
+		"Movement",
 		"Dialogue",
-		"Ending Shot",
-		"Environmental Base",
-		"Sound Layer",
+		"Last Frame",
+		"World Plate",
+		"Sound Bed",
 		"Severe shaking, time flickering, and identity drift were avoided",
-		"micro-fidgeting",  // acting features
+		"micro-fidgeting", // acting features
 		"Anatomical Emotion",
+		"delivery register", // how the line is said (anti-robotic)
+		"Alive from frame one, never statue-still",
+		"watchFor", // per-shot production QA notes
+		"Screen-sides lock",
+		"First-frame continuity",
 	}
 	for _, s := range required {
 		if !strings.Contains(defaultShotBuilderPrompt, s) {
@@ -146,6 +152,62 @@ func TestValidateShotJSON(t *testing.T) {
 				t.Errorf("\n  input: %s\n  got:   %v\n  want:  %v", tc.json, got, tc.valid)
 			}
 		})
+	}
+}
+
+// TestValidateShotJSONCuts verifies per-shot field invariants on cuts.
+func TestValidateShotJSONCuts(t *testing.T) {
+	tests := []struct {
+		json  string
+		valid bool
+		desc  string
+	}{
+		{json: `{"shots":[{"id":"A","cuts":2}]}`, valid: true, desc: "integer cuts valid"},
+		{json: `{"shots":[{"id":"A","cuts":0}]}`, valid: true, desc: "zero cuts valid (continuous take)"},
+		{json: `{"shots":[{"id":"A","cuts":-1}]}`, valid: false, desc: "negative cuts invalid"},
+		{json: `{"shots":[{"id":"A","cuts":1.5}]}`, valid: false, desc: "fractional cuts invalid"},
+		{json: `{"shots":[{"id":"A","cuts":"2"}]}`, valid: false, desc: "string cuts invalid"},
+		{json: `{"shots":[{"id":"A","cuts":null}]}`, valid: false, desc: "null cuts invalid"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			if got := validateShotJSON(tc.json); got != tc.valid {
+				t.Errorf("\n  input: %s\n  got:   %v\n  want:  %v", tc.json, got, tc.valid)
+			}
+		})
+	}
+}
+
+// TestValidateShotJSONPrompt verifies prompt.en invariants.
+func TestValidateShotJSONPrompt(t *testing.T) {
+	tests := []struct {
+		json  string
+		valid bool
+		desc  string
+	}{
+		{json: `{"shots":[{"id":"A","prompt":{"en":"Scene & Mood:\n\nFrame Map:"}}]}`, valid: true, desc: "non-empty prompt.en valid"},
+		{json: `{"shots":[{"id":"A","prompt":{"en":"  "}}]}`, valid: false, desc: "blank prompt.en invalid"},
+		{json: `{"shots":[{"id":"A","prompt":{"en":"Use @image1 as anchor"}}]}`, valid: false, desc: "@imageN forbidden"},
+		{json: `{"shots":[{"id":"A","prompt":{"en":"Use [Image1] as anchor"}}]}`, valid: true, desc: "[ImageN] allowed"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			if got := validateShotJSON(tc.json); got != tc.valid {
+				t.Errorf("\n  input: %s\n  got:   %v\n  want:  %v", tc.json, got, tc.valid)
+			}
+		})
+	}
+}
+
+// TestValidateV1PromptFormat verifies the locked v1 section check.
+func TestValidateV1PromptFormat(t *testing.T) {
+	full := `{"episode":{},"scenes":[{"shots":[{"id":"A","prompt":{"en":"Scene & Mood:\n\nFrame Map:\n\nCapture Realism: matte\n\nCamera Capture: handheld"}}]}]}`
+	missing := `{"episode":{},"scenes":[{"shots":[{"id":"A","prompt":{"en":"Scene & Mood:\n\nFrame Map:"}}]}]}`
+	if !validateV1PromptFormat(full) {
+		t.Error("prompt.en with both sections should pass validateV1PromptFormat")
+	}
+	if validateV1PromptFormat(missing) {
+		t.Error("prompt.en without the sections should fail validateV1PromptFormat")
 	}
 }
 
@@ -282,9 +344,207 @@ func TestBuildCorrectivePromptFrom(t *testing.T) {
 // TestRefineModeInstructions verifies the refinement rules include the
 // anti-drift directives that keep unchanged shots identical.
 func TestRefineModeInstructions(t *testing.T) {
-	for _, s := range []string{"change_request", "IDENTICAL", "previous breakdown", "ONLY a valid JSON object"} {
+	for _, s := range []string{"change_request", "IDENTICAL", "previous breakdown", "ONLY a valid JSON object", "TARGETED SHOTS", "RECENT CONVERSATION"} {
 		if !strings.Contains(refineModeInstructions, s) {
 			t.Errorf("refine mode instructions missing required keyword: %q", s)
 		}
+	}
+}
+
+func TestBuildRefinePrompt(t *testing.T) {
+	const prev = `{"scenes":[{"scriptNumber":89}]}`
+	const change = "make shot A slower"
+
+	t.Run("base compose", func(t *testing.T) {
+		p := buildRefinePrompt(nil, prev, change, nil, nil)
+		if !strings.Contains(p, "=== Previous Breakdown ===") || !strings.Contains(p, prev) {
+			t.Error("missing previous breakdown section")
+		}
+		if !strings.Contains(p, "=== Change Request ===") || !strings.Contains(p, change) {
+			t.Error("missing change request section")
+		}
+		if strings.Contains(p, "TARGETED SHOTS") || strings.Contains(p, "RECENT CONVERSATION") {
+			t.Error("optional sections should be absent when not provided")
+		}
+	})
+
+	t.Run("targets listed with scene-shot ids", func(t *testing.T) {
+		p := buildRefinePrompt(nil, prev, change, []ShotRefineTarget{{SceneNumber: 89, ShotID: "A"}}, nil)
+		if !strings.Contains(p, "=== TARGETED SHOTS ===") || !strings.Contains(p, "89-A") {
+			t.Error("targeted shots section should list 89-A")
+		}
+		if !strings.Contains(p, "ONLY to these shots") {
+			t.Error("targeted section should scope the change to the listed shots")
+		}
+	})
+
+	t.Run("recent context bounded and truncated", func(t *testing.T) {
+		long := strings.Repeat("x", 800)
+		p := buildRefinePrompt(nil, prev, change, nil, []ChatTurn{{Role: "user", Content: long}})
+		if !strings.Contains(p, "=== RECENT CONVERSATION ===") {
+			t.Error("recent conversation section missing")
+		}
+		if !strings.Contains(p, "user: ") {
+			t.Error("recent turn should be labeled by role")
+		}
+		if strings.Contains(p, strings.Repeat("x", 700)) {
+			t.Error("recent content should be truncated to ~500 runes")
+		}
+		if !strings.Contains(p, "…") {
+			t.Error("truncated content should end with an ellipsis")
+		}
+	})
+
+	t.Run("scene context included when provided", func(t *testing.T) {
+		ctx := &SceneContext{Description: "office"}
+		p := buildRefinePrompt(ctx, prev, change, nil, nil)
+		if !strings.Contains(p, "=== Current Scene Context ===") || !strings.Contains(p, "office") {
+			t.Error("scene context section should be included when provided")
+		}
+	})
+
+	t.Run("truncateRune leaves short strings intact", func(t *testing.T) {
+		if got := truncateRune("hola", 10); got != "hola" {
+			t.Errorf("truncateRune should not cut short strings, got %q", got)
+		}
+	})
+}
+
+// ─── Refine consistency validation ──────────────────────────────────────────
+
+func refineTestShot(id string, overrides map[string]any) map[string]any {
+	shot := map[string]any{
+		"id":         id,
+		"title":      "t",
+		"duration":   10,
+		"references": []any{map[string]any{"slot": "[Image1]", "assetId": "c1", "type": "character"}},
+		"prompt":     map[string]any{"en": "Scene & Mood:\n\nFrame Map:"},
+	}
+	for k, v := range overrides {
+		shot[k] = v
+	}
+	return shot
+}
+
+func refineTestBreakdown(sceneNum int, shots ...map[string]any) string {
+	root := map[string]any{
+		"episode": map[string]any{"title": "EP"},
+		"scenes":  []any{map[string]any{"scriptNumber": sceneNum, "shots": shots}},
+	}
+	b, err := json.Marshal(root)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
+func TestValidateRefineConsistency(t *testing.T) {
+	prev := refineTestBreakdown(56,
+		refineTestShot("A", nil),
+		refineTestShot("B", nil),
+	)
+	targetA := []ShotRefineTarget{{SceneNumber: 56, ShotID: "A"}}
+
+	tests := []struct {
+		name   string
+		text   string
+		refine *refineContext
+		valid  bool
+	}{
+		{
+			name:   "nil refine context is a no-op",
+			text:   prev,
+			refine: nil,
+			valid:  true,
+		},
+		{
+			name:   "empty previous response skips the check",
+			text:   prev,
+			refine: &refineContext{previousResponse: "", targets: targetA},
+			valid:  true,
+		},
+		{
+			name:   "no targets skips the check",
+			text:   prev,
+			refine: &refineContext{previousResponse: prev, targets: nil},
+			valid:  true,
+		},
+		{
+			name:   "identical breakdown passes",
+			text:   prev,
+			refine: &refineContext{previousResponse: prev, targets: targetA},
+			valid:  true,
+		},
+		{
+			name: "targeted shot may change",
+			text: refineTestBreakdown(56,
+				refineTestShot("A", map[string]any{"duration": 12}),
+				refineTestShot("B", nil),
+			),
+			refine: &refineContext{previousResponse: prev, targets: targetA},
+			valid:  true,
+		},
+		{
+			name: "non-target shot must not change",
+			text: refineTestBreakdown(56,
+				refineTestShot("A", nil),
+				refineTestShot("B", map[string]any{"duration": 9}),
+			),
+			refine: &refineContext{previousResponse: prev, targets: targetA},
+			valid:  false,
+		},
+		{
+			name:   "non-target shot must not disappear",
+			text:   refineTestBreakdown(56, refineTestShot("A", nil)),
+			refine: &refineContext{previousResponse: prev, targets: targetA},
+			valid:  false,
+		},
+		{
+			name: "non-target shot must not be added",
+			text: refineTestBreakdown(56,
+				refineTestShot("A", nil),
+				refineTestShot("B", nil),
+				refineTestShot("C", nil),
+			),
+			refine: &refineContext{previousResponse: prev, targets: targetA},
+			valid:  false,
+		},
+		{
+			name:   "different field order is canonical and passes",
+			text:   `{"episode":{"title":"EP"},"scenes":[{"scriptNumber":56,"shots":[{"title":"t","id":"A","duration":10,"prompt":{"en":"Scene & Mood:\n\nFrame Map:"},"references":[{"slot":"[Image1]","assetId":"c1","type":"character"}]},{"title":"t","id":"B","duration":10,"prompt":{"en":"Scene & Mood:\n\nFrame Map:"},"references":[{"slot":"[Image1]","assetId":"c1","type":"character"}]}]}]}`,
+			refine: &refineContext{previousResponse: prev, targets: targetA},
+			valid:  true,
+		},
+		{
+			name: "slot mapped to two assets is rejected",
+			text: refineTestBreakdown(56,
+				refineTestShot("A", map[string]any{"references": []any{
+					map[string]any{"slot": "[Image1]", "assetId": "c1", "type": "character"},
+					map[string]any{"slot": "[Image1]", "assetId": "c2", "type": "character"},
+				}}),
+				refineTestShot("B", nil),
+			),
+			refine: &refineContext{previousResponse: prev, targets: targetA},
+			valid:  false,
+		},
+		{
+			name:   "episode-level assetAssignments slot conflict is rejected",
+			text:   `{"episode":{"title":"EP","assetAssignments":[{"slot":"[Image1]","assetId":"c1","type":"character"},{"slot":"[Image1]","assetId":"c2","type":"character"}]},"scenes":[{"scriptNumber":56,"shots":[{"id":"A","title":"t","duration":10,"prompt":{"en":"P"},"references":[{"slot":"[Image1]","assetId":"c1","type":"character"}]}]}]}`,
+			refine: &refineContext{previousResponse: prev, targets: targetA},
+			valid:  false,
+		},
+		{
+			name:   "unparseable previous response is lenient",
+			text:   prev,
+			refine: &refineContext{previousResponse: "not json at all", targets: targetA},
+			valid:  true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := validateRefineConsistency(tc.text, tc.refine); got != tc.valid {
+				t.Errorf("\n  input: %s\n  got:   %v\n  want:  %v", tc.text, got, tc.valid)
+			}
+		})
 	}
 }

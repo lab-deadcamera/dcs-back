@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -89,6 +91,7 @@ func (s *Service) CreateModel(req CreateModelRequest) (*Model, error) {
 		DefaultAssetGroupID: req.DefaultAssetGroupID,
 		ProjectName:         req.ProjectName,
 		ProjectNumber:       req.ProjectNumber,
+		Config:              normalizeModelConfig(req.Config),
 		Active:              active,
 	}
 	if err := s.store.CreateModel(m); err != nil {
@@ -149,6 +152,9 @@ func (s *Service) UpdateModel(id string, req UpdateModelRequest) (*Model, error)
 	if req.ProjectNumber != nil {
 		updates["project_number"] = *req.ProjectNumber
 	}
+	if req.Config != nil {
+		updates["config"] = normalizeModelConfig(req.Config)
+	}
 	if req.Active != nil {
 		updates["active"] = *req.Active
 	}
@@ -169,6 +175,57 @@ func (s *Service) UpdateModel(id string, req UpdateModelRequest) (*Model, error)
 
 func (s *Service) SoftDeleteModel(id string) error {
 	return s.store.SoftDeleteModel(id)
+}
+
+// normalizeModelConfig sanitizes a per-model config: negative values are
+// clamped to zero and a max below the min is corrected to the min.
+func normalizeModelConfig(c *ModelConfig) ModelConfig {
+	if c == nil {
+		return ModelConfig{}
+	}
+	n := *c
+	if n.MinVideos < 0 {
+		n.MinVideos = 0
+	}
+	if n.MaxVideos < 0 {
+		n.MaxVideos = 0
+	}
+	if n.MaxVideos > 0 && n.MaxVideos < n.MinVideos {
+		n.MaxVideos = n.MinVideos
+	}
+	if n.MinDuration < 0 {
+		n.MinDuration = 0
+	}
+	if n.MaxDuration < 0 {
+		n.MaxDuration = 0
+	}
+	if n.MaxDuration > 0 && n.MaxDuration < n.MinDuration {
+		n.MaxDuration = n.MinDuration
+	}
+	n.AspectRatios = normalizeStringList(n.AspectRatios)
+	n.Resolutions = normalizeStringList(n.Resolutions)
+	return n
+}
+
+// normalizeStringList trims whitespace, drops empty entries and duplicates.
+func normalizeStringList(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(values))
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (s *Service) GetFavorite() (*Model, error) {
@@ -202,7 +259,7 @@ var csvHeader = []string{
 	"provider_name", "name", "model_type",
 	"api_key", "url", "endpoint",
 	"access_key_id", "secret_access_key", "default_asset_group_id",
-	"project_name", "project_number", "active",
+	"project_name", "project_number", "config", "active",
 }
 
 // ExportProvidersCSV generates a CSV with all providers and their models.
@@ -234,6 +291,7 @@ func (s *Service) ExportProvidersCSV() (string, error) {
 				m.DefaultAssetGroupID,
 				m.ProjectName,
 				m.ProjectNumber,
+				configCSVValue(m.Config),
 				active,
 			})
 		}
@@ -323,6 +381,7 @@ func (s *Service) ImportProvidersCSV(r io.Reader) (*ImportResult, error) {
 			get(row, "default_asset_group_id"),
 			get(row, "project_name"),
 			get(row, "project_number"),
+			get(row, "config"),
 		)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("line %d: model error: %v", lineNum, err))
@@ -361,9 +420,31 @@ func (s *Service) upsertProviderTx(tx *sql.Tx, name string) (string, bool, error
 	return id, true, nil
 }
 
+// configCSVValue renders a ModelConfig for the CSV "config" column.
+func configCSVValue(c ModelConfig) string {
+	b, err := json.Marshal(c)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// parseModelConfigCSV parses the CSV "config" column into a ModelConfig.
+// Empty or malformed values produce an empty config.
+func parseModelConfigCSV(s string) ModelConfig {
+	var c ModelConfig
+	if strings.TrimSpace(s) == "" {
+		return c
+	}
+	if err := json.Unmarshal([]byte(s), &c); err != nil {
+		return ModelConfig{}
+	}
+	return normalizeModelConfig(&c)
+}
+
 // upsertModelTx looks up model by provider_id + name; updates it if found, creates otherwise.
 // Returns (wasUpdated, error).
-func (s *Service) upsertModelTx(tx *sql.Tx, providerID, name, modelType, apiKey, url, endpoint string, active bool, accessKeyID, secretAccessKey, defaultAssetGroupID, projectName, projectNumber string) (bool, error) {
+func (s *Service) upsertModelTx(tx *sql.Tx, providerID, name, modelType, apiKey, url, endpoint string, active bool, accessKeyID, secretAccessKey, defaultAssetGroupID, projectName, projectNumber, configCSV string) (bool, error) {
 	var existingID string
 	err := tx.QueryRow(`SELECT id FROM models WHERE provider_id = $1 AND name = $2 AND deleted_at IS NULL`, providerID, name).Scan(&existingID)
 	if err == nil {
@@ -371,15 +452,16 @@ func (s *Service) upsertModelTx(tx *sql.Tx, providerID, name, modelType, apiKey,
 		if apiKey == "" {
 			apiKey = "pending"
 		}
+		modelConfig := parseModelConfigCSV(configCSV)
 		_, err = tx.Exec(`
 			UPDATE models SET
 				model_type = $1, api_key = $2, url = $3, endpoint = $4,
 				access_key_id = $5, secret_access_key = $6,
 				default_asset_group_id = $7, project_name = $8, project_number = $9,
-				active = $10, updated_at = NOW()
-			WHERE id = $11`, modelType, apiKey, url, endpoint,
+				config = $10::jsonb, active = $11, updated_at = NOW()
+			WHERE id = $12`, modelType, apiKey, url, endpoint,
 			accessKeyID, secretAccessKey, defaultAssetGroupID, projectName, projectNumber,
-			active, existingID)
+			configJSON(modelConfig), active, existingID)
 		if err != nil {
 			return false, err
 		}
@@ -397,11 +479,11 @@ func (s *Service) upsertModelTx(tx *sql.Tx, providerID, name, modelType, apiKey,
 	_, err = tx.Exec(`
 		INSERT INTO models (id, provider_id, name, model_type, api_key, url, endpoint,
 		                    access_key_id, secret_access_key, default_asset_group_id,
-		                    project_name, project_number, active)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		                    project_name, project_number, config, active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14)`,
 		id, providerID, name, modelType, apiKey, url, endpoint,
 		accessKeyID, secretAccessKey, defaultAssetGroupID, projectName, projectNumber,
-		active)
+		configJSON(parseModelConfigCSV(configCSV)), active)
 	if err != nil {
 		return false, err
 	}

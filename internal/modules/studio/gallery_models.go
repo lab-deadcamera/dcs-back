@@ -10,6 +10,16 @@ import "strings"
 //   - DataURL is replaced with the model-specific reference URI
 var GalleryModels = []string{
 	"dreamina-seedance-2-0-gallery",
+	"dreamina-seedance-2-5-260628",
+}
+
+// galleryShareGroups agrupa modelos que comparten la MISMA galería externa
+// (misma asset library de BytePlus). El primer elemento de cada grupo es el
+// modelo canónico que posee los registros de sync en model_assets: todos los
+// miembros consultan y escriben bajo su model_id, así un asset sincronizado
+// por cualquiera de ellos queda disponible para el resto sin duplicarse.
+var galleryShareGroups = [][]string{
+	{"dreamina-seedance-2-0-gallery", "dreamina-seedance-2-5-260628"},
 }
 
 // IsGalleryModel returns true if the given model name matches any registered gallery model.
@@ -21,6 +31,21 @@ func IsGalleryModel(modelName string) bool {
 		}
 	}
 	return false
+}
+
+// GalleryOwnerModel returns the canonical model that owns the gallery sync
+// records for the given model. Models that share a gallery resolve to the same
+// owner; models outside any share group resolve to themselves.
+func GalleryOwnerModel(modelName string) string {
+	lower := strings.ToLower(modelName)
+	for _, group := range galleryShareGroups {
+		for _, member := range group {
+			if strings.Contains(lower, strings.ToLower(member)) {
+				return group[0]
+			}
+		}
+	}
+	return modelName
 }
 
 // BuildReferenceURI construye la URI de referencia según el tipo de modelo.

@@ -396,6 +396,7 @@ IndexStudio
 | `/projects/{id}/chapters/{chId}/scenes/{scId}/shots/{shId}` | PATCH | Actualizar shot (incluyendo aspect_ratio y duration_seconds) |
 | `/projects/{id}/chapters/{chId}/scenes/{scId}/shots` | GET | Listar shots de la escena |
 | `/projects/{id}/chapters/{chId}/scenes/{scId}/shots/{shId}/resources` | GET | Obtener recursos del shot (personajes, assets, presets) |
-| `/studio/text/claude/generate-shots` | POST | Enviar prompt + scene context a Claude para generar shots |
+| `/studio/text/claude/generate-shots` | POST | Enviar prompt + scene context a Claude para generar shots (async: responde `status:"processing"` + `taskId` en el acto) |
+| `/studio/text/claude/generate-shots/status/:taskId` | GET | Consultar estado de la generación async (`processing` \| `succeeded` \| `failed`) |
 | `/projects/{id}/chapters/{chId}/scenes/{scId}/shots/{shId}` | PATCH | Actualizar shot (incluyendo aspect_ratio y duration_seconds) |
 | `StudioApiService` | HTTP requests del Studio (assignments, resources, updateShotFormat) |

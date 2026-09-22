@@ -9,23 +9,23 @@ type EpisodeAsset struct {
 }
 
 type Episode struct {
-	Title           string         `json:"title,omitempty"`
-	TotalDuration   int            `json:"totalDuration,omitempty"`
-	TotalShots      int            `json:"totalShots,omitempty"`
+	Title            string         `json:"title,omitempty"`
+	TotalDuration    int            `json:"totalDuration,omitempty"`
+	TotalShots       int            `json:"totalShots,omitempty"`
 	AssetAssignments []EpisodeAsset `json:"assetAssignments,omitempty"`
 }
 
 // ─── Scene-level types ──────────────────────────────────────────
 
 type SceneContinuity struct {
-	Location            string   `json:"location"`
-	LocationChange      bool     `json:"locationChange"`
-	TimeContinuity      string   `json:"timeContinuity"`
-	CharactersPresent   []string `json:"charactersPresent"`
-	EmotionalCarryover  string   `json:"emotionalCarryover,omitempty"`
-	PhysicalCarryover   string   `json:"physicalCarryover,omitempty"`
-	WardrobeCarryover   string   `json:"wardrobeCarryover,omitempty"`
-	Notes               []string `json:"notes,omitempty"`
+	Location           string   `json:"location"`
+	LocationChange     bool     `json:"locationChange"`
+	TimeContinuity     string   `json:"timeContinuity"`
+	CharactersPresent  []string `json:"charactersPresent"`
+	EmotionalCarryover string   `json:"emotionalCarryover,omitempty"`
+	PhysicalCarryover  string   `json:"physicalCarryover,omitempty"`
+	WardrobeCarryover  string   `json:"wardrobeCarryover,omitempty"`
+	Notes              []string `json:"notes,omitempty"`
 }
 
 type Camera struct {
@@ -102,6 +102,10 @@ type Render struct {
 type ShotNotes struct {
 	Todos    []string `json:"todos"`
 	Warnings []string `json:"warnings"`
+	// WatchFor carries 1-3 plain-language production QA notes per shot:
+	// learned failure modes, continuity locks to respect, what to check in
+	// the first render. Consumed by the frontend shot cards.
+	WatchFor []string `json:"watchFor,omitempty"`
 	Approved bool     `json:"approved"`
 }
 
@@ -112,37 +116,37 @@ type ShotReference struct {
 }
 
 type Shot struct {
-	ID          string      `json:"id"`
-	Title       string      `json:"title"`
-	Description string      `json:"description"`
-	Duration    int         `json:"duration"`
-	Start       int         `json:"start"`
-	End         int         `json:"end"`
-	Camera      Camera      `json:"camera"`
-	Composition Composition `json:"composition"`
-	Blocking    Blocking    `json:"blocking"`
-	Acting      Acting      `json:"acting"`
-	Timeline    Timeline    `json:"timeline"`
-	Audio       Audio       `json:"audio"`
+	ID          string          `json:"id"`
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	Duration    int             `json:"duration"`
+	Start       int             `json:"start"`
+	End         int             `json:"end"`
+	Camera      Camera          `json:"camera"`
+	Composition Composition     `json:"composition"`
+	Blocking    Blocking        `json:"blocking"`
+	Acting      Acting          `json:"acting"`
+	Timeline    Timeline        `json:"timeline"`
+	Audio       Audio           `json:"audio"`
 	References  []ShotReference `json:"references"`
-	Prompt      PromptPair  `json:"prompt"`
-	Render      Render      `json:"render"`
-	Notes       ShotNotes   `json:"notes"`
+	Prompt      PromptPair      `json:"prompt"`
+	Render      Render          `json:"render"`
+	Notes       ShotNotes       `json:"notes"`
 }
 
 type SceneData struct {
-	ScriptNumber   int              `json:"scriptNumber"`
-	ScriptLocation string           `json:"scriptLocation"`
-	Title          string           `json:"title"`
-	Description    string           `json:"description"`
-	Duration       int              `json:"duration"`
-	Start          int              `json:"start"`
-	End            int              `json:"end"`
-	SceneType      string           `json:"sceneType"`
-	Mode           string           `json:"mode"`
-	Continuity     SceneContinuity  `json:"continuity"`
-	References     []ShotReference  `json:"references"`
-	Shots          []Shot           `json:"shots"`
+	ScriptNumber   int             `json:"scriptNumber"`
+	ScriptLocation string          `json:"scriptLocation"`
+	Title          string          `json:"title"`
+	Description    string          `json:"description"`
+	Duration       int             `json:"duration"`
+	Start          int             `json:"start"`
+	End            int             `json:"end"`
+	SceneType      string          `json:"sceneType"`
+	Mode           string          `json:"mode"`
+	Continuity     SceneContinuity `json:"continuity"`
+	References     []ShotReference `json:"references"`
+	Shots          []Shot          `json:"shots"`
 }
 
 type DirectorNotes struct {
@@ -181,7 +185,7 @@ type SceneContextAsset struct {
 }
 
 type SceneContext struct {
-	Description string                `json:"description,omitempty"`
+	Description string                  `json:"description,omitempty"`
 	Characters  []SceneContextCharacter `json:"characters,omitempty"`
 	Presets     []SceneContextPreset    `json:"presets,omitempty"`
 	Assets      []SceneContextAsset     `json:"assets,omitempty"`
@@ -202,21 +206,103 @@ type ClaudeGenerateShotsRequest struct {
 	UserName     string        `json:"user_name"`
 	SceneContext *SceneContext `json:"scene_context,omitempty"`
 	GenerateZh   bool          `json:"generate_zh"`
+	// Optional closed-world element registry produced by the elicitation
+	// flow. When present it is injected into the system prompt as hard
+	// visual rules (see buildClosedWorldBlock).
+	ElementRegistry []ElementEntity `json:"element_registry,omitempty"`
 }
 
 type ClaudeGenerateShotsResponse struct {
-	TaskID string      `json:"taskId"`
-	Model  string      `json:"model"`
-	Status string      `json:"status"`
-	Text   string      `json:"text,omitempty"`
-	Episode *Episode   `json:"episode,omitempty"`
-	Scenes  []SceneData `json:"scenes,omitempty"`
+	TaskID        string         `json:"taskId"`
+	Model         string         `json:"model"`
+	Status        string         `json:"status"`
+	Text          string         `json:"text,omitempty"`
+	Episode       *Episode       `json:"episode,omitempty"`
+	Scenes        []SceneData    `json:"scenes,omitempty"`
 	DirectorNotes *DirectorNotes `json:"directorNotes,omitempty"`
-	AspectRatio string `json:"aspectRatio,omitempty"`
-	Mode string        `json:"mode,omitempty"`
+	AspectRatio   string         `json:"aspectRatio,omitempty"`
+	Mode          string         `json:"mode,omitempty"`
+}
+
+// ClaudeShotsStatusResponse is the polling response for a background
+// generate-shots task: "processing" | "succeeded" (text holds the clean JSON) |
+// "failed" (error holds the reason).
+type ClaudeShotsStatusResponse struct {
+	TaskID string `json:"taskId"`
+	Model  string `json:"model"`
+	Status string `json:"status"`
+	Text   string `json:"text,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+// ─── Element Elicitation (closed-world registry) ─────────────────
+
+// ElementDecision is the user's resolution for one visual element before
+// generation. Type is one of:
+//
+//	define_with_reference — link an existing asset (linked_asset_id required)
+//	define_with_text      — free-text description (description required)
+//	invent_free           — let Claude invent freely
+//	invent_restricted     — invent but respect description constraints
+//	abstract              — render as abstract/atmospheric presence
+type ElementDecision struct {
+	Type        string `json:"type"`
+	Description string `json:"description,omitempty"`
+}
+
+// ElementEntity is one visual element extracted from the script by the
+// analyze-elements pass and resolved by the user in the elicitation UI.
+// DefinitionStatus comes from the analysis ("defined" | "asset_orphan" |
+// "undefined"); once the user decides, UserDecision is set and the final
+// status sent to generate/refine becomes "defined" | "invented" | "abstracted".
+type ElementEntity struct {
+	EntityID         string           `json:"entity_id"`
+	Category         string           `json:"category"`
+	MentionedAs      string           `json:"mentioned_as"`
+	SourceText       string           `json:"source_text,omitempty"`
+	SceneNumber      int              `json:"scene_number"`
+	DefinitionStatus string           `json:"definition_status"`
+	LinkedAssetID    string           `json:"linked_asset_id,omitempty"`
+	ConsistencyGroup string           `json:"consistency_group,omitempty"`
+	UserDecision     *ElementDecision `json:"user_decision,omitempty"`
+}
+
+// ClaudeAnalyzeElementsRequest starts a background element-analysis task.
+// The prompt carries the full decoded script; scene_context provides the
+// characters and assets available for linking. The response reuses the
+// async shape of ClaudeGenerateShotsResponse (taskId + polling).
+type ClaudeAnalyzeElementsRequest struct {
+	SceneID      string        `json:"scene_id" binding:"required"`
+	ProjectID    string        `json:"project_id" binding:"required"`
+	ProjectName  string        `json:"project_name"`
+	Model        string        `json:"model"`
+	APIModel     string        `json:"api_model"`
+	Prompt       string        `json:"prompt" binding:"required"`
+	SystemPrompt string        `json:"system_prompt"`
+	SkillID      string        `json:"skill_id"`
+	UserID       int           `json:"user_id"`
+	UserName     string        `json:"user_name"`
+	SceneContext *SceneContext `json:"scene_context,omitempty"`
 }
 
 // ─── Shot Builder Refine ────────────────────────────────────────
+
+// ShotRefineTarget identifies a single shot to refine. SceneNumber is the
+// scene's script number (scriptNumber from the breakdown); ShotID is the
+// shot's id within that scene (e.g. "A", "B"). When present in a refine
+// request, Claude modifies ONLY the listed shots and leaves every other shot
+// byte-identical.
+type ShotRefineTarget struct {
+	SceneNumber int    `json:"sceneNumber"`
+	ShotID      string `json:"shotId"`
+}
+
+// ChatTurn is one message from the conversational thread, sent as bounded
+// coherence context on refine (last few turns) — never the full history.
+type ChatTurn struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
 
 // ClaudeRefineShotsRequest is the payload for refining an existing shot
 // breakdown. previous_response is the raw JSON returned by generate-shots
@@ -235,6 +321,13 @@ type ClaudeRefineShotsRequest struct {
 	UserName         string        `json:"user_name"`
 	GenerateZh       bool          `json:"generate_zh"`
 	SceneContext     *SceneContext `json:"scene_context,omitempty"`
+	// Optional chat-style refinement controls (both additive).
+	Targets       []ShotRefineTarget `json:"targets,omitempty"`        // refine only these shots
+	RecentContext []ChatTurn         `json:"recent_context,omitempty"` // last few turns for thread coherence
+	// Optional closed-world element registry produced by the elicitation
+	// flow. When present it is injected into the system prompt as hard
+	// visual rules (see buildClosedWorldBlock).
+	ElementRegistry []ElementEntity `json:"element_registry,omitempty"`
 }
 
 type ClaudeRefineShotsResponse struct {
@@ -271,18 +364,20 @@ type ListShotBuilderLogsRequest struct {
 // ─── Proncer ─────────────────────────────────────────────────────
 
 type ClaudeOptimizePromptRequest struct {
-	SceneID          string        `json:"scene_id" binding:"required"`
-	ProjectID        string        `json:"project_id" binding:"required"`
-	Model            string        `json:"model"`
-	APIModel         string        `json:"api_model"`
-	CurrentPrompt    string        `json:"current_prompt" binding:"required"`
-	UserInstructions string        `json:"user_instructions"`
-	SystemPrompt     string        `json:"system_prompt"`
-	SkillID          string        `json:"skill_id"`
-	UserID           int           `json:"user_id"`
-	UserName         string        `json:"user_name"`
-	ShotContext      *ShotContext  `json:"shot_context,omitempty"`
-	SceneContext     *SceneContext `json:"scene_context,omitempty"`
+	SceneID          string          `json:"scene_id" binding:"required"`
+	ProjectID        string          `json:"project_id" binding:"required"`
+	Model            string          `json:"model"`
+	APIModel         string          `json:"api_model"`
+	CurrentPrompt    string          `json:"current_prompt" binding:"required"`
+	UserInstructions string          `json:"user_instructions"`
+	SystemPrompt     string          `json:"system_prompt"`
+	SkillID          string          `json:"skill_id"`
+	UserID           int             `json:"user_id"`
+	UserName         string          `json:"user_name"`
+	ShotContext       *ShotContext    `json:"shot_context,omitempty"`
+	SceneContext      *SceneContext   `json:"scene_context,omitempty"`
+	ElementRegistry   []ElementEntity `json:"element_registry,omitempty"`
+	ReferenceFiles    []string        `json:"reference_files,omitempty"`
 }
 
 type ShotContext struct {

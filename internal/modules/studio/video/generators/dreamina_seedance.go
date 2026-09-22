@@ -55,7 +55,7 @@ func (g *SeedanceGenerator) Validate(req *studio.GeneratorRequest) error {
 		errs.Add("ratio", "unsupported value: "+req.Ratio)
 	}
 	if req.Resolution != "" && !ValidResolutionsVideo[req.Resolution] {
-		errs.Add("resolution", "must be one of: 480p, 720p, 1080p")
+		errs.Add("resolution", "must be one of: 480p, 720p, 1080p, 1440p, 2k, 4k")
 	}
 	if req.GenerateAudio && IsFastModel(req.Model) {
 		errs.Add("generate_audio", "only supported on pro models (non-fast)")

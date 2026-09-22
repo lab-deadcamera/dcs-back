@@ -241,6 +241,14 @@ Cuando el modelo es tipo "gallery" (e.g. `dreamina-seedance-2-0-gallery`), antes
 |-----------|-------|------|--------|
 | `SeedanceGenerator` | Contiene "dreamina-seedance-2-0-260128" | Async | Dreamina Seedance 2.0 |
 | `SeedanceGalleryGenerator` | Contiene "dreamina-seedance-2-0-gallery" | Async + Gallery | Dreamina Seedance 2.0 Gallery |
+| `Seedance25Generator` | Contiene "dreamina-seedance-2-5-260628" | Async | Dreamina Seedance 2.5 (4–30s) |
+
+> Los modelos exponen un campo de configuración JSONB (`models.config`, p.
+> ej. `{"min_videos": 1, "max_videos": 4, "min_duration": 4, "max_duration": 30,
+> "aspect_ratios": ["16:9", "9:16"], "resolutions": ["480p", "720p"]}`)
+> que limita la cantidad de videos por generación, el rango de duración en
+> segundos y los formatos de salida soportados; se aplica en `GenerateUnified`
+> vía `enforceVideoLimits` (ver `model_config.go`).
 
 ---
 

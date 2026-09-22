@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -43,13 +44,14 @@ type visionImage struct {
 }
 
 type Handler struct {
-	providerStore  *provider.Store
-	skillSvc       *skillmodule.Service
-	logStore       *LogStore
-	pushSvc        PushNotifier
-	vision         VisionImageProvider
+	providerStore   *provider.Store
+	skillSvc        *skillmodule.Service
+	logStore        *LogStore
+	pushSvc         PushNotifier
+	vision          VisionImageProvider
 	maxOutputTokens int
 	maxVisionImages int
+	taskStore       *ShotTaskStore
 }
 
 func NewHandler(
@@ -68,6 +70,7 @@ func NewHandler(
 		vision:          vision,
 		maxOutputTokens: maxOutputTokens,
 		maxVisionImages: maxVisionImages,
+		taskStore:       NewShotTaskStore(),
 	}
 }
 
@@ -131,18 +134,22 @@ episode.assetAssignments: [
 ]
 '''
 
-Type values: "character", "location", "prop", "audio".
+Type values: "character", "location", "prop", "audio", "plate", "environment", "other".
 - "character" = a person / character (people, actors)
 - "location" = a location or environment where the shot takes place (INT/EXT space, set)
 - "prop" = an additional object in the scene that must stay consistent over time or needs an exact design (suitcase, hair dryer, chair, or anything with a unique feature)
 - "audio" = an audio asset
+- "plate" = a fixed reference image (first frame / plate) that anchors the space — reproduced exactly, never redrawn
+- "environment" = an ambient environment (e.g. weather, atmosphere) without a fixed plate
+- "other" = any asset type not covered above
 - Same character across multiple scenes = same [ImageN] slot
 - Each scene's 'references' array only includes assets that actually appear in THAT scene
 - If an asset is a location/environment plate, only assign it to scenes that take place in that location
 - Location plates anchor the Location & Blocking block in the prompt
 
-## Continuity Engine — Scene-to-Scene Tracking
+## Continuity Engine — Scene-to-Scene AND Shot-to-Shot Tracking
 
+### Scene-Level (for the 'continuity' object)
 For every scene AFTER the first, analyze how it differs from the previous scene and populate the 'continuity' object. Track these dimensions:
 
 1. **Location** — did the location change? INT. KITCHEN → INT. CONVENIENCE STORE = YES
@@ -152,6 +159,19 @@ For every scene AFTER the first, analyze how it differs from the previous scene 
 5. **Physical state** — injuries? Torn clothes? Sweating? Bruised? Dust in hair?
 6. **Wardrobe** — any changes? Costume for flashback, jacket removed, shirt untucked, mask on/off
 7. **Props/Environment** — set changes? Chair broken? Bottle empty? Spilled drink?
+8. **Character positions at scene start** — where is each character standing/sitting when the scene opens? This is the spatial anchor for Shot 1.
+
+### Shot-Level (inside each shot's prompt.en)
+Between consecutive shots in the same scene, the spatial state must be CONTINUOUS. Each shot's Last Frame declares the closing state; the next shot's Scene & Mood must open with that exact state. Track:
+
+- **Screen position** — left/center/right third (locked unless motivated movement)
+- **Body orientation** — facing camera / profile / three-quarter / away
+- **Posture** — standing / sitting / kneeling / leaning / reclining
+- **Gaze direction** — where the eyes point (screen-left, screen-right, down, at another character)
+- **Hands and objects** — what the hands hold, where they rest, what they touch
+- **Eye lines** — for 2+ characters, who looks at whom, from which screen side
+
+These 6 dimensions form the SPATIAL HANDOFF between shots. The next shot inherits them unchanged unless the script explicitly describes a movement that changes them.
 
 Also track scene type transitions: present→flashback, flashback→present, day→night. The SMASH CUT TO or HARD CUT TO signals are important continuity markers.
 
@@ -268,16 +288,17 @@ Start with a references header listing the [Image] slots used in this shot, in t
 
 Then write the sections in THIS EXACT ORDER, each on its own line, separated by blank lines. Do NOT nest them in JSON — this is the prompt body text:
 
-- **Scene and Mood**: LEAD with the subject + primary physical action in the first sentence (the first 20-30 words carry ~80% of spatial-init weight). Then one line of dramatic mood as residue. Camera and style NEVER open.
-- **Composition**: Where each subject sits in 2-D screen space — left/center/right third (or x%, 0%=left, 50%=center, 100%=right), foreground/midground/background, depth, frame occupancy (close-up / medium / full / waist-up / chest-up, or % of frame height), and negative space (what stays empty, where, what fills it). Name the [ImageN] anchors. Use film language without percentages for classical compositions (centered single, over-the-shoulder, profile two-shot, symmetrical wide); coordinates earn their place when the composition is asymmetric or drift would break the shot. For multi-edit shots, give EACH edit its own framing and focal length (e.g., "Edit 1 wide back 3/4 at 35mm, Edit 2 3/4 medium at 65mm").
-- **Space and Mélange**: First establish the physical space (space type, key surfaces, lighting, atmosphere). Then pin each character to a coherent place — surface, body orientation, contact point, gaze. Carry each [ImageN] anchor inline. Bodies sit INSIDE the space, not on a backdrop.
-- **Cross-Shot Rule**: For 2+ subjects — no swap (never trade screen positions), no center crossing, no depth change, distance and screen sides held, eyelines named (who looks at whom, whether it holds or breaks), costumes and silhouettes consistent. For multi-shot — what carries across the cut. For multi-edit shots also keep SCREEN DIRECTION consistent (a subject moving right stays moving right — never reverse mid-sequence) and state explicitly what must stay OUT of frame for continuity (e.g., "the door stays out of frame throughout — it is the next shot's reveal").
-- **Action**: The character's physical action as observable muscular facts (transitive verb; NO result-oriented adjectives like "angry"/"sad"), with per-beat timestamps and 1-2 micro-fidgeting injections (see Anatomy Library). Add micro-motion (breath, hair, fabric, jewelry) and environmental motion (rain, smoke, dust, traffic, wind) where the scene has them. Subject motion and camera motion strictly separated — never fuse them in one phrase. Naming "nothing else moves" is a directive: absence is stated, not implied. Put a small physical beat around the spoken line (a slow exhale before speaking, a jaw settle) so the delivery reads acted, not recited.
-- **Dialogue**: MANDATORY — exact line in double quotes, speaker identified by visual descriptor + [ImageN] tag. Budget ~2-2.5 words/sec. If silent write exactly "None—Silent shot." The quoted line is always English — it is what the model renders as speech and lip-syncs to. One speaker focus per shot; off-screen lines marked (o.s.); never split a line across a cut. When dialogue or an [audio] reference is present, let audio transients drive involuntary reactions (a sharp inhale or stressed syllable triggers an asymmetric blink, a faint jaw tug, or a nostril flare just after the consonant). For multi-edit shots, place the cut on a narrative or audio beat where possible ("cut the moment she begins to speak").
-- **Ending Shot**: Exact closing composition at end of runtime. Close with: "No on-screen text, subtitles, sign fonts, or rendered text appear in the shot."
-- **Environmental Base**: Location anchored to [ImageN] plate if attached. Time of day, lighting, atmosphere, color palette.
-- **Sound Layer**: Diegetic only — specific ambient/foley sounds. NO music, NO lyrics, NO score. Dialogue NEVER restated here.
-- Final paragraph (no header) integrating the **Capture Realism** mechanics (see Capture Realism section below: atmosphere between planes, moisture without shine if wet, per-zone specular kill, contrast stated three ways) + the shot's mode **Camera Capture** line (see Camera Capture section: lens, movement as rhythm, stock, grade, grain, fps, shutter, runtime) + close with "Severe shaking, time flickering, and identity drift were avoided."
+- **Scene & Mood**: LEAD with the subject + primary physical action in the first sentence (the first 20-30 words carry ~80% of spatial-init weight). CRITICAL: if this is NOT the first shot of the scene, the first sentence MUST match the spatial state declared in the previous shot's Last Frame — same screen position, same body orientation, same posture, same gaze, same objects in hand. Do NOT reset or reposition characters between shots without a motivated action. Then one line of dramatic mood as residue. Camera and style NEVER open.
+- **Frame Map**: Where each subject sits in 2-D screen space — left/center/right third (or x%, 0%=left, 50%=center, 100%=right), foreground/midground/background, frame occupancy (close-up / medium / full / waist-up / chest-up, or % of frame height), and negative space. Name the [ImageN] anchors. Use film language without percentages for classical compositions (centered single, over-the-shoulder, profile two-shot). For multi-cut shots, give EACH cut its own framing with inline timing ("Cut A (0-6s): ...; Cut B (6-10s): ...") and keep one single frame size inside each cut. Exclusions are expressed AS FRAMING, never as prohibition lists: state what stays out of frame by the angle itself — "the wardrobe and open door are NOT in frame, excluded by the angle", "only Wyatt and the blue TV read — everything else out of frame" — and name the empty areas of the frame (negative space, empty foreground). Never write a bare "no X in frame" without the framing reason.
+- **Location & Blocking**: FIRST establish the physical space from the plate (space type, key surfaces, lighting, atmosphere). When a location plate is attached, it is GROUND TRUTH — reproduce it exactly as shown, do not redraw, add, restyle, or rearrange the set, and never invent architecture, furniture, or props that are not in the plate. THEN pin each character to a coherent place — surface, body orientation, contact point, gaze. Carry each [ImageN] anchor inline. Bodies sit INSIDE the space, touching real surfaces, never on a backdrop.
+- **Cross-Frame Rules**: For 2+ characters — no swap (never trade screen positions), no center crossing, no depth change, distance and screen sides held, eyelines named. For shots in the SAME location, keep the screen sides CONSISTENT across every shot of that location (e.g. "he stays screen-LEFT, she screen-RIGHT — holds for every shot in this scene"). Write the positive census: who is in frame, who is NOT, explicitly. If a character is attached as an ingredient but must not appear in this shot or in one of its cuts, write it as a hard lock ("[Image3] never appears in cut 1"). An attached ingredient tends to get drawn even when the prompt says otherwise — when a character must NOT appear, prefer not attaching them at all and say so. For multi-cut shots state what carries across the cut and what stays out of frame.
+- **Movement**: The character's physical action as observable muscular facts (transitive verb; NO result-oriented adjectives like "angry"/"sad"), written as a progressive timeline per cut, EACH CUT BROKEN DOWN BEAT-BY-BEAT BY SECOND — "Cut A (0-5s): 0s → ..., 1s → ..., 2s → ...; hard cut (no fade, no dissolve) to Cut B (5-10s): 0s → ..." — with per-beat timestamps and 1-2 micro-fidgeting injections (see Anatomy Library). There is NO separate Cut Timing section — anchor every internal cut to a dialogue, audio, or action beat right here ("Cut A ends the instant '...' ends", "Cut B opens mid-motion so the cut has an action reason"); never time a cut to a bare second count; if the shot is one continuous take, write "none — single unbroken take". Encode HOW each line is said — the delivery register: volume, tempo, jaw, breath, gaze direction ("clipped and harder", "a low mutter from a nearly still jaw", "far louder than the room needs"). BRACKET the performance between its two failure modes and put the target between them ("dead hands read as hiding something, theatrical faces read as mugging — the target is between them: hands alive but economical, face doing almost nothing"). A silent hold can BE the performance (a stare with no blink for three seconds) — give it the beat it needs. Add micro-motion (breath, hair, fabric, jewelry) and environmental motion (rain, smoke, dust, traffic, wind) where present. Subject motion and camera motion strictly separated. Naming "nothing else moves" is a directive: absence is stated, not implied. CLOSE EVERY Movement block with "Alive from frame one, never statue-still." EXCEPTION — frozen-pose shots: when stillness IS the dramatic intent (a held stare, a dead-quiet beat, a tableau, a frozen reaction), the shot must declare it explicitly at the start of the Movement block ("frozen pose — stillness is the performance"); then stillness IS the performance — the micro-fidget is replaced by environmental or camera micro-motion (dust, fabric, screen flicker, micro-drift) or by its deliberate absence, and the closing line becomes "Nothing moves but the camera." The rest of rule 14 still applies: beat-by-beat timeline, physical impact, action sound, and the Ending Shot consequence. A static shot without that declaration still violates the rule.
+- **Dialogue**: MANDATORY — exact line in double quotes, speaker identified by visual descriptor + [ImageN] tag. Budget ~2-2.5 words/sec. If silent write exactly "None—Silent shot." The quoted line is always English — it is what the model renders as speech and lip-syncs to. One speaker focus per shot; off-screen lines marked (o.s.); never split a line across a cut. When dialogue or an [audio] reference is present, let audio transients drive involuntary reactions (a sharp inhale or stressed syllable triggers an asymmetric blink, a faint jaw tug, or a nostril flare just after the consonant). For multi-cut shots, state which line belongs to which cut.
+- **Last Frame**: Exact closing composition at end of runtime. For EVERY character in frame, state: (1) screen position — left/center/right, (2) body orientation — facing camera/profile/three-quarter/away, (3) posture — standing/sitting/kneeling/leaning, (4) gaze direction — where the eyes point, (5) hands — what they hold or where they rest, (6) any objects in contact. This is the SPATIAL HANDOFF — the next shot's Scene & Mood MUST open with this exact state. Close with: "No on-screen text, subtitles, sign fonts, or rendered text appear in the shot."
+- **World Plate**: Location anchored to [ImageN] plate if attached. Time of day, lighting, atmosphere, color palette. In a CONTINUOUS scene, atmosphere (smoke, rain, haze), light direction, and color grade are LOCKED across every shot of that scene — they only change when the script marks a time or location transition, which must be declared in the scene's continuity object.
+- **Sound Bed**: Diegetic only — specific ambient/foley sounds. NO music, NO lyrics, NO score. Dialogue NEVER restated here.
+- **Capture Realism** (own section, header on its own line): the anti-plastic block — real depth from the lens via suspended atmosphere between planes (scaled thin/light/heavy), moisture without shine (only if wet/humid/sweaty), per-zone specular kill on skin (zero shine, matte, soft even pore texture, never plastic), contrast curve stated three ways (shadows lifted holding texture, highlights rolled off, nothing crushed, every pixel matte, slightly desaturated). See Capture Realism section below.
+- **Camera Capture** (own section, header on its own line): the shot's mode camera line (see Camera Capture section below: lens and aperture with natural round bokeh, flat rectilinear field, no lens distortion, movement as rhythm, stock, grade, grain, fps, shutter, runtime), then close with the technical-stability line: "avoid jitter, avoid flicker, avoid identity drift, avoid extra people, avoid phantom feet or limbs, avoid fade or dissolve, avoid haze, avoid fisheye." This avoid list replaces the legacy sentence "Severe shaking, time flickering, and identity drift were avoided" — its severity is folded into the list; never emit both.
 
 ### Universal Prompt Rules
 1. Front-load subject + physical action in Scene and Mood — camera and style never open.
@@ -290,15 +311,28 @@ Then write the sections in THIS EXACT ORDER, each on its own line, separated by 
 8. One main idea per shot. One dominant action, one camera strategy.
 9. Per-shot runtime: 4-8s = one strong action, 8-12s = action + hold, 12-15s = 2-3 beats.
 10. Target 280-400 words per prompt.en (≤600 for multi-shot). Concise beats verbose — the pre-prompt is what the generator uses.
-11. Include micro-fidgeting injection in Action — timed per-beat.
+11. Include micro-fidgeting injection in Movement — timed per-beat.
 12. **Reference function declaration** — declare what to extract from every tag. A bare tag makes the model guess and mis-mix references (a reference video's face bleeding into an image's face). Example: "[image1] strictly as character reference for face and clothing; follow the exact body momentum and camera curve from [video1]; reference voice timbre from [audio1]."
-13. **Movement layers in Action** — character motion + micro-motion (breath, hair, fabric, jewelry) + environmental motion (rain, smoke, dust, traffic, wind); subject and camera motion strictly separated. Naming "nothing else moves" is a directive — absence is stated, not implied.
+13. **Movement layers** — character motion + micro-motion (breath, hair, fabric, jewelry) + environmental motion (rain, smoke, dust, traffic, wind); subject and camera motion strictly separated. Naming "nothing else moves" is a directive — absence is stated, not implied.
 14. **Audio-face coupling** — when the shot carries spoken dialogue or an [audio] reference, let audio transients drive involuntary reactions: a sharp inhale or stressed syllable triggers an asymmetric blink, a faint jaw tug, or a nostril flare just after the consonant.
 15. **Dialogue continuity** — quoted dialogue lines are always English (they are what the model renders as speech and lip-syncs to). One speaker focus per shot; off-screen lines marked (o.s.); never split a spoken line across a cut.
 16. **Frame rate & slow motion** — all modes default to 24fps, 180° shutter. Slow-motion beats (impact, hair whip, water splash) go in the camera line: "intercut 96fps high-speed slow-motion at [moment] holding 180° shutter."
-17. **Positive locks over negative prohibitions** — the only sanctioned negatives are the on-screen-text suppression, the specular-kill in Capture Realism, and the technical-stability line. Naming a forbidden element can summon it (the negation bug); keep acting direction positive and physical. Phrase constraints the model tends to violate as locks — "hands hang naturally at her sides, she keeps walking throughout" — not "no phone in hand, never stop".
+17. **Positive locks over negative prohibitions** — the only sanctioned negatives are the on-screen-text suppression, the specular-kill in Capture Realism, the technical-stability line, the plate-fidelity lock in Location & Blocking, and framing exclusions in Frame Map (always stated as camera/angle decisions with the framing reason, never as bare prohibition lists). Naming a forbidden element can summon it (the negation bug); keep acting direction positive and physical. Phrase constraints the model tends to violate as locks — "hands hang naturally at her sides, she keeps walking throughout" — not "no phone in hand, never stop".
 18. **Ambiguity handling** — if the script is ambiguous about cast, location, or blocking, make the most physically-grounded assumption and flag it in the shot's notes.warnings. Never invent or drop characters; never place a body in a location the script does not establish.
 19. **Reference tokens are exact** — write reference tokens as [Image1]/[Video1]/[Audio1] with NO space (never "[Image 1]"). They must match the references array byte-for-byte; the generator matches on the exact token.
+20. **Delivery register** — every spoken line carries HOW it is said (volume, tempo, jaw, breath, gaze direction). The quoted Dialogue line is WHAT is said; Movement is HOW. A line without a delivery register reads recited, not acted.
+21. **Acting bracket** — name the two failure modes that bracket each performance (e.g. dead hands vs theatrical mugging) and put the muscular target between them. Do not stop at "natural"; say exactly what the target looks like.
+22. **First-frame continuity** — every shot's FIRST FRAME must already carry the state the previous cut left it in (a settled expression, a mid-motion arm, an empty doorway). If the input describes the previous episode's closing shot, Shot 1's first frame must already show that state — no build-up. Never open a shot on a neutral face if the scene requires a set one.
+23. **Screen-sides lock** — characters keep the same screen side across every shot of the same location unless a cross is explicitly motivated and timed. State the lock in the location's first shot and honor it in every shot's Cross-Frame Rules.
+24. **watchFor notes** — every shot's notes.watchFor carries 1-3 production QA notes: the learned failure modes that already happened (ghosts, invented background, an attached character drawn anyway, dead hands), the continuity locks to respect in the render, and what to check in the first render. Written for the human operator, in plain language.
+25. **Previous-episode continuity** — when the script or user input references the previous episode (its closing frame, a character's exit, an expression), lock the current episode's opening shot to it in the first frame.
+26. **Reference tokens are ALWAYS "[ImageN]"** — square-bracketed slot syntax in the references arrays, assetAssignments, the prompt.en header, and every inline anchor; never "@imageN" or "@ImageN". This is a fundamental part of the prompt structure; tokens must match byte-for-byte (see rule 19).
+27. **Carried physical state** — every shot DECLARES the state it inherits from the previous cut (blood, sweat, dust, torn clothes, bruising) in its opening beats and re-emits it in its Last Frame, so damage and wear accumulate across shots and scenes instead of being reset at each cut. The scene's continuity object registers scene-level state; prompt.en registers what THIS shot starts with and ends with.
+28. **Prop persistence** — a key prop established in a scene (car, watch, chair, glass) persists IDENTICAL in every shot where it is in frame: position, orientation, and damage state. It can only leave when the script removes it or a framing exclusion states it is out of frame; never redesign, relocate, or redraw an established prop between shots. Props anchored to a reference asset keep the plate-fidelity lock.
+29. **Reference discipline — image-linked elements**: When an element has a visual reference image (linked_asset_id in the element registry), the prompt.en MUST use ONLY the [ImageN] token for that element — DO NOT include appearance descriptions (hair, clothing, facial features, body type, wardrobe) alongside the token. The video generator reads the reference image for visual appearance; describing it in text forces the generator to reinterpret and redraw the element, breaking visual consistency. Describe only the element's ACTION and BEHAVIOR in the shot. The only allowed appearance details are state-changes the image cannot carry (damp, torn, dusty, bloodied, eyes closed, mouth open). Elements WITHOUT a visual reference (invent_free, define_with_text, abstract) may be described freely.
+30. **Cross-shot spatial continuity (HANDOFF LOCK)**: Every shot's Last Frame is a binding spatial handoff to the next shot. The next shot's Scene & Mood MUST open by placing every character in the EXACT position, orientation, posture, gaze direction, and hand state that the previous shot's Last Frame declared. Characters do NOT teleport, rotate, or reposition between shots unless the script explicitly describes a motivated movement. Screen sides are LOCKED: if a character is screen-left in the previous shot's closing frame, they MUST be screen-left in the next shot's opening frame. Eye lines must match: if a character was looking screen-right, the next shot must preserve that gaze unless the character has a reason to look away. Objects in hand persist: if a character was holding a phone, the phone is still in hand unless the script removes it. This rule applies to BOTH within-scene shots (shot A → shot B in the same scene) AND across-scene transitions (last shot of scene N → first shot of scene N+1 when CONTINUOUS). The only exceptions are: (a) scene type changes (present→flashback), (b) explicit time jumps (CONTINUOUS→later), or (c) location changes where the script re-establishes the character.
+
+**CONTINUITY EXAMPLE** — Shot A ends: "[Image2] stands screen-left at the dresser, body three-quarter to camera, right hand gripping the drawer pull, gaze down into the drawer." Shot B MUST open: "[Image2] screen-left at the dresser, three-quarter to camera, right hand still on the drawer pull, gaze down — she lifts the black rabbit mask with her left hand." The spatial state (screen-left, three-quarter, right hand on drawer, gaze down) is INHERITED, not re-described from scratch. The only change is the new action (lifting the mask).
 
 ### Capture Realism (the anti-plastic block — mandatory on every shot)
 Every prompt.en closes with a capture-realism paragraph tuned to the scene. Four mechanics:
@@ -364,17 +398,19 @@ Return ONLY a valid JSON object with this exact structure. This is the ONLY thin
           "duration": 10,
           "start": 0,
           "end": 10,
+          "cuts": 0,
           "references": [
             { "slot": "[Image1]", "assetId": "character_uuid", "type": "character" },
             { "slot": "[Image4]", "assetId": "location_file_id", "type": "location" }
           ],
           "prompt": {
-            "en": "[Image1] [Image4]\n\nScene and Mood: ...\n\nComposition: ...\n\nSpace and Mélange: ...\n\nCross-Shot Rule: ...\n\nAction: ...\n\nDialogue: ...\n\nEnding Shot: ...\n\nEnvironmental Base: ...\n\nSound Layer: ...\n\n<final paragraph: capture realism + camera capture + runtime + 'Severe shaking, time flickering, and identity drift were avoided.'>",
+            "en": "[Image1] [Image4]\n\nScene & Mood: ...\n\nFrame Map: ...\n\nLocation & Blocking: ...\n\nCross-Frame Rules: ...\n\nMovement: ...\n\nDialogue: ...\n\nLast Frame: ...\n\nWorld Plate: ...\n\nSound Bed: ...\n\nCapture Realism: ...\n\nCamera Capture: ..., 9:16 vertical, 10s. avoid jitter, avoid flicker, avoid identity drift, avoid extra people, avoid phantom feet or limbs, avoid fade or dissolve, avoid haze, avoid fisheye.",
             "zh": "Full Chinese translation of the same prompt"
           },
           "notes": {
             "todos": ["Load [Image1] Wyatt - sweaty variant", "Load [Image4] kitchen plate"],
-            "warnings": []
+            "warnings": [],
+            "watchFor": ["First frame must already carry the distaste - no build-up", "Check the deer head is NOT behind him", "She never appears in cut 1 - positive census"]
           }
         }
       ]
@@ -390,12 +426,19 @@ Return ONLY a valid JSON object with this exact structure. This is the ONLY thin
 4. **All timestamps (start, end)** are cumulative from the episode start. First scene starts at 0.
 5. **Flashback visual language**: Flashback scenes should use distinct visual language. Note this in continuity.notes and consider a different mode.
 6. **Continuity accuracy**: Every scene must have an accurate continuity object. locationChange=true when the location changes. Note flashback transitions.
-7. **prompt.en** must use the simplified format: references header "[ImageN]" then the sections Scene and Mood / Composition / Space and Mélange / Cross-Shot Rule / Action / Dialogue / Ending Shot / Environmental Base / Sound Layer, then a final capture-and-camera paragraph. Concise, 280-400 words (≤600 for multi-shot).
-8. **No result-oriented acting**: Replace every emotional adjective ("angry," "sad," "scared") with muscular description or transitive verb.
+7. **prompt.en** must use the locked format: references header "[ImageN]" then the sections Scene & Mood / Frame Map / Location & Blocking / Cross-Frame Rules / Movement / Dialogue / Last Frame / World Plate / Sound Bed, then two closing sections **Capture Realism** and **Camera Capture** (each with its own header line), with Camera Capture ending on the technical-stability avoid list. There is NO dedicated Cut Timing section — cut structure and cut anchoring live inside Frame Map and Movement. Reference slots are ALWAYS "[ImageN]" — never "@imageN". Concise, 280-400 words (≤600 for multi-shot).
+8. **No result-oriented acting**: Replace every emotional adjective ("angry," "sad," "scared") with muscular description or transitive verb. Encode the delivery register (volume, tempo, jaw, breath) and bracket each performance between its two failure modes.
 9. **At least one micro-fidgeting injection per acting shot**, timed per-beat.
 10. **prompt.zh** is OPTIONAL. Only include it when the user explicitly requests Chinese generation.
 11. **Do NOT use double quotes (") inside JSON string values.** If dialogue quotes are needed inside a prompt, use single quotes (') or Chinese angle brackets 「」. Escape quotes in the JSON structure only.
-12. **Shot objects are SLIM**: id, title, description, duration, start, end, references, prompt, notes. Do NOT emit camera/composition/blocking/acting/timeline/audio — that direction lives inside prompt.en.
+12. **Shot objects are SLIM**: id, title, description, duration, start, end, cuts, references, prompt, notes. Do NOT emit camera/composition/blocking/acting/timeline/audio — that direction lives inside prompt.en. **cuts** = the number of internal cuts (segment transitions) within the shot; 0 means one continuous unbroken take. Match the Cut Timing block in prompt.en: a shot with 2 cuts is edited across 3 segments.
+13. **Every shot carries notes.watchFor** (1-3 plain-language QA notes: failure modes to watch, continuity locks, what to check in the first render). Never omit it.
+14. **Every shot must carry the full physical/action anatomy**:
+    - **Micro-fidgets** — at least one micro-movement or post-impact gesture (nostril flare, eye-dart, jaw reset, breath catch) timed to a beat, never statue-still. EXCEPTION: frozen-pose shots (stillness IS the dramatic intent, declared explicitly in the Movement block) replace micro-fidgets with environmental or camera micro-motion or their deliberate absence.
+    - **Detailed timeline** — the Movement block must be a progressive timeline per cut, each cut broken down beat-by-beat per second (Cut A (0-5s): 0s → 1s → 2s → …; hard cut → Cut B (5-10s): 0s → …), never a single static description.
+    - **Realistic physical impact** — sweat, muscle tension, and body response (weight shift, recoil, effort tremor) written into the body and Capture lines.
+    - **Action sound** — strikes, effort grunts, and breathing layered into the Sound Layer block, not just ambient.
+    - **Physical consequence in the Ending Shot** — lasting marks (bruise, blood, sweat, exhaustion, labored breath) carried into the Ending Shot so damage continuity reads across cuts.
 
 ## CRITICAL — Output Format (MANDATORY — THIS IS THE LAST RULE)
 
@@ -414,15 +457,237 @@ EXAMPLES OF WHAT NOT TO DO:
 ✅ "{...}" — valid JSON only, nothing else.
 `
 
+// shotBuilderStructurePrompt is the v2 base prompt for generate-shots-v2.
+// Unlike defaultShotBuilderPrompt, it only defines the OUTPUT STRUCTURE (JSON
+// schema, slot/asset conventions and format rules). The BEHAVIOR — how to
+// interpret the script, direct actors, compose prompts, etc. — is defined by
+// the user-selected skill, which is appended on top.
+const shotBuilderStructurePrompt = `
+## Input Format — Script Parsing
 
-const defaultProncerPrompt = `You are a professional cinematography prompt consultant. Your ONLY role is to help refine and optimize video-generation prompts.
+You receive a script in standard screenplay format. Each scene unit follows this pattern:
 
-Given a current prompt and optional context, the user may ask you to:
-- Make the prompt more descriptive or cinematic
-- Add specific camera angles, lighting, or atmosphere
-- Shorten or restructure the prompt
-- Suggest improvements
+'''
+56. INT. WYATT'S KITCHEN — DAY
+Content, dialogue, and action description...
 
+57. INT. CONVENIENCE STORE - NIGHT (FLASHBACK - HALLOWEEN 2015)
+Content...
+'''
+
+Parse each 'NN. INT/EXT. LOCATION — TIME' block as follows:
+- **NN** (e.g., 56) = 'scriptNumber' — the scene number from the script
+- **INT. WYATT'S KITCHEN — DAY** = 'scriptLocation' — full location string
+- **Content** = the scene's dramatic material to interpret and subdivide into shots
+
+Detect scene types: 'present', 'flashback', 'fantasy', 'dream', 'montage'. Look for markers like (FLASHBACK), (CONTINUOUS), SMASH CUT TO, HARD CUT TO, etc.
+
+## Episode-Level Asset Assignment
+
+You receive a 'scene_context' with characters, presets, and assets. Assign assets at the EPISODE level:
+
+'''
+episode.assetAssignments: [
+  { "slot": "[Image1]", "assetId": "wyatt", "type": "character" },
+  { "slot": "[Image4]", "assetId": "kitchen-plate", "type": "location" }
+]
+'''
+
+Type values: "character", "location", "prop", "audio", "plate", "environment", "other".
+- "character" = a person / character (people, actors)
+- "location" = a location or environment where the shot takes place (INT/EXT space, set)
+- "prop" = an additional object in the scene that must stay consistent over time or needs an exact design (suitcase, hair dryer, chair, or anything with a unique feature)
+- "audio" = an audio asset
+- "plate" = a fixed reference image (first frame / plate) that anchors the space — reproduced exactly, never redrawn
+- "environment" = an ambient environment (e.g. weather, atmosphere) without a fixed plate
+- "other" = any asset type not covered above
+- Same character across multiple scenes = same [ImageN] slot
+- Each scene's 'references' array only includes assets that actually appear in THAT scene
+- If an asset is a location/environment plate, only assign it to scenes that take place in that location
+- Location plates anchor the Location & Blocking block in the prompt
+
+## Output JSON Structure
+
+Return ONLY a valid JSON object with this exact structure. This is the ONLY thing you return — no text before or after.
+
+{
+  "episode": {
+    "title": "Episode title from the script header or user input",
+    "totalDuration": total_seconds_estimated,
+    "totalShots": total_number_of_shots_across_all_scenes,
+    "assetAssignments": [
+      { "slot": "[Image1]", "assetId": "character_uuid_from_scene_context", "type": "character" },
+      { "slot": "[Image2]", "assetId": "name_of_asset", "type": "location" }
+    ]
+  },
+  "description": "One-line logline describing the episode's core dramatic conflict",
+  "duration": total_seconds,
+  "mode": "M1",
+  "aspectRatio": "9:16",
+  "directorNotes": {
+    "goal": "What should the audience feel or understand from this episode?",
+    "styleGuide": "teal-amber grade - spherical rectilinear lens - 24fps 180 degree - diegetic audio only - prompt in positive",
+    "warnings": ["Critical episode-wide warnings"]
+  },
+  "scenes": [
+    {
+      "scriptNumber": 56,
+      "scriptLocation": "INT. WYATT'S KITCHEN — DAY",
+      "title": "Dramatic short title for this scene",
+      "description": "One-sentence plain-language action summary",
+      "duration": 25,
+      "start": 0,
+      "end": 25,
+      "sceneType": "present",
+      "mode": "M1",
+      "continuity": {
+        "location": "INT. WYATT'S KITCHEN — DAY",
+        "locationChange": false,
+        "timeContinuity": "DAY — same day as previous scene",
+        "charactersPresent": ["Wyatt", "Dixie"],
+        "emotionalCarryover": "N/A — first scene",
+        "physicalCarryover": "N/A — first scene",
+        "wardrobeCarryover": "N/A — first scene",
+        "notes": ["Episode cold open"]
+      },
+      "references": [
+        { "slot": "[Image1]", "assetId": "character_uuid", "type": "character" },
+        { "slot": "[Image4]", "assetId": "location_file_id", "type": "location" }
+      ],
+      "shots": [
+        {
+          "id": "A",
+          "title": "Wyatt paces frantically",
+          "description": "Wyatt walks back and forth gesticulating while Dixie watches in silence",
+          "duration": 10,
+          "start": 0,
+          "end": 10,
+          "cuts": 0,
+          "references": [
+            { "slot": "[Image1]", "assetId": "character_uuid", "type": "character" },
+            { "slot": "[Image4]", "assetId": "location_file_id", "type": "location" }
+          ],
+          "prompt": {
+            "en": "Full English prompt text for the shot — content, structure, length and style are defined by the selected skill, not by this schema",
+            "zh": "Full Chinese translation of the same prompt"
+          },
+          "notes": {
+            "todos": ["Load [Image1] Wyatt - sweaty variant", "Load [Image4] kitchen plate"],
+            "warnings": [],
+            "watchFor": ["First frame must already carry the distaste - no build-up", "Check the deer head is NOT behind him", "She never appears in cut 1 - positive census"]
+          }
+        }
+      ]
+    }
+  ]
+}
+
+## Critical Rules
+
+1. **Script numbering**: The script's scene numbers (56, 57, 58) map directly to scenes[].scriptNumber. Maintain the order from the script.
+2. **Total duration**: episode.totalDuration should match the user's estimate from the prompt or the sum of all scene durations.
+3. **Scene-shots relationship**: Each scene has 1+ shots. Scenes with dialogue + action typically need 2-3 shots (wide establishing, single character A, single character B).
+4. **All timestamps (start, end)** are cumulative from the episode start. First scene starts at 0.
+5. **Continuity accuracy**: Every scene must have an accurate continuity object. locationChange=true when the location changes. Note flashback transitions.
+6. **prompt.zh** is OPTIONAL. Only include it when the user explicitly requests Chinese generation.
+7. **Do NOT use double quotes (") inside JSON string values.** If dialogue quotes are needed inside a prompt, use single quotes (') or Chinese angle brackets 「」. Escape quotes in the JSON structure only.
+8. **Shot objects are SLIM**: id, title, description, duration, start, end, cuts, references, prompt, notes. Do NOT emit camera/composition/blocking/acting/timeline/audio — that direction lives inside prompt.en. **cuts** = the number of internal cuts (segment transitions) within the shot; 0 means one continuous unbroken take.
+9. **Reference tokens are ALWAYS "[ImageN]"** — square-bracketed slot syntax in episode.assetAssignments, scenes[].references, shots[].references, and inside prompt.en; never "@imageN" or "@ImageN". Tokens must match byte-for-byte (no space: never "[Image 1]").
+10. **Reference discipline — image-linked elements**: When an element has a visual reference image (linked_asset_id in the element registry), the prompt.en MUST use ONLY the [ImageN] token for that element — DO NOT include appearance descriptions (hair, clothing, facial features, body type, wardrobe) alongside the token. The video generator reads the reference image for visual appearance; describing it in text forces the generator to reinterpret and redraw the element, breaking visual consistency. Describe only the element's ACTION and BEHAVIOR in the shot. The only allowed appearance details are state-changes the image cannot carry (damp, torn, dusty, bloodied, eyes closed, mouth open). Elements WITHOUT a visual reference (invent_free, define_with_text, abstract) may be described freely.
+11. **Cross-shot spatial continuity (HANDOFF LOCK)**: Every shot's Last Frame is a binding spatial handoff to the next shot. The next shot's prompt MUST open by placing every character in the EXACT position, orientation, posture, gaze direction, and hand state that the previous shot's Last Frame declared. Characters do NOT teleport, rotate, or reposition between shots unless the script explicitly describes a motivated movement. Screen sides are LOCKED: if a character is screen-left in the previous shot's closing frame, they MUST be screen-left in the next shot's opening frame. Eye lines must match. Objects in hand persist. This applies to both within-scene shots AND across-scene transitions when CONTINUOUS.
+12. **Last Frame spatial handoff**: Every shot's Last Frame MUST declare for EACH character in frame: (1) screen position — left/center/right, (2) body orientation — facing camera/profile/three-quarter/away, (3) posture — standing/sitting/kneeling/leaning, (4) gaze direction — where the eyes point, (5) hands — what they hold or where they rest, (6) objects in contact. This is the binding contract for the next shot.
+
+## CRITICAL — Output Format (MANDATORY — THIS IS THE LAST RULE)
+
+You MUST respond with ONLY a valid JSON object matching the structure above. No exceptions.
+
+- Do NOT include ANY text before or after the JSON — no greetings, no commentary, no explanations, no markdown fences, no code blocks, no "Here is the result", no "Let me know if you need changes".
+- The response MUST begin with '{' and end with '}'.
+- Your ENTIRE response must be a single parseable JSON object with "episode" and "scenes" keys.
+- All string values must be valid JSON strings. Escape ALL double quotes inside prompts using backslash (\\").
+
+EXAMPLES OF WHAT NOT TO DO:
+❌ "I've analyzed your script. Here is the JSON:\\n{...}"
+❌ "...\\n{...}\\nLet me know if you need changes."
+❌ "'''json\\n{...}\\n'''"
+
+✅ "{...}" — valid JSON only, nothing else.
+`
+
+const defaultProncerPrompt = `You are a professional cinematography prompt consultant specializing in Seedance 2.5 video-generation prompts. Your ONLY role is to refine and optimize a single shot's prompt.en — you do NOT generate shot lists, scene descriptions, or multi-shot breakdowns.
+
+## Seedance Prompt Structure
+
+A well-formed prompt.en follows this EXACT section order:
+1. **[ImageN] header** — reference tokens used in this shot
+2. **Scene & Mood** — subject + primary physical action (first 20-30 words carry ~80% spatial-init weight), then dramatic mood
+3. **Frame Map** — 2-D screen positioning of each subject (left/center/right, foreground/midground, frame occupancy)
+4. **Location & Blocking** — physical space from plate, then each character pinned to a coherent place
+5. **Cross-Frame Rules** — screen-sides lock, eye lines, positive census
+6. **Movement** — progressive timeline per cut, beat-by-beat per second, micro-fidgeting injections
+7. **Dialogue** — exact line in double quotes, speaker identified
+8. **Last Frame** — closing composition with spatial handoff (position, orientation, posture, gaze, hands, objects)
+9. **World Plate** — location plate, time of day, lighting, atmosphere
+10. **Sound Bed** — diegetic only, no music
+11. **Capture Realism** — anti-plastic block (depth, moisture, specular kill, contrast curve)
+12. **Camera Capture** — mode camera line + technical-stability avoid list
+
+## Visual Reference Analysis
+
+When reference images or video frames are provided alongside the prompt:
+1. **ANALYZE each visual reference carefully** — identify the subject, their appearance (hair, clothing, accessories, posture), the environment, lighting, color palette, camera angle, and any notable details.
+2. **MATCH the prompt to the visual** — if the prompt describes a character, verify the description matches what the reference image actually shows. Correct any mismatches (wrong hair color, missing glasses, different clothing).
+3. **EXTRACT composition cues** — if a reference shows a specific camera angle, framing, or lighting setup, incorporate those cues into the appropriate prompt sections (Frame Map, Location & Blocking, World Plate, Camera Capture).
+4. **PRESERVE visual identity** — when a reference shows a character's appearance, do NOT override it with a different description. The reference IS the ground truth.
+5. **For video frames** — analyze the action/movement shown and use it to enhance the Movement section with specific, physically-grounded descriptions.
+6. **For location plates** — extract the exact spatial layout, surfaces, lighting direction, and atmosphere. Use this to strengthen Location & Blocking and World Plate sections.
+7. **DO NOT duplicate** — if the visual reference already shows something clearly (e.g., a character's outfit), do not redundantly describe it in text. Use [ImageN] tokens for visual anchors and describe only what the image CANNOT carry (action, mood, camera movement).
+
+## CRITICAL RULES — You MUST enforce these when optimizing
+
+### Reference Discipline (image-linked elements)
+When the prompt contains [ImageN] tokens for elements that have visual reference images:
+- **DO NOT add appearance descriptions** (hair color, clothing, facial features, body type, wardrobe) alongside the [ImageN] token. The video generator reads the reference image for visual appearance; describing it in text forces the generator to reinterpret and redraw the element, breaking visual consistency.
+- **Describe only ACTION and BEHAVIOR** — what the element does, how it moves, where it looks, what it interacts with.
+- **State-changes ONLY** — the only allowed appearance details are things the reference image CANNOT carry: damp, torn, dusty, bloodied, eyes closed vs open, mouth open vs closed.
+- Elements WITHOUT a visual reference (invent_free, define_with_text, abstract) may be described freely in text.
+
+GOOD: "[Image4] stares at the screen, jaw clenched, fingers frozen above the keyboard."
+BAD:  "[Image4] a young man with dark hair and glasses stares at the screen."
+
+### Spatial Continuity (HANDOFF LOCK)
+- The prompt's **Last Frame** MUST declare for EACH character: screen position, body orientation, posture, gaze direction, hands, objects in contact. This is the spatial handoff to the next shot.
+- The prompt's **Scene & Mood** opening MUST match the previous shot's spatial state if this is not the first shot of the scene.
+- Do NOT reposition, rotate, or teleport characters between shots without a motivated action in the Movement section.
+- Screen sides are LOCKED across consecutive shots in the same location.
+
+### Section-Aware Optimization
+- **Scene & Mood**: Keep it concise (1-2 sentences). Lead with subject + action. Camera and style NEVER open here.
+- **Frame Map**: Preserve [ImageN] anchors. Maintain screen-side consistency.
+- **Location & Blocking**: Preserve plate-fidelity. Do not add furniture, props, or architecture not in the reference plate.
+- **Movement**: Preserve beat-by-beat timeline structure. Enhance physical specificity (transitive verbs, micro-fidgets). Remove result-oriented adjectives (angry, sad, scared).
+- **Last Frame**: Strengthen the spatial handoff — ensure position, orientation, posture, gaze, hands are explicit for every character.
+- **Capture Realism**: Preserve the anti-plastic mechanics. Do not add commercial/commercial lighting language.
+- **Camera Capture**: Preserve mode line and technical-stability avoid list.
+
+### What You MAY Improve
+- Physical specificity in Movement (replace vague actions with muscular, transitive verbs)
+- Micro-fidgeting injections (eye-darts, nostril flares, lip curls)
+- Spatial precision in Frame Map (exact screen positions, negative space)
+- Delivery register in Dialogue (volume, tempo, jaw, breath)
+- Sound Bed specificity (particular foley sounds, not generic "ambient noise")
+- Camera Capture rhythm words (smooth, gradual, fluid — never hardware specs)
+- Cross-frame locks (explicit screen-sides, eye-line directions)
+
+### What You MUST NOT Change
+- [ImageN] slot assignments or reference tokens
+- Shot duration or timestamp structure
+- Dialogue lines (exact text must be preserved)
+- Location plate identity (do not redesign the space)
+- Screen-side assignments established in previous shots
+- The section order (Scene & Mood → Frame Map → ... → Camera Capture)
+
+## Output
 Return ONLY a valid JSON object:
 {
   "optimized_prompt": "the improved prompt",
@@ -445,17 +710,118 @@ input. They may have CHANGED since the previous breakdown — the user can edit 
 replace them between refinements. They are ground truth.
 
 Rules:
-- Apply ONLY the changes described in change_request. Everything else must remain IDENTICAL to the previous breakdown: same scene count, same shot ids, same titles, same descriptions, same prompts, same references, same continuity objects, same cumulative start/end timestamps.
+- Apply ONLY the changes described in change_request. Everything else must remain IDENTICAL to the previous breakdown: same scene count, same shot ids, same titles, same descriptions, same prompts, same references, same continuity objects, same cuts, same cumulative start/end timestamps.
 - RE-VALIDATE every reference image against the breakdown. For each shot, check that the character identity/wardrobe, the location geometry, and the props described in prompt.en still match the CURRENT image. If an image changed and a shot no longer matches it (different wardrobe, different plate layout, changed prop), CORRECT that shot's prompt.en to describe the current image — this is a required correction, not drift. If the image still matches, leave the shot untouched.
 - When you correct a shot because an image changed (not because of change_request), add a note to that shot's notes.warnings stating what changed.
 - If change_request adds or removes scenes/shots, adjust ONLY what is necessary and keep the rest untouched.
+- TARGETED REFINEMENT: when a "=== TARGETED SHOTS ===" section is present, modify ONLY the shots it lists (their prompt.en, and if needed their duration/cuts/start/end/references). Every other shot — and every scene that is not a target scene — must be emitted byte-for-byte identical to the previous breakdown: same titles, same descriptions, same prompts, same references, same continuity objects, same cuts, same timestamps. Do not renumber or re-edit anything outside the targets, even if you think it would be better. The change request applies ONLY to the targeted shots.
 - Preserve the script numbering (scriptNumber), the [ImageN] slot assignments, and the output JSON schema (episode + scenes + shots, each shot with prompt.en and optional prompt.zh).
+- A "=== RECENT CONVERSATION ===" section, when present, is context from earlier turns of the same conversation — it explains the intent behind the current change request but the change request is the operative instruction.
+- Reference discipline — image-linked elements: When an element has a visual reference image (linked_asset_id in the element registry), the prompt.en MUST use ONLY the [ImageN] token for that element — DO NOT include appearance descriptions (hair, clothing, facial features, body type, wardrobe) alongside the token. The video generator reads the reference image for visual appearance; describing it in text forces the generator to reinterpret and redraw the element, breaking visual consistency. Describe only the element's ACTION and BEHAVIOR in the shot. The only allowed appearance details are state-changes the image cannot carry (damp, torn, dusty, bloodied, eyes closed, mouth open). Elements WITHOUT a visual reference (invent_free, define_with_text, abstract) may be described freely.
+- Cross-shot spatial continuity: When modifying shots, PRESERVE the spatial handoff between consecutive shots. If you change a shot's Last Frame (position, orientation, posture, gaze, hands), you MUST update the next shot's opening to match. If you change a shot's opening, you MUST update the previous shot's Last Frame to match. Screen sides, eye lines, and objects in hand are LOCKED unless the change_request explicitly repositions a character.
 - Respond with ONLY a valid JSON object matching the schema — no text before or after, no markdown fences.
+`
+
+// elementElicitationPrompt is the system prompt for POST /claude/
+// analyze-elements. Derived from docs/elicitation-agent-system-prompt.md,
+// trimmed to phases 1–3 (extraction, asset cross-check, prioritization):
+// the interactive elicitation happens in the DCS UI, not here, and the
+// final status write-back is deterministic backend code. The model must
+// answer with a single strict JSON object — nothing else.
+const elementElicitationPrompt = `
+## Mission
+
+DCS-WORLD-CLOSING — pre-shotlist element analyzer. You read a script and produce the ELEMENT REGISTRY: every visual entity the shot generator could later render, each with an explicit definition status. You are a scout, not a designer: you NEVER describe appearance, you never invent details — you only detect what exists and what is missing.
+
+Your output feeds a UI where the user resolves every gap BEFORE any shot is generated. Nothing visual may reach the shot generator without a decision.
+
+## Inputs
+
+1. The full script (user message).
+2. Optional scene context listing available characters and image assets (with slot labels like [Image1]).
+
+## Entity taxonomy
+
+Track every visual entity in these categories:
+- character — named or unnamed people ("Wyatt", "the guard", "the line of customers")
+- animal — any animal mentioned or strongly implied
+- prop — objects, hero props, and set dressing with narrative weight
+- location — sets, rooms, exteriors
+- vehicle — cars, bikes, anything rideable or drivable
+- weather — atmospheric condition, only when exteriors or visible windows exist
+- wardrobe — clothing explicitly mentioned that could clash with reference images
+- screen_content — any screen-within-screen: laptops, monitors, camera feeds, progress bars, UI
+- sound_object — objects implied only by diegetic sound but that could enter frame
+- other — any other relevant visual element
+
+Do NOT describe appearance. Name, categorize, and quote the source text. If something is mentioned but NOT visually described (e.g. "ON SCREEN — decrypted camera feeds cycling"), extract it anyway: the missing description IS the gap you report, not a reason to omit it.
+
+## Procedure
+
+Phase 1 — Extraction. Walk the script scene by scene using its numbering. For each scene, list every mentioned or strongly implied visual entity with its exact source-text quote.
+
+Phase 2 — Cross-check. Compare each entity against the scene-context assets:
+- defined — an image asset clearly corresponds to this entity (set linked_asset_id to that asset id).
+- asset_orphan — an image asset is assigned to the scene but NO extracted entity matches it. Report the orphan itself as an entity (category other, definition_status asset_orphan, mentioned_as set to the asset label) so the user decides what it should show.
+- undefined — no asset and no sufficient textual description exists to fix its appearance.
+
+Phase 3 — Prioritization. Order entities within each scene by consistency impact: character, location, prop (hero props first), wardrobe, vehicle/animal, screen_content, weather, sound_object/other.
+
+## Hard rules
+
+1. Never resolve a gap yourself. undefined means undefined — do not fill it "reasonably".
+2. Reference images are absolute truth. Never reinterpret what an assigned asset shows.
+3. Director warnings present in the script are hard rules — flag any entity whose resolution would violate one.
+4. Do not mix locations: if two locations must never share a frame, keep their entities separate.
+5. screen_content is high risk: every on-screen text/UI/graphic needs an explicit entry — it is where unwanted hallucinated content appears most.
+6. Deduplicate across scenes: a recurring entity keeps one stable entity_id base and one shared consistency_group slug (e.g. "wyatt", "bank-interior"), and appears once per scene where it occurs.
+
+## Output format
+
+CRITICAL — Output Format. Respond with ONLY a valid JSON object matching the schema below — no text before or after, no markdown fences:
+
+{
+  "element_registry": [
+    {
+      "entity_id": "stable-slug",
+      "category": "character|animal|prop|location|vehicle|weather|wardrobe|screen_content|sound_object|other",
+      "mentioned_as": "how the script names it",
+      "source_text": "exact quote from the script",
+      "scene_number": 96,
+      "definition_status": "defined|asset_orphan|undefined",
+      "linked_asset_id": null,
+      "consistency_group": "shared-slug"
+    }
+  ],
+  "summary": "short prose summary of what was detected"
+}
+
+- linked_asset_id is the asset id string when defined, otherwise null.
+- scene_number is the integer script scene number.
+- All text values must be in English.
 `
 
 // ─── Shot Builder ─────────────────────────────────────────────────
 
 func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
+	h.claudeGenerateShots(c, defaultShotBuilderPrompt, true)
+}
+
+// ClaudeGenerateShotsV2 is the v2 shot generator: the base prompt only defines
+// the output STRUCTURE (JSON schema + format rules) and the BEHAVIOR is
+// delegated to the user-selected skill, appended on top of the base prompt.
+// Everything else — async task, polling, retries and logging — is identical
+// to generate-shots.
+func (h *Handler) ClaudeGenerateShotsV2(c *gin.Context) {
+	h.claudeGenerateShots(c, shotBuilderStructurePrompt, false)
+}
+
+// claudeGenerateShots is the shared implementation behind generate-shots and
+// generate-shots-v2. The only difference between them is the base system
+// prompt: the full director prompt (v1) vs the structure-only prompt (v2).
+// lockedFormat is true for the v1 director prompt, whose prompt.en follows the
+// locked 11-block format that must be validated on every response.
+func (h *Handler) claudeGenerateShots(c *gin.Context, basePrompt string, lockedFormat bool) {
 	// Capture the raw request body BEFORE binding — it is the ground truth for
 	// reconstructing a failed request (payload + scene_context with the
 	// assigned resources). Restore it so ShouldBindJSON still works.
@@ -486,10 +852,15 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 	// resend it, otherwise Claude answers "No script provided".
 	originalPrompt := finalPrompt
 
-	// Build system prompt: start with the default shot builder schema,
-	// then APPEND the skill's system prompt on top (if any), so Claude
-	// still has the JSON output format and critical rules.
-	systemPrompt, skillName := h.buildShotBuilderSystemPrompt(defaultShotBuilderPrompt, req.SkillID, req.SystemPrompt, req.GenerateZh)
+	// Build system prompt: start with the base schema (full director prompt for
+	// v1, structure-only for v2), then APPEND the skill's system prompt on top
+	// (if any), so Claude still has the JSON output format and critical rules.
+	systemPrompt, skillName := h.buildShotBuilderSystemPrompt(basePrompt, req.SkillID, req.SystemPrompt, req.GenerateZh)
+	// Closed-world rules from a resolved elicitation registry override any
+	// inference — appended last so they win.
+	if len(req.ElementRegistry) > 0 {
+		systemPrompt += buildClosedWorldBlock(req.ElementRegistry)
+	}
 
 	keyModel := req.Model
 	if keyModel == "" {
@@ -509,19 +880,68 @@ func (h *Handler) ClaudeGenerateShots(c *gin.Context) {
 		UserName:  req.UserName,
 	}
 
-	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "generate shots", "=== ORIGINAL SCRIPT AND INSTRUCTIONS ===", h.buildVisionImages(req.SceneContext))
-	if errMsg != "" {
-		utils.InternalError(c, errMsg)
+	// The breakdown can take 5+ minutes on Claude, so the request returns
+	// immediately with a taskId and the generation runs in the background.
+	// The client polls GET /generate-shots/status/:taskId for the result.
+	taskID := fmt.Sprintf("claude_%d", time.Now().UnixMilli())
+	user := userFromContext(c)
+
+	task := &ShotTask{
+		TaskID:    taskID,
+		Status:    ShotTaskProcessing,
+		Model:     apiModel,
+		CreatedAt: time.Now(),
+	}
+	h.taskStore.Set(task)
+
+	go func() {
+		// Detached context — the generation survives the client disconnecting.
+		ctx := context.Background()
+		clean, errMsg := h.runClaudeShotBuilder(ctx, user, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "generate shots", "=== ORIGINAL SCRIPT AND INSTRUCTIONS ===", lockedFormat, h.buildVisionImages(req.SceneContext), nil)
+		if errMsg != "" {
+			h.taskStore.Update(taskID, func(t *ShotTask) {
+				t.Status = ShotTaskFailed
+				t.Error = errMsg
+			})
+			return
+		}
+		h.taskStore.Update(taskID, func(t *ShotTask) {
+			t.Status = ShotTaskSucceeded
+			t.Text = clean
+		})
+		// ✅ Valid — notify the requesting user. The call was already logged.
+		h.notifyShotsReady(user.ID, clean, req.ProjectName)
+	}()
+
+	utils.Success(c, ClaudeGenerateShotsResponse{
+		TaskID: taskID,
+		Model:  apiModel,
+		Status: "processing",
+	})
+}
+
+// GetClaudeShotsStatus returns the current state of a background shot
+// generation task. The client polls this until the status is "succeeded"
+// (result in data.text) or "failed" (error in data.error).
+func (h *Handler) GetClaudeShotsStatus(c *gin.Context) {
+	taskID := c.Param("taskId")
+	if taskID == "" {
+		utils.BadRequest(c, "taskId is required")
 		return
 	}
 
-	// ✅ Valid — notify the requesting user and return clean JSON. Success is NOT logged.
-	h.notifyShotsReady(c, clean, req.ProjectName)
-	utils.Success(c, ClaudeGenerateShotsResponse{
-		TaskID: fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
-		Model:  apiModel,
-		Status: "succeeded",
-		Text:   clean,
+	task, ok := h.taskStore.Get(taskID)
+	if !ok {
+		utils.NotFound(c, "shot generation task not found")
+		return
+	}
+
+	utils.Success(c, ClaudeShotsStatusResponse{
+		TaskID: task.TaskID,
+		Model:  task.Model,
+		Status: task.Status,
+		Text:   task.Text,
+		Error:  task.Error,
 	})
 }
 
@@ -559,17 +979,18 @@ func (h *Handler) ClaudeRefineShots(c *gin.Context) {
 
 	// Anchor on the CURRENT scene context (the user may have edited or replaced
 	// reference images since the previous breakdown) + the previous breakdown +
-	// the change request. The images are also attached as vision blocks.
-	originalPrompt := ""
-	if req.SceneContext != nil {
-		originalPrompt += "=== Current Scene Context ===\n" + buildSceneContextBlock(req.SceneContext) + "\n\n"
-	}
-	originalPrompt += "=== Previous Breakdown ===\n" + req.PreviousResponse +
-		"\n\n=== Change Request ===\n" + req.ChangeRequest
+	// the change request (+ optional targeted shots and recent conversation).
+	// The images are also attached as vision blocks.
+	originalPrompt := buildRefinePrompt(req.SceneContext, req.PreviousResponse, req.ChangeRequest, req.Targets, req.RecentContext)
 
 	// Same base schema as generate-shots plus refinement (anti-drift) rules.
 	basePrompt := defaultShotBuilderPrompt + "\n\n## Refinement Mode\n" + refineModeInstructions
 	systemPrompt, skillName := h.buildShotBuilderSystemPrompt(basePrompt, req.SkillID, req.SystemPrompt, req.GenerateZh)
+	// Closed-world rules from a resolved elicitation registry override any
+	// inference — appended last so they win.
+	if len(req.ElementRegistry) > 0 {
+		systemPrompt += buildClosedWorldBlock(req.ElementRegistry)
+	}
 
 	keyModel := req.Model
 	if keyModel == "" {
@@ -589,20 +1010,96 @@ func (h *Handler) ClaudeRefineShots(c *gin.Context) {
 		UserName:  req.UserName,
 	}
 
-	clean, errMsg := h.runClaudeShotBuilder(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===", h.buildVisionImages(req.SceneContext))
-	if errMsg != "" {
-		utils.InternalError(c, errMsg)
-		return
+	// The refine can take 5+ minutes on Claude, so the request returns
+	// immediately with a taskId and the refinement runs in the background.
+	// The client polls GET /generate-shots/status/:taskId for the result.
+	taskID := fmt.Sprintf("claude_%d", time.Now().UnixMilli())
+	user := userFromContext(c)
+
+	task := &ShotTask{
+		TaskID:    taskID,
+		Status:    ShotTaskProcessing,
+		Model:     apiModel,
+		CreatedAt: time.Now(),
+	}
+	h.taskStore.Set(task)
+
+	go func() {
+		// Detached context — the refinement survives the client disconnecting.
+		ctx := context.Background()
+		clean, errMsg := h.runClaudeShotBuilder(ctx, user, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, "refine shots", "=== PREVIOUS BREAKDOWN AND CHANGE REQUEST ===", true, h.buildVisionImages(req.SceneContext), &refineContext{previousResponse: req.PreviousResponse, targets: req.Targets})
+		if errMsg != "" {
+			h.taskStore.Update(taskID, func(t *ShotTask) {
+				t.Status = ShotTaskFailed
+				t.Error = errMsg
+			})
+			return
+		}
+		h.taskStore.Update(taskID, func(t *ShotTask) {
+			t.Status = ShotTaskSucceeded
+			t.Text = clean
+		})
+		// ✅ Valid — notify the requesting user. The call was already logged.
+		h.notifyShotsReady(user.ID, clean, req.ProjectName)
+	}()
+
+	utils.Success(c, ClaudeGenerateShotsResponse{
+		TaskID: taskID,
+		Model:  apiModel,
+		Status: "processing",
+	})
+}
+
+// buildRefinePrompt composes the user prompt for a refine-shots call: current
+// scene context (optional) + previous breakdown + change request, plus optional
+// targeted shots (modify only these) and recent conversation turns (bounded
+// thread coherence). Pure — no handler state, unit-testable.
+func buildRefinePrompt(sceneContext *SceneContext, previousResponse, changeRequest string, targets []ShotRefineTarget, recent []ChatTurn) string {
+	var b strings.Builder
+
+	if sceneContext != nil {
+		b.WriteString("=== Current Scene Context ===\n")
+		b.WriteString(buildSceneContextBlock(sceneContext))
+		b.WriteString("\n\n")
 	}
 
-	// ✅ Valid — notify the requesting user and return clean JSON. Success is NOT logged.
-	h.notifyShotsReady(c, clean, req.ProjectName)
-	utils.Success(c, ClaudeRefineShotsResponse{
-		TaskID: fmt.Sprintf("claude_%d", time.Now().UnixMilli()),
-		Model:  apiModel,
-		Status: "succeeded",
-		Text:   clean,
-	})
+	b.WriteString("=== Previous Breakdown ===\n")
+	b.WriteString(previousResponse)
+	b.WriteString("\n\n=== Change Request ===\n")
+	b.WriteString(changeRequest)
+
+	if len(targets) > 0 {
+		b.WriteString("\n\n=== TARGETED SHOTS ===\n")
+		parts := make([]string, 0, len(targets))
+		for _, t := range targets {
+			parts = append(parts, fmt.Sprintf("%d-%s", t.SceneNumber, t.ShotID))
+		}
+		b.WriteString(strings.Join(parts, ", "))
+		b.WriteString("\nApply the change request ONLY to these shots. Every other shot must be emitted byte-for-byte identical to the previous breakdown.")
+	}
+
+	if len(recent) > 0 {
+		b.WriteString("\n\n=== RECENT CONVERSATION ===\n")
+		for _, turn := range recent {
+			role := turn.Role
+			if role == "" {
+				role = "user"
+			}
+			b.WriteString(role + ": " + truncateRune(turn.Content, 500) + "\n")
+		}
+	}
+
+	return b.String()
+}
+
+// truncateRune shortens s to at most max runes, appending an ellipsis when it
+// had to cut. Used to bound the recent-conversation context on refine calls.
+func truncateRune(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
 }
 
 // ─── Shared Shot Builder pipeline ────────────────────────────────
@@ -642,18 +1139,29 @@ func (h *Handler) buildShotBuilderSystemPrompt(basePrompt, skillID, userSystemPr
 	return systemPrompt, skillName
 }
 
+// refineContext carries the previous breakdown and the targeted shots so the
+// consistency validator can enforce that a refine response only touches its
+// targets. nil means a fresh generate call — no drift check is applied.
+type refineContext struct {
+	previousResponse string
+	targets          []ShotRefineTarget
+}
+
 // runClaudeShotBuilder executes the shared Claude retry loop for the shot
 // builder (generate-shots and refine-shots): up to 3 attempts with corrective
-// feedback, JSON extraction + validation, and log-only-failures persistence.
-// On success it returns the clean JSON and an empty message; on failure it
-// persists the log and returns the error message to send to the client.
+// feedback, JSON extraction + validation, and log persistence on both success
+// and failure. On success it returns the clean JSON and an empty message; on
+// failure it returns the error message to send to the client.
 func (h *Handler) runClaudeShotBuilder(
-	c *gin.Context,
+	ctx context.Context,
+	user shotBuilderUser,
 	meta *shotBuilderMeta,
 	systemPrompt, originalPrompt string,
 	rawBody []byte,
 	skillName, keyModel, apiModel, actionLabel, correctiveHeader string,
+	lockedFormat bool,
 	images []visionImage,
+	refine *refineContext,
 ) (string, string) {
 	// Retry loop: up to 3 attempts with corrective feedback
 	const maxAttempts = 3
@@ -667,7 +1175,7 @@ func (h *Handler) runClaudeShotBuilder(
 	finalPrompt := originalPrompt
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		reply, usage, duration, callErr := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt, images)
+		reply, usage, duration, callErr := h.callClaude(ctx, keyModel, apiModel, systemPrompt, finalPrompt, images)
 
 		a := &ShotBuilderAttempt{
 			AttemptNumber: attempt + 1,
@@ -680,14 +1188,14 @@ func (h *Handler) runClaudeShotBuilder(
 			a.ErrorMessage = callErr.Error()
 			attempts = append(attempts, a)
 			msg := fmt.Sprintf("failed to %s: %v", actionLabel, callErr)
-			h.persistFailure(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, msg, start)
+			h.persistLog("failed", msg, user, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, start)
 			return "", msg
 		}
 
 		// Extract clean JSON from Claude's response
 		clean := extractJSON(reply)
 		a.Response = reply
-		a.Valid = validateShotJSON(clean)
+		a.Valid = validateShotJSON(clean) && (!lockedFormat || validateV1PromptFormat(clean)) && (refine == nil || validateRefineConsistency(clean, refine))
 		if usage != nil {
 			a.InputTokens = int(usage.InputTokens)
 			a.OutputTokens = int(usage.OutputTokens)
@@ -699,7 +1207,8 @@ func (h *Handler) runClaudeShotBuilder(
 		attempts = append(attempts, a)
 
 		if a.Valid {
-			// ✅ Valid — return clean JSON. Success is NOT logged.
+			// ✅ Valid — persist the successful call before returning.
+			h.persistLog("succeeded", "", user, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, clean, start)
 			return clean, ""
 		}
 
@@ -719,13 +1228,13 @@ func (h *Handler) runClaudeShotBuilder(
 
 	// All attempts exhausted — persist the failure before returning.
 	msg := buildExhaustionError(maxAttempts, lastReply)
-	h.persistFailure(c, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, msg, start)
+	h.persistLog("failed", msg, user, meta, systemPrompt, originalPrompt, rawBody, skillName, keyModel, apiModel, attempts, totalInputTokens, totalOutputTokens, lastReply, start)
 	return "", msg
 }
 
-// ─── Shot Builder Logs (failed calls) ─────────────────────────────
+// ─── Shot Builder Logs (generate-shots / refine-shots) ───────────
 
-// ListGenerateShotsLogs returns paginated failed generate-shots calls.
+// ListGenerateShotsLogs returns paginated generate-shots / refine-shots calls.
 func (h *Handler) ListGenerateShotsLogs(c *gin.Context) {
 	var req ListShotBuilderLogsRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -765,7 +1274,7 @@ func (h *Handler) ListGenerateShotsLogs(c *gin.Context) {
 	})
 }
 
-// GetGenerateShotsLog returns a single failed generate-shots call with its attempts.
+// GetGenerateShotsLog returns a single generate-shots / refine-shots call with its attempts.
 func (h *Handler) GetGenerateShotsLog(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -791,30 +1300,31 @@ func (h *Handler) GetGenerateShotsLog(c *gin.Context) {
 	utils.Success(c, gin.H{"log": logEntry, "attempts": attempts})
 }
 
-// persistFailure writes the shot builder log row and all buffered attempts
-// for a failed generate-shots / refine-shots call. A logging error must never
-// mask the real error already sent to the client, so failures are only logged
-// with log.Printf.
-func (h *Handler) persistFailure(
-	c *gin.Context,
+// persistLog writes the shot builder log row and all buffered attempts for a
+// generate-shots / refine-shots call, whether it succeeded or failed. A logging
+// error must never mask the real result, so persistence failures are only
+// logged with log.Printf.
+func (h *Handler) persistLog(
+	status, errorMsg string,
+	user shotBuilderUser,
 	meta *shotBuilderMeta,
 	systemPrompt, originalPrompt string,
 	rawBody []byte,
 	skillName, keyModel, apiModel string,
 	attempts []*ShotBuilderAttempt,
 	totalInput, totalOutput int,
-	lastReply, errorMsg string,
+	lastReply string,
 	start time.Time,
 ) {
 	if h.logStore == nil {
 		return
 	}
 
-	userID := userIDFromContext(c)
+	userID := user.ID
 	if userID == 0 {
 		userID = meta.UserID
 	}
-	userName := stringFromContext(c, "username")
+	userName := user.Name
 	if userName == "" {
 		userName = meta.UserName
 	}
@@ -823,7 +1333,7 @@ func (h *Handler) persistFailure(
 		Mode:              meta.Mode,
 		UserID:            userID,
 		UserName:          userName,
-		UserEmail:         stringFromContext(c, "user_email"),
+		UserEmail:         user.Email,
 		ProjectID:         meta.ProjectID,
 		SceneID:           meta.SceneID,
 		KeyModel:          keyModel,
@@ -833,7 +1343,7 @@ func (h *Handler) persistFailure(
 		RequestPayload:    string(rawBody),
 		SystemPrompt:      systemPrompt,
 		Prompt:            originalPrompt,
-		Status:            "failed",
+		Status:            status,
 		ErrorMessage:      errorMsg,
 		Response:          extractJSON(lastReply),
 		Attempts:          len(attempts),
@@ -876,10 +1386,28 @@ func stringFromContext(c *gin.Context, key string) string {
 	return ""
 }
 
+// shotBuilderUser carries the authenticated identity captured from the request
+// context, so background shot generation can persist failure logs and send the
+// "shots ready" push after the request has returned.
+type shotBuilderUser struct {
+	ID    int
+	Name  string
+	Email string
+}
+
+// userFromContext captures the authenticated user's identity from the request
+// context. Must be called BEFORE a background goroutine is spawned.
+func userFromContext(c *gin.Context) shotBuilderUser {
+	return shotBuilderUser{
+		ID:    userIDFromContext(c),
+		Name:  stringFromContext(c, "username"),
+		Email: stringFromContext(c, "user_email"),
+	}
+}
+
 // notifyShotsReady sends a push to the requesting user when a shot breakdown
 // finishes generating or refining. Fire-and-forget — never blocks the response.
-func (h *Handler) notifyShotsReady(c *gin.Context, clean, projectName string) {
-	userID := userIDFromContext(c)
+func (h *Handler) notifyShotsReady(userID int, clean, projectName string) {
 	if h.pushSvc == nil || userID == 0 {
 		return
 	}
@@ -952,6 +1480,11 @@ func (h *Handler) ClaudeOptimizePrompt(c *gin.Context) {
 	if systemPrompt == "" {
 		systemPrompt = defaultProncerPrompt
 	}
+	// Closed-world rules from a resolved elicitation registry — appended last
+	// so they win. Ensures the Proncer respects reference discipline.
+	if len(req.ElementRegistry) > 0 {
+		systemPrompt += buildClosedWorldBlock(req.ElementRegistry)
+	}
 
 	finalPrompt := strings.Join(promptParts, "\n\n")
 
@@ -964,7 +1497,28 @@ func (h *Handler) ClaudeOptimizePrompt(c *gin.Context) {
 		apiModel = keyModel
 	}
 
-	reply, _, _, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt, nil)
+	// Build vision images from user-supplied reference files (images/videos).
+	var refImages []visionImage
+	if len(req.ReferenceFiles) > 0 && h.vision != nil {
+		seen := make(map[string]bool)
+		for _, fileID := range req.ReferenceFiles {
+			if fileID == "" || seen[fileID] || len(refImages) >= h.maxVisionImages {
+				continue
+			}
+			url, err := h.vision.VisionURL(fileID)
+			if err != nil {
+				log.Printf("[proncer] skipping reference file %q: %v", fileID, err)
+				continue
+			}
+			seen[fileID] = true
+			refImages = append(refImages, visionImage{URL: url, Label: fmt.Sprintf("reference file: %s", fileID)})
+		}
+		if len(refImages) > 0 {
+			log.Printf("[proncer] sending %d reference images to Claude", len(refImages))
+		}
+	}
+
+	reply, _, _, err := h.callClaude(c.Request.Context(), keyModel, apiModel, systemPrompt, finalPrompt, refImages)
 	if err != nil {
 		utils.InternalError(c, fmt.Sprintf("failed to optimize prompt: %v", err))
 		return
@@ -1051,15 +1605,16 @@ func (h *Handler) callClaude(ctx context.Context, keyModel, apiModel, systemProm
 
 	// 2. Create a detached context so the API call survives client disconnects.
 	//    The shot builder sends the full DCS-DIRECTION system prompt (large,
-	//    cache-miss on first call) plus up to 16384 output tokens (EN + ZH),
-	//    which can take well over 5 minutes on Claude.
-	apiCtx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	//    cache-miss on first call) plus up to 64000 output tokens (EN + ZH),
+	//    which can take well over 5 minutes on Claude. Timeouts are set as
+	//    high as the provider allows so heavy breakdowns do not get cut.
+	apiCtx, cancel := context.WithTimeout(context.Background(), 35*time.Minute)
 	defer cancel()
 
 	// 3. Create a per-request client with the resolved API key
 	client := anthropic.NewClient(
 		option.WithAPIKey(apiKey),
-		option.WithRequestTimeout(15*time.Minute),
+		option.WithRequestTimeout(30*time.Minute),
 	)
 
 	// Build the user turn: the text prompt (script + scene context) followed by
@@ -1311,26 +1866,264 @@ func extractJSON(text string) string {
 	return text
 }
 
-// validateShotJSON checks that the text is a JSON object with either:
-//   - Legacy format: a "shots" array
-//   - New format: an "episode" object + "scenes" array (each scene has shots)
-func validateShotJSON(text string) bool {
+// walkShots iterates every shot (new format: episode + scenes, or legacy flat
+// shots array) and calls fn on each. Returns true when the text parses, there
+// is at least one shot, and fn returns true for every shot.
+func walkShots(text string, fn func(shot map[string]json.RawMessage) bool) bool {
 	// Try new format first (episode + scenes)
 	var newFormat struct {
 		Episode *struct{} `json:"episode"`
 		Scenes  []struct {
-			Shots []any `json:"shots"`
+			Shots []map[string]json.RawMessage `json:"shots"`
 		} `json:"scenes"`
 	}
 	if json.Unmarshal([]byte(text), &newFormat) == nil && newFormat.Episode != nil && len(newFormat.Scenes) > 0 {
+		for _, scene := range newFormat.Scenes {
+			for _, shot := range scene.Shots {
+				if !fn(shot) {
+					return false
+				}
+			}
+		}
 		return true
 	}
 
 	// Fallback: legacy format (flat shots array)
 	var legacy struct {
-		Shots []any `json:"shots"`
+		Shots []map[string]json.RawMessage `json:"shots"`
 	}
-	return json.Unmarshal([]byte(text), &legacy) == nil && len(legacy.Shots) > 0
+	if json.Unmarshal([]byte(text), &legacy) == nil && len(legacy.Shots) > 0 {
+		for _, shot := range legacy.Shots {
+			if !fn(shot) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// atImageRe matches the forbidden "@imageN" reference syntax. References are
+// ALWAYS "[ImageN]" (v1 rule 26 / v2 rule 9).
+var atImageRe = regexp.MustCompile(`(?i)@image\s*\d`)
+
+// validShotFields checks the per-shot invariants enforced on every response
+// regardless of format (v1 or v2/skill):
+//   - "cuts", when present, must be a non-negative integer (0 = continuous take)
+//   - "prompt.en", when present, must be a non-empty string
+//   - "prompt.en" must never use "@imageN"
+func validShotFields(shot map[string]json.RawMessage) bool {
+	if raw, ok := shot["cuts"]; ok {
+		if string(raw) == "null" {
+			return false
+		}
+		var n float64
+		if err := json.Unmarshal(raw, &n); err != nil || n < 0 || n != float64(int64(n)) {
+			return false
+		}
+	}
+	if raw, ok := shot["prompt"]; ok {
+		var prompt struct {
+			En string `json:"en"`
+		}
+		if err := json.Unmarshal(raw, &prompt); err == nil {
+			if strings.TrimSpace(prompt.En) == "" {
+				return false
+			}
+			if atImageRe.MatchString(prompt.En) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// validateShotJSON checks that the text is a JSON object with either:
+//   - Legacy format: a "shots" array
+//   - New format: an "episode" object + "scenes" array (each scene has shots)
+//
+// and that every shot passes validShotFields.
+func validateShotJSON(text string) bool {
+	return walkShots(text, validShotFields)
+}
+
+// validateV1PromptFormat checks the locked v1 prompt format: every shot's
+// prompt.en must carry the Capture Realism and Camera Capture sections. Only
+// applied when the full director prompt (v1) was the base — v2/skill responses
+// may use whatever prompt format the selected skill defines.
+func validateV1PromptFormat(text string) bool {
+	return walkShots(text, func(shot map[string]json.RawMessage) bool {
+		raw, ok := shot["prompt"]
+		if !ok {
+			return false
+		}
+		var prompt struct {
+			En string `json:"en"`
+		}
+		if err := json.Unmarshal(raw, &prompt); err != nil {
+			return false
+		}
+		return strings.Contains(prompt.En, "Capture Realism") && strings.Contains(prompt.En, "Camera Capture")
+	})
+}
+
+// validateRefineConsistency enforces refine-mode consistency between the
+// returned breakdown and the previous one:
+//   - every reference slot maps to a single asset across the whole response
+//   - every shot that is NOT a refinement target must be byte-for-byte
+//     identical to the previous breakdown (no drift, no additions, no removals)
+//
+// Returns true when there is nothing to check (nil refine, empty previous
+// response, or no targets) or when the breakdown is consistent.
+func validateRefineConsistency(text string, refine *refineContext) bool {
+	if refine == nil || refine.previousResponse == "" || len(refine.targets) == 0 {
+		return true
+	}
+	if !validateSlotUniqueness(text) {
+		return false
+	}
+
+	prevShots, ok := indexShotsByKey(refine.previousResponse)
+	if !ok {
+		// Previous breakdown unparseable — nothing reliable to compare against.
+		return true
+	}
+	newShots, ok := indexShotsByKey(text)
+	if !ok {
+		return false
+	}
+
+	targets := make(map[string]bool, len(refine.targets))
+	for _, t := range refine.targets {
+		targets[fmt.Sprintf("%d-%s", t.SceneNumber, t.ShotID)] = true
+	}
+
+	// Every non-target shot in the new response must match the previous one.
+	for key, newRaw := range newShots {
+		if targets[key] {
+			continue
+		}
+		prevRaw, exists := prevShots[key]
+		if !exists || prevRaw != newRaw {
+			return false
+		}
+	}
+
+	// No non-target shot may disappear from the previous breakdown.
+	for key := range prevShots {
+		if targets[key] {
+			continue
+		}
+		if _, exists := newShots[key]; !exists {
+			return false
+		}
+	}
+
+	return true
+}
+
+// validateSlotUniqueness checks that every reference slot in the response
+// (episode.assetAssignments + per-shot references) maps to exactly one asset.
+func validateSlotUniqueness(text string) bool {
+	seen := make(map[string]string)
+	check := func(slot, assetID string) bool {
+		if slot == "" {
+			return true
+		}
+		if prev, ok := seen[slot]; ok {
+			return prev == assetID
+		}
+		seen[slot] = assetID
+		return true
+	}
+
+	var ep struct {
+		Episode *struct {
+			AssetAssignments []struct {
+				Slot    string `json:"slot"`
+				AssetID string `json:"assetId"`
+			} `json:"assetAssignments"`
+		} `json:"episode"`
+	}
+	if err := json.Unmarshal([]byte(text), &ep); err == nil && ep.Episode != nil {
+		for _, a := range ep.Episode.AssetAssignments {
+			if !check(a.Slot, a.AssetID) {
+				return false
+			}
+		}
+	}
+
+	return walkShots(text, func(shot map[string]json.RawMessage) bool {
+		var refs []struct {
+			Slot    string `json:"slot"`
+			AssetID string `json:"assetId"`
+		}
+		raw, ok := shot["references"]
+		if !ok || json.Unmarshal(raw, &refs) != nil {
+			return true
+		}
+		for _, r := range refs {
+			if !check(r.Slot, r.AssetID) {
+				return false
+			}
+		}
+		return true
+	})
+}
+
+// indexShotsByKey parses a breakdown (new episode+scenes format, or the legacy
+// flat shots array) and returns a map of "sceneNumber-shotID" → canonical JSON
+// of that shot. Shots are decoded into map[string]any so json.Marshal re-sorts
+// map keys at every nesting level — structurally-identical shots produce
+// identical bytes regardless of field order (and 10 vs 10.0 normalize).
+func indexShotsByKey(text string) (map[string]string, bool) {
+	var newFormat struct {
+		Episode *struct{} `json:"episode"`
+		Scenes  []struct {
+			ScriptNumber int              `json:"scriptNumber"`
+			Shots        []map[string]any `json:"shots"`
+		} `json:"scenes"`
+	}
+	if err := json.Unmarshal([]byte(text), &newFormat); err == nil && newFormat.Episode != nil && len(newFormat.Scenes) > 0 {
+		out := make(map[string]string)
+		for _, scene := range newFormat.Scenes {
+			for _, shot := range scene.Shots {
+				key := fmt.Sprintf("%d-%s", scene.ScriptNumber, shotString(shot, "id"))
+				if raw, err := json.Marshal(shot); err == nil {
+					out[key] = string(raw)
+				}
+			}
+		}
+		return out, true
+	}
+
+	var legacy struct {
+		Shots []map[string]any `json:"shots"`
+	}
+	if err := json.Unmarshal([]byte(text), &legacy); err == nil && len(legacy.Shots) > 0 {
+		out := make(map[string]string)
+		for _, shot := range legacy.Shots {
+			key := "0-" + shotString(shot, "id")
+			if raw, err := json.Marshal(shot); err == nil {
+				out[key] = string(raw)
+			}
+		}
+		return out, true
+	}
+
+	return nil, false
+}
+
+func shotString(shot map[string]any, key string) string {
+	raw, ok := shot[key]
+	if !ok {
+		return ""
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return ""
+	}
+	return s
 }
 
 func parseOptimizeResponse(text string) (optimized string, suggestions, changes []string) {
