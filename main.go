@@ -185,6 +185,19 @@ func main() {
 	})
 	projectHdl := project.NewHandler(projectSvc)
 
+	// ─── Startup repair ──────────────────────────────────────────
+	// Downloads and persists a local copy for every take that still only has
+	// an external video_url (video_local_url empty). Runs in background so it
+	// never blocks server start.
+	go func() {
+		repaired, err := projectSvc.RepairMissingLocalVideos()
+		if err != nil {
+			log.Printf("startup: local video repair failed: %v", err)
+			return
+		}
+		log.Printf("startup: local video repair done, %d takes with local copy", repaired)
+	}()
+
 	// ─── Router ──────────────────────────────────────────────────
 
 	r := gin.Default()

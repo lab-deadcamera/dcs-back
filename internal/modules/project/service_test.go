@@ -282,6 +282,16 @@ func (m *mockStore) ListTakes(shotID string) ([]Take, error) {
 	return list, nil
 }
 
+func (m *mockStore) ListTakesNeedingLocalVideo() ([]Take, error) {
+	var list []Take
+	for _, t := range m.takes {
+		if t.VideoURL != "" && t.VideoLocalURL == "" {
+			list = append(list, *t)
+		}
+	}
+	return list, nil
+}
+
 func (m *mockStore) UpdateTake(id string, updates map[string]interface{}) error {
 	t, ok := m.takes[id]
 	if !ok {

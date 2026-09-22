@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -55,6 +56,7 @@ type projectStore interface {
 	CreateTake(t *Take) error
 	GetTakeByID(id string) (*Take, error)
 	ListTakes(shotID string) ([]Take, error)
+	ListTakesNeedingLocalVideo() ([]Take, error)
 	ListActiveTakes(shotID string) ([]Take, error)
 	GetActiveTakeByNumber(shotID string, number int) (*Take, error)
 	GetPendingTakeByNumber(shotID string, number int) (*Take, error)
@@ -513,6 +515,60 @@ func (s *Service) ListTakes(shotID string) ([]Take, error) {
 	return takes, nil
 }
 
+// ListTakesWithLocalVideos lists takes for a shot and materializes a local
+// copy (inside the outputs dir) of any take that has an external video_url
+// but no video_local_url yet. The local URL is persisted so subsequent
+// listings skip the download. Download failures are non-fatal: the take is
+// returned as-is so the listing still succeeds.
+func (s *Service) ListTakesWithLocalVideos(shotID, username string) ([]Take, error) {
+	takes, err := s.ListTakes(shotID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range takes {
+		takes[i] = s.ensureLocalVideo(takes[i], username)
+	}
+	return takes, nil
+}
+
+// ensureLocalVideo downloads and persists the local video for a single take
+// when video_local_url is still empty. Returns the take unchanged otherwise
+// or on failure.
+func (s *Service) ensureLocalVideo(t Take, username string) Take {
+	if t.VideoURL == "" || t.VideoLocalURL != "" {
+		return t
+	}
+	updated, err := s.DownloadTakeVideo(t.ID, username)
+	if err != nil {
+		log.Printf("[takes] local video download failed for take %s: %v", t.ID, err)
+		return t
+	}
+	if updated == nil {
+		return t
+	}
+	return *updated
+}
+
+// RepairMissingLocalVideos scans every take that still only has an external
+// video_url and downloads/persists a local copy (outputs dir). Non-fatal per
+// take: takes whose download fails are skipped and logged. Returns the number
+// of takes repaired.
+func (s *Service) RepairMissingLocalVideos() (int, error) {
+	takes, err := s.store.ListTakesNeedingLocalVideo()
+	if err != nil {
+		return 0, err
+	}
+	repaired := 0
+	for _, t := range takes {
+		if _, err := s.DownloadTakeVideo(t.ID, ""); err != nil {
+			log.Printf("[startup] local video download failed for take %s: %v", t.ID, err)
+			continue
+		}
+		repaired++
+	}
+	return repaired, nil
+}
+
 func (s *Service) UpdateTake(id string, req *UpdateTakeRequest) (*Take, error) {
 	updates := make(map[string]interface{})
 	if req.VideoURL != nil {
@@ -917,6 +973,19 @@ func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 		return t, nil
 	}
 
+	// If the stored URL is already a local outputs path, there is nothing to
+	// download: just promote it to video_local_url and persist.
+	if isLocalOutputURL(t.VideoURL) {
+		if err := s.store.UpdateTake(takeID, map[string]interface{}{
+			"video_url":       t.VideoURL,
+			"video_local_url": t.VideoURL,
+		}); err != nil {
+			return nil, err
+		}
+		t.VideoLocalURL = t.VideoURL
+		return t, nil
+	}
+
 	// Resolve shot -> scene -> project for naming
 	sh, err := s.store.GetShotByID(t.ShotID)
 	if err != nil {
@@ -990,6 +1059,12 @@ func (s *Service) DownloadTakeVideo(takeID, username string) (*Take, error) {
 	t.VideoURL = localURL
 	t.VideoLocalURL = localURL
 	return t, nil
+}
+
+// isLocalOutputURL reports whether a stored URL already points at this
+// server's outputs directory (a relative path) instead of an external host.
+func isLocalOutputURL(rawURL string) bool {
+	return strings.HasPrefix(rawURL, "/") && !strings.Contains(rawURL, "://")
 }
 
 // ─── Chapter Assignment Service Methods ──────────────────────────

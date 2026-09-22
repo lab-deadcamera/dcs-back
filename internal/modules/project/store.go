@@ -409,7 +409,7 @@ const takeListFrom = `FROM takes t
 func (s *ProjectStore) scanTake(t *Take, scanner interface {
 	Scan(dest ...interface{}) error
 }) error {
-	return scanner.Scan(&t.ID, &t.SceneID, &t.ShotID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.Final, &t.TaskID, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
+	return scanner.Scan(&t.ID, &t.SceneID, &t.ShotID, &t.Number, &t.VideoURL, &t.VideoLocalURL, &t.Status, &t.Active, &t.Final, &t.TaskID, &t.Rating, &t.CreatedAt, &t.UpdatedAt, &t.DeletedAt)
 }
 
 func (s *ProjectStore) scanTakeWithPayload(t *Take, scanner interface {
@@ -450,6 +450,30 @@ func (s *ProjectStore) ListTakes(shotID string) ([]Take, error) {
 	for rows.Next() {
 		var t Take
 		if err := s.scanTakeWithPayload(&t, rows); err != nil {
+			return nil, err
+		}
+		takes = append(takes, t)
+	}
+	return takes, rows.Err()
+}
+
+// ListTakesNeedingLocalVideo returns non-deleted takes that still have an
+// external video URL but no local copy yet (video_local_url empty). Used at
+// startup to repair takes generated before local downloads were persisted.
+func (s *ProjectStore) ListTakesNeedingLocalVideo() ([]Take, error) {
+	query := `SELECT ` + takeCols + ` FROM takes t
+		WHERE t.video_url <> '' AND t.video_local_url = '' AND t.deleted_at IS NULL
+		ORDER BY t.created_at ASC`
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var takes []Take
+	for rows.Next() {
+		var t Take
+		if err := s.scanTake(&t, rows); err != nil {
 			return nil, err
 		}
 		takes = append(takes, t)
