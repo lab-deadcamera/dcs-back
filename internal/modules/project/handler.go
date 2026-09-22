@@ -518,7 +518,10 @@ func (h *Handler) ListTakes(c *gin.Context) {
 		return
 	}
 
-	takes, err := h.svc.ListTakes(shotID)
+	username, _ := c.Get("username")
+	userStr, _ := username.(string)
+
+	takes, err := h.svc.ListTakesWithLocalVideos(shotID, userStr)
 	if err != nil {
 		if err.Error() == "shot not found" {
 			utils.NotFound(c, err.Error())
