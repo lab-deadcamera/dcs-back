@@ -273,6 +273,16 @@ type TaskRecord struct {
 	UserID       int    // owner of the task (0 when not known)
 	PushNotified bool   // true once a completion push was sent for this task
 	ResourceType string // "video", "image", ... — gates the completion push
+	// StatusFinal is true once the task reached a terminal state (succeeded /
+	// failed). When set, Result holds the definitive snapshot and GetStatus
+	// returns it without contacting the provider again.
+	StatusFinal bool
+	// LastLoggedStatus is the last provider status persisted to
+	// server_communications. Used to avoid writing one DB row per poll.
+	LastLoggedStatus string
+	// UpdatedAt is refreshed on every successful status poll; the cleanup loop
+	// evicts records idle for longer than taskRecordTTL.
+	UpdatedAt time.Time
 }
 
 // TakeSaver is a callback to persist completed generation outputs
