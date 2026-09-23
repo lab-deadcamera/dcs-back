@@ -72,7 +72,7 @@ func (s *Service) GetProviderStore() *provider.Store {
 }
 
 func NewService(providerStore *provider.Store, fileService *file.Service, outputsDir, baseURL string) *Service {
-	return &Service{
+	s := &Service{
 		providerStore: providerStore,
 		fileService:   fileService,
 		outputsDir:    outputsDir,
@@ -81,6 +81,8 @@ func NewService(providerStore *provider.Store, fileService *file.Service, output
 		costCalcs:     []CostCalculator{},
 		tasks:         make(map[string]*TaskRecord),
 	}
+	go s.cleanupTasks()
+	return s
 }
 
 func (s *Service) SetAssetSyncStore(store *AssetSyncStore) {
@@ -371,24 +373,34 @@ func (s *Service) GenerateUnified(req *StudioGenerateRequest) (*StudioGenerateRe
 	}
 
 	// Track the task for status polling
-	terminal := result.Status == config.STATUS_SUCCESS || result.Status == config.STATUS_FAILED
+	terminal := isTerminalStatus(result.Status)
+	initialResult := &StatusResult{
+		Status: result.Status,
+		Raw:    result.Raw,
+	}
+	if len(result.Outputs) > 0 {
+		initialResult.VideoURL = result.Outputs[0].URL
+		initialResult.LocalURL = result.Outputs[0].LocalURL
+	}
+	now := time.Now()
 	s.mu.Lock()
 	record := &TaskRecord{
-		TaskID:       result.TaskID,
-		ModelID:      m.ID,
-		ModelName:    m.Name,
-		Status:       result.Status,
-		ProjectName:  req.ProjectName,
-		SceneCode:    req.SceneCode,
-		TakeNumber:   req.TakeNumber,
-		UserHandle:   userName,
-		UserID:       req.UserID,
-		PushNotified: terminal,
-		ResourceType: req.ResourceType,
-		Result: &StatusResult{
-			Status: result.Status,
-			Raw:    result.Raw,
-		},
+		TaskID:           result.TaskID,
+		ModelID:          m.ID,
+		ModelName:        m.Name,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		Status:           result.Status,
+		ProjectName:      req.ProjectName,
+		SceneCode:        req.SceneCode,
+		TakeNumber:       req.TakeNumber,
+		UserHandle:       userName,
+		UserID:           req.UserID,
+		PushNotified:     terminal,
+		ResourceType:     req.ResourceType,
+		StatusFinal:      terminal,
+		LastLoggedStatus: result.Status,
+		Result:           initialResult,
 	}
 	s.tasks[result.TaskID] = record
 	s.mu.Unlock()
@@ -1346,34 +1358,41 @@ func (s *Service) statusFromLog(log *GenerationLog) (*StatusResult, error) {
 
 	result, err := gen.GetStatus(log.TaskID, m.APIKey, m.URL, m.Endpoint)
 
-	// Log server communication
-	if s.commStore != nil {
-		reqBytes, _ := json.Marshal(map[string]string{"task_id": log.TaskID})
-		respBody := ""
-		genStatus := 200
-		if err != nil {
-			genStatus = 0
-			respBody = err.Error()
-		} else if result != nil && result.Raw != nil {
-			rawBytes, _ := json.Marshal(result.Raw)
-			respBody = string(rawBytes)
-		}
-		errMsg := ""
-		if err != nil {
-			errMsg = err.Error()
-		}
-		s.commStore.Create(&ServerCommunication{
-			TaskID:       log.TaskID,
-			ModelName:    m.Name,
-			Endpoint:     m.URL + m.Endpoint,
-			Method:       "GET",
-			RequestBody:  string(reqBytes),
-			ResponseBody: respBody,
-			StatusCode:   genStatus,
-			ErrorMessage: errMsg,
-		})
+	// Log server communication only when the status changes (or on error), so
+	// polling an in-flight task does not insert a DB row on every request.
+	var providerStatus string
+	if result != nil {
+		providerStatus = result.Status
 	}
-	fmt.Printf("[status-from-log] gen.GetStatus err=%v", err != nil)
+	if err != nil || providerStatus != log.Status {
+		if s.commStore != nil {
+			reqBytes, _ := json.Marshal(map[string]string{"task_id": log.TaskID})
+			respBody := ""
+			genStatus := 200
+			if err != nil {
+				genStatus = 0
+				respBody = err.Error()
+			} else if result != nil && result.Raw != nil {
+				rawBytes, _ := json.Marshal(result.Raw)
+				respBody = string(rawBytes)
+			}
+			errMsg := ""
+			if err != nil {
+				errMsg = err.Error()
+			}
+			s.commStore.Create(&ServerCommunication{
+				TaskID:       log.TaskID,
+				ModelName:    m.Name,
+				Endpoint:     m.URL + m.Endpoint,
+				Method:       "GET",
+				RequestBody:  string(reqBytes),
+				ResponseBody: respBody,
+				StatusCode:   genStatus,
+				ErrorMessage: errMsg,
+			})
+		}
+		fmt.Printf("[status-from-log] status=%s err=%v", providerStatus, err != nil)
+	}
 	if err != nil {
 		// Error consultando al generator, devolver el estado del log
 		return &StatusResult{Status: log.Status, Error: err.Error()}, nil
@@ -1445,6 +1464,14 @@ func (s *Service) saveToTakes(taskID string, videoURL, localURL string) {
 func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	s.mu.RLock()
 	record, ok := s.tasks[taskID]
+	// Once a task is terminal, its result is definitive: return the cached
+	// snapshot instead of hitting the provider again or re-downloading the
+	// video on every poll.
+	if ok && record.StatusFinal && record.Result != nil {
+		cached := record.Result
+		s.mu.RUnlock()
+		return cached, nil
+	}
 	s.mu.RUnlock()
 
 	if !ok {
@@ -1477,34 +1504,42 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	if gen != nil {
 		result, err := gen.GetStatus(taskID, m.APIKey, m.URL, m.Endpoint)
 
-		// Log server communication
-		if s.commStore != nil {
-			reqBytes, _ := json.Marshal(map[string]string{"task_id": taskID})
-			respBody := ""
-			genStatus := 200
-			if err != nil {
-				genStatus = 0
-				respBody = err.Error()
-			} else if result != nil && result.Raw != nil {
-				rawBytes, _ := json.Marshal(result.Raw)
-				respBody = string(rawBytes)
-			}
-			errMsg := ""
-			if err != nil {
-				errMsg = err.Error()
-			}
-			s.commStore.Create(&ServerCommunication{
-				TaskID:       taskID,
-				ModelName:    m.Name,
-				Endpoint:     m.URL + m.Endpoint,
-				Method:       "GET",
-				RequestBody:  string(reqBytes),
-				ResponseBody: respBody,
-				StatusCode:   genStatus,
-				ErrorMessage: errMsg,
-			})
+		// Persist a server_communication row only when the provider status
+		// changes (or on error). Logging every poll would insert one DB row
+		// every few seconds per task and saturate the database.
+		var providerStatus string
+		if result != nil {
+			providerStatus = result.Status
 		}
-		log.Printf("[get-status] gen.GetStatus err=%v", err != nil)
+		if err != nil || s.shouldLogStatus(record, providerStatus) {
+			if s.commStore != nil {
+				reqBytes, _ := json.Marshal(map[string]string{"task_id": taskID})
+				respBody := ""
+				genStatus := 200
+				if err != nil {
+					genStatus = 0
+					respBody = err.Error()
+				} else if result != nil && result.Raw != nil {
+					rawBytes, _ := json.Marshal(result.Raw)
+					respBody = string(rawBytes)
+				}
+				errMsg := ""
+				if err != nil {
+					errMsg = err.Error()
+				}
+				s.commStore.Create(&ServerCommunication{
+					TaskID:       taskID,
+					ModelName:    m.Name,
+					Endpoint:     m.URL + m.Endpoint,
+					Method:       "GET",
+					RequestBody:  string(reqBytes),
+					ResponseBody: respBody,
+					StatusCode:   genStatus,
+					ErrorMessage: errMsg,
+				})
+			}
+			log.Printf("[get-status] status=%s err=%v", providerStatus, err != nil)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -1519,18 +1554,25 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 			statusResult.LocalURL = result.Outputs[0].LocalURL
 		}
 
-		if result.Status == config.STATUS_SUCCESS || result.Status == config.STATUS_FAILED {
+		if isTerminalStatus(result.Status) {
 			s.mu.Lock()
+			alreadyFinal := record.StatusFinal
 			notify := !record.PushNotified
 			record.PushNotified = true
 			record.Status = result.Status
 			record.Result = statusResult
+			record.StatusFinal = true
+			record.UpdatedAt = time.Now()
 			s.mu.Unlock()
-			// Update generation log with final AI response
-			s.updateLogWithFinalStatus(taskID, result)
-			if result.Status == config.STATUS_SUCCESS {
-				s.saveGeneratedAssets(taskID, result)
-				s.saveToTakes(taskID, statusResult.VideoURL, statusResult.LocalURL)
+			// A concurrent poll may have already persisted the terminal state;
+			// only the first one performs the heavy side effects.
+			if !alreadyFinal {
+				// Update generation log with final AI response
+				s.updateLogWithFinalStatus(taskID, result)
+				if result.Status == config.STATUS_SUCCESS {
+					s.saveGeneratedAssets(taskID, result)
+					s.saveToTakes(taskID, statusResult.VideoURL, statusResult.LocalURL)
+				}
 			}
 			if notify {
 				s.notifyTaskCompletion(record.UserID, taskNotifyInfo{
@@ -1548,6 +1590,48 @@ func (s *Service) GetStatus(taskID string) (*StatusResult, error) {
 	}
 
 	return nil, fmt.Errorf("no generator available for model: %s", m.Name)
+}
+
+// isTerminalStatus reports whether a task reached a final state.
+func isTerminalStatus(status string) bool {
+	return status == config.STATUS_SUCCESS || status == config.STATUS_FAILED
+}
+
+// shouldLogStatus reports whether the given provider status differs from the
+// last one persisted for the task, updating the stored value under the lock.
+// This keeps server_communications to one row per status transition instead of
+// one row per poll.
+func (s *Service) shouldLogStatus(record *TaskRecord, status string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if record.LastLoggedStatus == status {
+		return false
+	}
+	record.LastLoggedStatus = status
+	return true
+}
+
+// taskRecordTTL bounds how long a finished task is kept in memory. After this
+// window the record is evicted; status lookups fall back to the generation log.
+const taskRecordTTL = 6 * time.Hour
+
+// cleanupTasks periodically evicts task records that are no longer needed,
+// preventing the in-memory task map from growing without bound.
+func (s *Service) cleanupTasks() {
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		cutoff := time.Now().Add(-taskRecordTTL)
+		s.mu.Lock()
+		for id, record := range s.tasks {
+			// Only drop terminal tasks; a still-running task is never evicted
+			// so its status can keep being resolved from memory.
+			if record.StatusFinal && record.UpdatedAt.Before(cutoff) {
+				delete(s.tasks, id)
+			}
+		}
+		s.mu.Unlock()
+	}
 }
 
 func (s *Service) GetStatusUnified(taskID string) (*StudioStatusResponse, error) {

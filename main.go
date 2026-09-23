@@ -185,18 +185,21 @@ func main() {
 	})
 	projectHdl := project.NewHandler(projectSvc)
 
-	// ─── Startup repair ──────────────────────────────────────────
-	// Downloads and persists a local copy for every take that still only has
-	// an external video_url (video_local_url empty). Runs in background so it
-	// never blocks server start.
-	go func() {
-		repaired, err := projectSvc.RepairMissingLocalVideos()
-		if err != nil {
-			log.Printf("startup: local video repair failed: %v", err)
-			return
-		}
-		log.Printf("startup: local video repair done, %d takes with local copy", repaired)
-	}()
+	// ─── Startup repair (DESHABILITADO) ──────────────────────────
+	// La reparación de takes con video_url externo pero sin video_local_url
+	// ya no es necesaria: la generación ahora persiste siempre la copia local
+	// antes de dar la tarea por completada. Se conserva el código comentado
+	// por si en el futuro hay que reparar datos históricos. Para reactivar,
+	// descomentar el bloque y volver a llamar a projectSvc.RepairMissingLocalVideos().
+	//
+	// go func() {
+	// 	repaired, err := projectSvc.RepairMissingLocalVideos()
+	// 	if err != nil {
+	// 		log.Printf("startup: local video repair failed: %v", err)
+	// 		return
+	// 	}
+	// 	log.Printf("startup: local video repair done, %d takes with local copy", repaired)
+	// }()
 
 	// ─── Router ──────────────────────────────────────────────────
 

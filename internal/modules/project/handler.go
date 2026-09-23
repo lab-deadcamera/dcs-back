@@ -518,10 +518,17 @@ func (h *Handler) ListTakes(c *gin.Context) {
 		return
 	}
 
-	username, _ := c.Get("username")
-	userStr, _ := username.(string)
-
-	takes, err := h.svc.ListTakesWithLocalVideos(shotID, userStr)
+	// NOTE: La reparación automática de videos sin copia local al listar
+	// ("ListTakesWithLocalVideos") quedó deshabilitada. Los videos ahora se
+	// persisten siempre con copia local al completarse la generación (ver
+	// studio.Service.GetStatus -> SaveURLOutput), por lo que este fallback ya
+	// no es necesario y generaba descargas repetidas en cada listado.
+	// La función se conserva en el service por si se necesita un caso futuro
+	// de reparación. Para reactivar este comportamiento, restaurar:
+	//   username, _ := c.Get("username")
+	//   userStr, _ := username.(string)
+	//   takes, err := h.svc.ListTakesWithLocalVideos(shotID, userStr)
+	takes, err := h.svc.ListTakes(shotID)
 	if err != nil {
 		if err.Error() == "shot not found" {
 			utils.NotFound(c, err.Error())
