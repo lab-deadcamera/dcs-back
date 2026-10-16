@@ -24,6 +24,28 @@ const (
 	AssetsHost    = "open.byteplusapi.com"
 )
 
+// assetNameMaxLen is BytePlus CreateAsset's Name limit; longer names fail
+// with a 400 "Name must be no more than 64 characters".
+const assetNameMaxLen = 64
+
+// sanitizeAssetName truncates an asset name to BytePlus's 64-char limit so
+// sync never fails on long filenames. It keeps the file extension when
+// truncating so the library entry stays identifiable; only the sync-facing
+// asset name is shortened, never the user-facing filename. Length counts
+// bytes, fine for ASCII filenames; multibyte names truncate slightly short.
+func sanitizeAssetName(name string) string {
+	if len(name) <= assetNameMaxLen {
+		return name
+	}
+	if i := strings.LastIndex(name, "."); i > 0 && i < len(name)-1 && i < assetNameMaxLen {
+		ext := name[i:]
+		if baseLen := assetNameMaxLen - len(ext); baseLen > 0 {
+			return name[:baseLen] + ext
+		}
+	}
+	return name[:assetNameMaxLen]
+}
+
 // SignedFetchInput contains all parameters for a signed AK/SK request.
 type SignedFetchInput struct {
 	AK      string
@@ -329,6 +351,10 @@ func (a *AssetAPI) CreateAsset(assetURL, name, assetType, projectName string) (m
 	if a.AssetGroupID == "" {
 		return nil, fmt.Errorf("asset group ID not configured on this model")
 	}
+
+	// BytePlus rejects names longer than 64 chars; truncate here so every
+	// caller (SyncAsset, SyncCharacterAssets, GallerySyncContent) is covered.
+	name = sanitizeAssetName(name)
 
 	payload := map[string]interface{}{
 		"GroupId":     a.AssetGroupID,
