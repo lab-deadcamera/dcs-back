@@ -2,6 +2,7 @@ package studio
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"dcs-back-v0/internal/utils"
@@ -116,12 +117,21 @@ func (h *Handler) ListGalleryModelAssets(c *gin.Context) {
 		return
 	}
 
-	assets, err := h.svc.ListGalleryAssets(modelID)
+	page, _ := strconv.Atoi(c.Query("page"))
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	result, err := h.svc.ListGalleryAssets(modelID, page, limit)
 	if err != nil {
 		utils.InternalError(c, err.Error())
 		return
 	}
-	utils.Success(c, assets)
+	utils.Success(c, result)
 }
 
 func (h *Handler) ListGalleryErrors(c *gin.Context) {

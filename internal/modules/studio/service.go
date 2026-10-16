@@ -694,8 +694,9 @@ func (s *Service) ListGalleryModels() ([]GalleryModel, error) {
 }
 
 // ListGalleryAssets returns a model's sync records enriched with the internal
-// gallery match (file name/mime) and the characters that reference each file.
-func (s *Service) ListGalleryAssets(modelID string) ([]GalleryAsset, error) {
+// gallery match (file name/mime) and the characters that reference each file,
+// paginated over the deduplicated (latest attempt per file) asset list.
+func (s *Service) ListGalleryAssets(modelID string, page, limit int) (*ListGalleryAssetsResponse, error) {
 	if s.assetSyncStore == nil {
 		return nil, fmt.Errorf("asset sync store not available")
 	}
@@ -705,17 +706,37 @@ func (s *Service) ListGalleryAssets(modelID string) ([]GalleryAsset, error) {
 	}
 
 	// Retries/fixes of the same file create one model_assets row per attempt.
-	// Show only the latest attempt per file (records arrive newest-first) so
+	// Keep only the latest attempt per file (records arrive newest-first) so
 	// each asset appears once — the per-asset error history is available via
 	// ListGalleryErrors.
 	seen := make(map[string]bool)
-	assets := make([]GalleryAsset, 0, len(records))
+	unique := make([]ModelAsset, 0, len(records))
 	for _, ma := range records {
 		if seen[ma.FileID] {
 			continue
 		}
 		seen[ma.FileID] = true
+		unique = append(unique, ma)
+	}
 
+	total := len(unique)
+	totalPages := (total + limit - 1) / limit
+	if totalPages < 1 {
+		totalPages = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+	start := (page - 1) * limit
+	if start > total {
+		start = total
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+	assets := make([]GalleryAsset, 0, end-start)
+	for _, ma := range unique[start:end] {
 		asset := GalleryAsset{ModelAsset: ma}
 		if s.fileService != nil {
 			if f, err := s.fileService.GetFile(ma.FileID); err == nil && f != nil {
@@ -737,7 +758,13 @@ func (s *Service) ListGalleryAssets(modelID string) ([]GalleryAsset, error) {
 		}
 		assets = append(assets, asset)
 	}
-	return assets, nil
+	return &ListGalleryAssetsResponse{
+		Assets:     assets,
+		Total:      total,
+		Page:       page,
+		Limit:      limit,
+		TotalPages: totalPages,
+	}, nil
 }
 
 // ListGalleryErrors returns the last 5 failed sync attempts for a specific
