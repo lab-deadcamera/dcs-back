@@ -233,7 +233,21 @@ func (g *Seedance25Generator) BuildPayload(req *studio.GeneratorRequest) map[str
 		"generate_audio": req.GenerateAudio,
 	}
 
-	if req.Ratio != "" {
+	// Seedance 2.5 rejects a fixed ratio whenever a reference video is sent
+	// (it classifies the task as video extension: 400 "`ratio` must be
+	// `adaptive`"). With a video input the output follows the selected
+	// video's aspect ratio, so we default to "adaptive" regardless of the
+	// requested ratio. Files without a video reference keep the user ratio.
+	hasVideoRef := false
+	for _, item := range req.Content {
+		if item.Type == "video" { 
+			hasVideoRef = true
+			break
+		}
+	}
+	if hasVideoRef {
+		payload["ratio"] = "adaptive"
+	} else if req.Ratio != "" {
 		payload["ratio"] = req.Ratio
 	}
 	if req.Resolution != "" {
