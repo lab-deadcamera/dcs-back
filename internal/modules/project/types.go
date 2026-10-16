@@ -29,6 +29,16 @@ type UpdateProjectRequest struct {
 	Active      *bool   `json:"active"`
 }
 
+// ProjectListResponse holds the paginated response for listing all projects
+// (admin endpoint GET /projects/list-all). When the client omits page/limit
+// it returns every project in a single page.
+type ProjectListResponse struct {
+	Projects   []Project `json:"projects"`
+	Total      int       `json:"total"`
+	Page       int       `json:"page"`
+	Limit      int       `json:"limit"`
+	TotalPages int       `json:"total_pages"`
+}
 // ─── Chapter ────────────────────────────────────────────────────
 
 type Chapter struct {

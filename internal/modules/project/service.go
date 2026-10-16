@@ -147,7 +147,10 @@ func (s *Service) List() ([]Project, error) {
 	return projects, nil
 }
 
-func (s *Service) ListAll() ([]Project, error) {
+// ListAll returns every project (including inactive ones), paginated when
+// page/limit are provided. With limit <= 0 it returns everything in one page,
+// matching the legacy (unpaginated) response of this admin endpoint.
+func (s *Service) ListAll(page, limit int) (*ProjectListResponse, error) {
 	projects, err := s.store.ListAll()
 	if err != nil {
 		return nil, err
@@ -155,7 +158,48 @@ func (s *Service) ListAll() ([]Project, error) {
 	if projects == nil {
 		projects = []Project{}
 	}
-	return projects, nil
+
+	total := len(projects)
+start := 0
+	end := total
+	if limit > 0 {
+		if page < 1 {
+			page = 1
+		}
+		start = (page - 1) * limit
+		if start > total {
+			start = total
+		}
+		end = start + limit
+		if end > total {
+			end = total
+		}
+		if page > (total+limit-1)/limit {
+			page = (total+limit-1)/limit
+		}
+		if page < 1 {
+			page = 1
+		}
+	} else {
+		limit = total
+		if limit < 1 {
+			limit = 1
+		}
+		page = 1
+	}
+
+	totalPages := (total + limit - 1) / limit
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	return &ProjectListResponse{
+		Projects:   projects[start:end],
+		Total:      total,
+		Page:       page,
+		Limit:      limit,
+		TotalPages: totalPages,
+	}, nil
 }
 
 func (s *Service) Update(id string, req *UpdateProjectRequest) (*Project, error) {
