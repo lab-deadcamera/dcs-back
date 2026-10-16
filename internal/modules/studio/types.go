@@ -213,6 +213,16 @@ type GalleryAsset struct {
 	Characters []GalleryCharacter `json:"characters"`
 }
 
+// ListGalleryAssetsResponse holds the paginated response for a model's
+// gallery assets.
+type ListGalleryAssetsResponse struct {
+	Assets     []GalleryAsset `json:"assets"`
+	Total      int            `json:"total"`
+	Page       int            `json:"page"`
+	Limit      int            `json:"limit"`
+	TotalPages int            `json:"total_pages"`
+}
+
 // ─── Asset sync ─────────────────────────────────────────────────
 
 type SyncAssetRequest struct {
