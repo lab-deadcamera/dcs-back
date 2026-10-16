@@ -15,6 +15,12 @@ import (
 // mean "no limit configured" and are ignored. An unset quantity (<= 0)
 // defaults to 1 before checking the minimum.
 func enforceVideoLimits(genReq *GeneratorRequest, cfg provider.ModelConfig) error {
+	// "adaptive" is mandatory for Seedance 2.5 whenever a reference video is
+	// attached (video extension tasks) and never appears in the static
+	// aspect_ratios list, so skip the configured-ratio check for it.
+	if genReq.Ratio == "adaptive" && hasVideoInput(genReq.Content) {
+		cfg.AspectRatios = nil
+	}
 	if genReq.Quantity <= 0 {
 		genReq.Quantity = 1
 	}
@@ -37,4 +43,14 @@ func enforceVideoLimits(genReq *GeneratorRequest, cfg provider.ModelConfig) erro
 		return fmt.Errorf("resolution %q is not supported by model %s", genReq.Resolution, genReq.Model)
 	}
 	return nil
+}
+
+// hasVideoInput reports whether content contains a non-empty video item.
+func hasVideoInput(content []ContentItem) bool {
+	for _, item := range content {
+		if item.Type == "video" && item.DataURL != "" {
+			return true
+		}
+	}
+	return false
 }
