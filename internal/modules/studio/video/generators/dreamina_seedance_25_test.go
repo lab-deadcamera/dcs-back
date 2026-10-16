@@ -83,6 +83,53 @@ func TestSeedance25Validate_InvalidRatio(t *testing.T) {
 	}
 }
 
+func TestSeedance25Validate_AdaptiveRatio(t *testing.T) {
+	g := &Seedance25Generator{}
+
+	// "adaptive" is valid only when a reference video is attached (video
+	// extension task enforced by the API).
+	req := &studio.GeneratorRequest{
+		Model:    "dreamina-seedance-2-5-260628",
+		Duration: 10,
+		Ratio:    "adaptive",
+		Content: []studio.ContentItem{
+			{Type: "text", Text: "a prompt"},
+			{Type: "video", DataURL: "https://example.com/vid.mp4"},
+		},
+	}
+	if err := g.Validate(req); err != nil {
+		t.Errorf("expected no error for adaptive with video ref, got: %v", err)
+	}
+
+	// Without a video reference the API rejects "adaptive", so validation
+	// must reject it up front instead of letting the request 400.
+	noVideo := &studio.GeneratorRequest{
+		Model:    "dreamina-seedance-2-5-260628",
+		Duration: 10,
+		Ratio:    "adaptive",
+		Content: []studio.ContentItem{
+			{Type: "text", Text: "a prompt"},
+		},
+	}
+	if err := g.Validate(noVideo); err == nil {
+		t.Error("expected error for adaptive without video ref")
+	}
+
+	// Empty DataURL video items do not count as a video reference.
+	emptyVideo := &studio.GeneratorRequest{
+		Model:    "dreamina-seedance-2-5-260628",
+		Duration: 10,
+		Ratio:    "adaptive",
+		Content: []studio.ContentItem{
+			{Type: "text", Text: "a prompt"},
+			{Type: "video", DataURL: ""},
+		},
+	}
+	if err := g.Validate(emptyVideo); err == nil {
+		t.Error("expected error for adaptive with empty video ref")
+	}
+}
+
 func TestSeedance25BuildPayload_Model(t *testing.T) {
 	g := &Seedance25Generator{}
 	req := &studio.GeneratorRequest{

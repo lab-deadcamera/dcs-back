@@ -58,8 +58,19 @@ func (g *Seedance25Generator) Validate(req *studio.GeneratorRequest) error {
 	if req.Duration < 4 || req.Duration > 30 {
 		errs.Add("duration", "must be between 4 and 30 seconds")
 	}
+	// "adaptive" is only meaningful for video extension tasks (a reference
+	// video attached); the API rejects it otherwise.
+	hasVideoRef := false
+	for _, item := range req.Content {
+		if item.Type == "video" && item.DataURL != "" {
+			hasVideoRef = true
+			break
+		}
+	}
 	if req.Ratio != "" && !ValidRatios[req.Ratio] {
-		errs.Add("ratio", "unsupported value: "+req.Ratio)
+		if req.Ratio != "adaptive" || !hasVideoRef {
+			errs.Add("ratio", "unsupported value: "+req.Ratio)
+		}
 	}
 	if req.Resolution != "" && !ValidResolutionsVideo[req.Resolution] {
 		errs.Add("resolution", "must be one of: 480p, 720p, 1080p, 1440p, 2k, 4k")
@@ -240,7 +251,7 @@ func (g *Seedance25Generator) BuildPayload(req *studio.GeneratorRequest) map[str
 	// requested ratio. Files without a video reference keep the user ratio.
 	hasVideoRef := false
 	for _, item := range req.Content {
-		if item.Type == "video" { 
+		if item.Type == "video" && item.DataURL != "" {
 			hasVideoRef = true
 			break
 		}

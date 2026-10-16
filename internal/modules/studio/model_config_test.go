@@ -15,6 +15,7 @@ func TestEnforceVideoLimits(t *testing.T) {
 		duration    int
 		ratio       string
 		resolution  string
+		content     []ContentItem
 		wantErr     bool
 		wantQty     int
 		errSubstr   string
@@ -130,17 +131,38 @@ func TestEnforceVideoLimits(t *testing.T) {
 			resolution: "720p",
 			wantQty:  1,
 		},
+		{
+			name:      "adaptive ratio allowed with video reference",
+			config:    provider.ModelConfig{AspectRatios: []string{"16:9", "9:16"}},
+			quantity:  1,
+			ratio:     "adaptive",
+			content:   []ContentItem{{Type: "text", Text: "a prompt"}, {Type: "video", DataURL: "https://example.com/v.mp4"}},
+			wantQty:   1,
+		},
+		{
+			name:      "adaptive ratio rejected without video reference",
+			config:    provider.ModelConfig{AspectRatios: []string{"16:9", "9:16"}},
+			quantity:  1,
+			ratio:     "adaptive",
+			content:   []ContentItem{{Type: "text", Text: "a prompt"}},
+			wantErr:   true,
+			errSubstr: "aspect ratio",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			content := tc.content
+			if content == nil {
+				content = []ContentItem{{Type: "text", Text: "a prompt"}}
+			}
 			req := &GeneratorRequest{
 				Model:      "dreamina-seedance-2-5-260628",
 				Quantity:   tc.quantity,
 				Duration:   tc.duration,
 				Ratio:      tc.ratio,
 				Resolution: tc.resolution,
-				Content:    []ContentItem{{Type: "text", Text: "a prompt"}},
+				Content:    content,
 			}
 			err := enforceVideoLimits(req, tc.config)
 			if tc.wantErr {
