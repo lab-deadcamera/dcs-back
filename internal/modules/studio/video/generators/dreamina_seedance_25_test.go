@@ -143,6 +143,42 @@ func TestSeedance25BuildPayload_WithReferences(t *testing.T) {
 	}
 }
 
+func TestSeedance25BuildPayload_VideoRefForcesAdaptiveRatio(t *testing.T) {
+	g := &Seedance25Generator{}
+	req := &studio.GeneratorRequest{
+		Model:    "dreamina-seedance-2-5-260628",
+		Ratio:    "16:9",
+		Duration: 5,
+		Content: []studio.ContentItem{
+			{Type: "text", Text: "extend the scene"},
+			{Type: "video", DataURL: "https://example.com/vid.mp4", ID: "vid-uuid"},
+		},
+	}
+	payload := g.BuildPayload(req)
+
+	if payload["ratio"] != "adaptive" {
+		t.Errorf("ratio = %v, want adaptive (video reference forces adaptive)", payload["ratio"])
+	}
+}
+
+func TestSeedance25BuildPayload_NoVideoKeepsRequestedRatio(t *testing.T) {
+	g := &Seedance25Generator{}
+	req := &studio.GeneratorRequest{
+		Model:    "dreamina-seedance-2-5-260628",
+		Ratio:    "16:9",
+		Duration: 5,
+		Content: []studio.ContentItem{
+			{Type: "text", Text: "a prompt"},
+			{Type: "image", DataURL: "https://example.com/img.png", ID: "uuid"},
+		},
+	}
+	payload := g.BuildPayload(req)
+
+	if payload["ratio"] != "16:9" {
+		t.Errorf("ratio = %v, want 16:9 (no video reference keeps user ratio)", payload["ratio"])
+	}
+}
+
 func TestSeedance25BuildPayload_EmptyImageDataURLSkipped(t *testing.T) {
 	g := &Seedance25Generator{}
 	req := &studio.GeneratorRequest{

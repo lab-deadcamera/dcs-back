@@ -2,6 +2,7 @@ package project
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 
 	"dcs-back-v0/internal/utils"
@@ -20,13 +21,21 @@ func NewHandler(svc *Service) *Handler {
 // ─── Projects ───────────────────────────────────────────────────
 
 func (h *Handler) ListAll(c *gin.Context) {
-	projects, err := h.svc.ListAll()
+	// Without page/limit params the endpoint keeps returning ALL projects
+	// (limit <= 0) so legacy consumers still work; with params it paginates.
+	page, _ := strconv.Atoi(c.Query("page"))
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	if limit > 10000 {
+		limit = 10000
+	}
+
+	result, err := h.svc.ListAll(page, limit)
 	if err != nil {
 		utils.InternalError(c, err.Error())
 		return
 	}
 
-	utils.Success(c, projects)
+	utils.Success(c, result)
 }
 
 func (h *Handler) Create(c *gin.Context) {
